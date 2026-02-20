@@ -1,0 +1,172 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC (adjustable)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Upstream branch to sync from'
+        required: false
+        default: 'main'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Detect upstream changes
+        id: detect
+        run: |
+          # Add upstream remote
+          git remote add upstream https://github.com/gsd-build/get-shit-done.git || true
+          git fetch upstream main --quiet
+          
+          # Compare with current branch
+          UPSTREAM_HASH=$(git rev-parse upstream/main)
+          CURRENT_HASH=$(git rev-parse HEAD)
+          
+          if [ "$UPSTREAM_HASH" == "$CURRENT_HASH" ]; then
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+            echo "No upstream changes detected"
+          else
+            echo "no_changes=false" >> $GITHUB_OUTPUT
+            echo "Upstream changes detected: $CURRENT_HASH → $UPSTREAM_HASH"
+            git log --oneline HEAD..upstream/main > /tmp/upstream_commits.txt
+            cat /tmp/upstream_commits.txt
+          fi
+
+      - name: Abort if no changes
+        if: steps.detect.outputs.no_changes == 'true'
+        run: echo "No upstream changes, skipping sync"
+
+      - name: Merge upstream
+        if: steps.detect.outputs.no_changes == 'false'
+        run: |
+          git config user.name "gsd-sync-bot"
+          git config user.email "sync@gsd.local"
+          git merge upstream/main -m "merge(upstream): sync from gsd-build/get-shit-done" --no-edit || MERGE_FAILED=1
+          
+          if [ "$MERGE_FAILED" ]; then
+            echo "Merge had conflicts - will attempt resolution"
+            git merge --abort
+            exit 1
+          fi
+
+      - name: Run generator and verifier
+        id: validate
+        continue-on-error: true
+        run: |
+          echo "Running generator..."
+          node scripts/generate-prompts.mjs > /tmp/gen_output.txt 2>&1
+          GEN_STATUS=$?
+          cat /tmp/gen_output.txt
+          
+          echo ""
+          echo "Running verifier..."
+          node scripts/verify-prompts.mjs > /tmp/ver_output.txt 2>&1
+          VER_STATUS=$?
+          cat /tmp/ver_output.txt
+          
+          if [ $GEN_STATUS -ne 0 ] || [ $VER_STATUS -ne 0 ]; then
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "gen_status=$GEN_STATUS" >> $GITHUB_OUTPUT
+            echo "ver_status=$VER_STATUS" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "validation_failed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Store upstream context for agent
+        if: steps.detect.outputs.no_changes == 'false' && steps.validate.outputs.validation_failed == 'true'
+        run: |
+          echo "Upstream merge succeeded but validation failed. Invoking sync agent for diagnosis..."
+          # Store context for the agent to analyze
+          git diff HEAD~1 HEAD -- commands/ get-shit-done/ agents/ > /tmp/upstream_changes.diff
+          
+          # Also capture any error output
+          echo "=== Generator Output ===" > /tmp/sync_context.txt
+          cat /tmp/gen_output.txt >> /tmp/sync_context.txt
+          echo "" >> /tmp/sync_context.txt
+          echo "=== Verifier Output ===" >> /tmp/sync_context.txt
+          cat /tmp/ver_output.txt >> /tmp/sync_context.txt
+
+      - name: Invoke sync agent
+        if: steps.detect.outputs.no_changes == 'false' && steps.validate.outputs.validation_failed == 'true'
+        # In a real flow, this would call Claude with the agent prompt
+        # For now, output debug info
+        run: |
+          echo "❌ Validation failed. Would invoke sync agent to:"
+          echo "1. Analyze upstream changes"
+          echo "2. Understand generator/verifier failures"
+          echo "3. Fix generator/verifier scripts"
+          echo "4. Re-run and verify"
+          echo ""
+          echo "Upstream changes:"
+          head -50 /tmp/upstream_changes.diff
+          echo ""
+          echo "Error context:"
+          cat /tmp/sync_context.txt
+
+      - name: Commit wrapper changes
+        if: steps.detect.outputs.no_changes == 'false' && steps.validate.outputs.validation_failed == 'false'
+        run: |
+          git add .github/prompts/ .github/agents/ .github/instructions/
+          if git diff --cached --quiet; then
+            echo "No wrapper changes to commit"
+          else
+            git commit -m "chore(sync): regenerate Copilot wrapper files from upstream"
+            echo "wrapper_changed=true" >> $GITHUB_ENV
+          fi
+
+      - name: Create pull request
+        if: steps.detect.outputs.no_changes == 'false' && steps.validate.outputs.validation_failed == 'false' && env.wrapper_changed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'chore(sync): sync from upstream + regenerate wrappers'
+          title: 'chore(sync): upstream sync (${{ github.run_id }})'
+          body: |
+            ## Upstream Sync Report
+
+            Merged changes from: `gsd-build/get-shit-done` 
+
+            ### Changes
+            - ✅ Merged upstream commits
+            - ✅ Regenerated Copilot wrapper layer (`.github/prompts/`, `.github/agents/`)
+            - ✅ Verified all commands have prompts
+            - ✅ No upstream files manually edited
+
+            ### Files Changed
+            - `.github/prompts/` — regenerated from upstream commands
+            - `.github/agents/` — updated as needed
+            - (upstream content unchanged)
+
+            Ready for review and merge.
+          branch: 'chore/upstream-sync-${{ github.run_id }}'
+          delete-branch: true
+
+      - name: Report failure
+        if: failure() && steps.detect.outputs.no_changes == 'false'
+        run: |
+          echo "❌ Sync workflow failed"
+          echo "Manual action required: Review error context above"
+          echo "Next steps:"
+          echo "1. Analyze what broke in generator/verifier"
+          echo "2. Fix scripts manually"
+          echo "3. Re-run workflow"
+

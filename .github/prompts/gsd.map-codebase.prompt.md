@@ -2,7 +2,47 @@
 name: gsd.map-codebase
 description: "Analyze codebase with parallel mapper agents to produce .planning/codebase/ documents"
 argument-hint: "[optional: specific area to map, e.g., 'api' or 'auth']"
+tools: ['agent', 'search', 'read', 'vscode/askQuestions', 'execute', 'edit']
 agent: agent
+---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/map-codebase.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+## Preflight (required)
+
+If the local GSD install does not exist in this workspace, do this **once**:
+
+1. Check for: `./.claude/get-shit-done/`
+2. If missing, run:
+
+```bash
+npx get-shit-done-cc --claude --local
+```
+
+3. Then re-run the slash command: `/gsd.map-codebase`
+
+---
+
+## Copilot Runtime Adapter (important)
+
+Upstream GSD command sources may reference an `AskUserQuestion` tool (Claude/OpenCode runtime concept).
+
+In VS Code Copilot, **do not attempt to call a tool named `AskUserQuestion`**.
+Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#tool:vscode/askQuestions** with:
+
+- Combine the **Header** and **Question** into a single clear question string.
+- If the upstream instruction specifies **Options**, present them as numbered choices.
+- If no options are specified, ask as a freeform question.
+
+**Rules:**
+1. If the options include "Other", "Something else", or "Let me explain", and the user selects it, follow up with a freeform question via #tool:vscode/askQuestions.
+2. Follow the upstream branching and loop rules exactly as written (e.g., "if X selected, do Y; otherwise continue").
+3. If the upstream flow says to **exit/stop** and run another command, tell the user to run that slash command next, then stop.
+4. Use #tool:vscode/askQuestions freely — do not guess or assume user intent.
+
 ---
 
 <objective>
@@ -13,7 +53,7 @@ Each mapper agent explores a focus area and **writes documents directly** to `.p
 Output: .planning/codebase/ folder with 7 structured documents about the codebase state.
 </objective>
 
-<execution_context>- Read file at: ./.claude/get-shit-done/workflows/map-codebase.md
+<execution_context>- Read file at: ../.claude/get-shit-done/workflows/map-codebase.md
 </execution_context>
 
 <context>
@@ -62,4 +102,3 @@ Check for .planning/STATE.md - loads context if project already initialized
 - [ ] Parallel agents completed without errors
 - [ ] User knows next steps
 </success_criteria>
-

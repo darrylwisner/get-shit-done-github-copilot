@@ -8,6 +8,8 @@ commands.html
 # Local test installs
 .claude/
 
+.planning/
+
 # Build artifacts (committed to npm, not git)
 hooks/dist/
 

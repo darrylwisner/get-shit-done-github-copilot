@@ -2,7 +2,47 @@
 name: gsd.research-phase
 description: "Research how to implement a phase (standalone - usually use /gsd:plan-phase instead)"
 argument-hint: "[phase]"
+tools: ['agent', 'search', 'read', 'vscode/askQuestions', 'execute', 'edit']
 agent: agent
+---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/research-phase.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+## Preflight (required)
+
+If the local GSD install does not exist in this workspace, do this **once**:
+
+1. Check for: `./.claude/get-shit-done/`
+2. If missing, run:
+
+```bash
+npx get-shit-done-cc --claude --local
+```
+
+3. Then re-run the slash command: `/gsd.research-phase`
+
+---
+
+## Copilot Runtime Adapter (important)
+
+Upstream GSD command sources may reference an `AskUserQuestion` tool (Claude/OpenCode runtime concept).
+
+In VS Code Copilot, **do not attempt to call a tool named `AskUserQuestion`**.
+Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#tool:vscode/askQuestions** with:
+
+- Combine the **Header** and **Question** into a single clear question string.
+- If the upstream instruction specifies **Options**, present them as numbered choices.
+- If no options are specified, ask as a freeform question.
+
+**Rules:**
+1. If the options include "Other", "Something else", or "Let me explain", and the user selects it, follow up with a freeform question via #tool:vscode/askQuestions.
+2. Follow the upstream branching and loop rules exactly as written (e.g., "if X selected, do Y; otherwise continue").
+3. If the upstream flow says to **exit/stop** and run another command, tell the user to run that slash command next, then stop.
+4. Use #tool:vscode/askQuestions freely — do not guess or assume user intent.
+
 ---
 
 <objective>
@@ -31,20 +71,20 @@ Normalize phase input in step 1 before any directory lookups.
 ## 0. Initialize Context
 
 ```bash
-INIT=$(node ./.claude/get-shit-done/bin/gsd-tools.cjs init phase-op "$ARGUMENTS")
+INIT=$(node ../.claude/get-shit-done/bin/gsd-tools.cjs init phase-op "$ARGUMENTS")
 ```
 
 Extract from init JSON: `phase_dir`, `phase_number`, `phase_name`, `phase_found`, `commit_docs`, `has_research`.
 
 Resolve researcher model:
 ```bash
-RESEARCHER_MODEL=$(node ./.claude/get-shit-done/bin/gsd-tools.cjs resolve-model gsd-phase-researcher --raw)
+RESEARCHER_MODEL=$(node ../.claude/get-shit-done/bin/gsd-tools.cjs resolve-model gsd-phase-researcher --raw)
 ```
 
 ## 1. Validate Phase
 
 ```bash
-PHASE_INFO=$(node ./.claude/get-shit-done/bin/gsd-tools.cjs roadmap get-phase "${phase_number}")
+PHASE_INFO=$(node ../.claude/get-shit-done/bin/gsd-tools.cjs roadmap get-phase "${phase_number}")
 ```
 
 **If `found` is false:** Error and exit. **If `found` is true:** Extract `phase_number`, `phase_name`, `goal` from JSON.
@@ -132,7 +172,7 @@ Write to: .planning/phases/${PHASE}-{slug}/${PHASE}-RESEARCH.md
 
 ```
 Task(
-  prompt="First, read ./.claude/agents/gsd-phase-researcher.md for your role and instructions.\n\n" + filled_prompt,
+  prompt="First, read ../.claude/agents/gsd-phase-researcher.md for your role and instructions.\n\n" + filled_prompt,
   subagent_type="general-purpose",
   model="{researcher_model}",
   description="Research Phase {phase}"
@@ -166,7 +206,7 @@ Research file: @.planning/phases/${PHASE}-{slug}/${PHASE}-RESEARCH.md
 
 ```
 Task(
-  prompt="First, read ./.claude/agents/gsd-phase-researcher.md for your role and instructions.\n\n" + continuation_prompt,
+  prompt="First, read ../.claude/agents/gsd-phase-researcher.md for your role and instructions.\n\n" + continuation_prompt,
   subagent_type="general-purpose",
   model="{researcher_model}",
   description="Continue research Phase {phase}"
@@ -182,4 +222,3 @@ Task(
 - [ ] Checkpoints handled correctly
 - [ ] User knows next steps
 </success_criteria>
-
