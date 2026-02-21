@@ -48,7 +48,7 @@ if ($WorkspaceDir -eq $PSScriptRoot) {
     Write-Host ""
     Write-Host "Or pass -WorkspaceDir explicitly:"
     Write-Host ""
-    Write-Host "  .\installer\install.ps1 -WorkspaceDir '<your-project-root>'"
+    Write-Host "  .\gsd-copilot-installer\gsd-copilot-install.ps1 -WorkspaceDir '<your-project-root>'"
     Write-Host ""
     exit 1
 }

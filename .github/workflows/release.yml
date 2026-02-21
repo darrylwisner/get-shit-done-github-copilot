@@ -71,7 +71,7 @@ jobs:
           echo '{"type":"commonjs"}' > staging/.claude/package.json
 
           # --- Installer files ---
-          cp gsd-copilot-installer/install.ps1 staging/gsd-copilot-installer/install.ps1
+          cp gsd-copilot-installer/gsd-copilot-install.ps1 staging/gsd-copilot-installer/gsd-copilot-install.ps1
           cp gsd-copilot-installer/README.md   staging/gsd-copilot-installer/README.md
 
           # --- Path replacement: rewrite ~/.claude/ → ./.claude/ in all .md files ---
