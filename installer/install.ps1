@@ -32,7 +32,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-$REPO         = "maitaitime/get-shit-done-github-copilot"
+$REPO         = "darrylwisner/get-shit-done-github-copilot"
 $ASSET_NAME   = "gsd-copilot-*.zip"
 $VERSION_FILE = ".github/.gsd-version"
 # ──────────────────────────────────────────────────────────────────────────────
