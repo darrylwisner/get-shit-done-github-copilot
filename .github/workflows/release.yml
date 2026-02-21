@@ -21,21 +21,87 @@ jobs:
 
       - name: Build zip artifact
         run: |
-          mkdir -p staging/.github
+          # --- Create staging directory structure ---
+          mkdir -p staging/.github/prompts
+          mkdir -p staging/.github/instructions
+          mkdir -p staging/.claude/commands/gsd
+          mkdir -p staging/.claude/get-shit-done
+          mkdir -p staging/.claude/agents
+          mkdir -p staging/.claude/hooks
+          mkdir -p staging/installer
 
-          # Copy all prompts
+          # --- Copilot layer: .github/ files ---
+
+          # Prompts
           cp -r .github/prompts staging/.github/prompts
 
-          # Copy GSD agent files (|| true so missing dir is non-fatal)
-          mkdir -p staging/.github/agents
-          find .github/agents -maxdepth 1 -name "gsd-*.agent.md" -exec cp {} staging/.github/agents/ \; 2>/dev/null || true
+          # GSD-prefixed instruction files only (|| true: dir may be empty or missing)
+          find .github/instructions -maxdepth 1 \( -name "gsd-*.instructions.md" -o -name "gsd.*.md" \) \
+            -exec cp {} staging/.github/instructions/ \; 2>/dev/null || true
 
-          # Copy GSD-prefixed instruction files only
-          mkdir -p staging/.github/instructions
-          find .github/instructions -maxdepth 1 \( -name "gsd-*.instructions.md" -o -name "gsd.*.md" \) -exec cp {} staging/.github/instructions/ \; 2>/dev/null || true
+          # NOTE: .github/agents/ is intentionally omitted — it is empty by design.
 
-          # Build zip from inside staging so extracted paths start with .github/
+          # --- Upstream runtime: .claude/ ---
+
+          # Commands
+          cp -r commands/gsd/. staging/.claude/commands/gsd/
+
+          # Get-shit-done runtime tree
+          cp -r get-shit-done/. staging/.claude/get-shit-done/
+
+          # Agents
+          cp -r agents/. staging/.claude/agents/
+
+          # Hooks (.js files only — || true: tolerates empty or missing dir)
+          find hooks -maxdepth 1 -name "*.js" -exec cp {} staging/.claude/hooks/ \; 2>/dev/null || true
+
+          # --- CommonJS mode marker ---
+          echo '{"type":"commonjs"}' > staging/.claude/package.json
+
+          # --- Installer files ---
+          cp installer/install.ps1 staging/installer/install.ps1
+          cp installer/README.md   staging/installer/README.md
+
+          # --- Path replacement: rewrite ~/.claude/ → ./.claude/ in all .md files ---
+          find staging/.claude -name "*.md" -exec sed -i 's|~/.claude/|./.claude/|g' {} \;
+
+          # --- Zip flat-at-root (paths inside zip start at .github/, .claude/, etc.) ---
           cd staging && zip -r ../gsd-copilot-${{ github.ref_name }}.zip .
+
+      - name: Validate zip contents
+        run: |
+          echo "Validating zip contents..."
+          ZIP="gsd-copilot-${{ github.ref_name }}.zip"
+
+          fail=0
+
+          check_path() {
+            local label="$1"
+            local pattern="$2"
+            if unzip -l "$ZIP" | grep -q "$pattern"; then
+              echo "  ✓ $label"
+            else
+              echo "  ✗ MISSING: $label ($pattern)"
+              fail=1
+            fi
+          }
+
+          check_path ".github/prompts/"                        ".github/prompts/"
+          check_path ".claude/commands/gsd/"                   ".claude/commands/gsd/"
+          check_path ".claude/get-shit-done/workflows/"        ".claude/get-shit-done/workflows/"
+          check_path ".claude/agents/"                         ".claude/agents/"
+          check_path ".claude/hooks/"                          ".claude/hooks/"
+          check_path ".claude/get-shit-done/bin/gsd-tools.cjs" ".claude/get-shit-done/bin/gsd-tools.cjs"
+          check_path ".claude/package.json"                    ".claude/package.json"
+          check_path "at least one .prompt.md"                 "\.prompt\.md"
+
+          if [ "$fail" -eq 1 ]; then
+            echo ""
+            echo "Release blocked: zip is missing required paths. See errors above."
+            exit 1
+          fi
+
+          echo "All zip contents validated."
 
       - name: Create GitHub Release and upload asset
         env:
