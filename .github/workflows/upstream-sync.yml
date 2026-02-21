@@ -14,6 +14,9 @@
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'copilot/**'
 
 name: Upstream Sync
 
@@ -239,4 +242,266 @@ jobs:
               --body-file /tmp/pr-body.md
             echo "Updated existing PR #${EXISTING_PR}."
           fi
+
+  repair:
+    name: Self-Repair (Copilot Agent)
+    runs-on: ubuntu-latest
+    needs: sync
+    if: always() && needs.sync.result != 'skipped'
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+
+    steps:
+      - name: Check COPILOT_PAT
+        id: preflight
+        run: |
+          if [ -z "${{ secrets.COPILOT_PAT }}" ]; then
+            echo "::warning::COPILOT_PAT secret is not set. Skipping self-repair job."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.preflight.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Setup Node
+        if: steps.preflight.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch upstream
+        if: steps.preflight.outputs.skip != 'true'
+        run: |
+          git remote add upstream https://github.com/gsd-build/get-shit-done.git 2>/dev/null || true
+          git fetch upstream
+
+      - name: Repair loop
+        if: steps.preflight.outputs.skip != 'true'
+        id: repair_loop
+        run: |
+          set -euo pipefail
+
+          MAX_ATTEMPTS=3
+          ATTEMPT=0
+          REPAIR_NEEDED=false
+          REPAIR_SUCCEEDED=false
+          REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
+
+          # Gather diagnostic context once
+          UPSTREAM_DIFF=$(git diff HEAD upstream/main -- . ':(exclude)commands/gsd' ':(exclude)get-shit-done' ':(exclude)agents' 2>/dev/null | head -c 20000 || true)
+          GENERATOR_SRC=$(cat scripts/generate-prompts.mjs)
+          VERIFIER_SRC=$(cat scripts/verify-prompts.mjs)
+
+          # Run initial verify to see if repair is needed
+          if node scripts/verify-prompts.mjs > /tmp/verify_initial.log 2>&1; then
+            echo "Verifier passed — no repair needed."
+            echo "repair_needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          REPAIR_NEEDED=true
+          INITIAL_ERRORS=$(cat /tmp/verify_initial.log | head -c 5000)
+
+          build_repair_prompt() {
+            local attempt=$1
+            local prior_patches=""
+            if [ "$attempt" -ge 2 ] && [ -f /tmp/patch_attempt_1.diff ]; then
+              prior_patches="\n\n## Failed Patch — Attempt 1\n\`\`\`diff\n$(cat /tmp/patch_attempt_1.diff | head -c 5000)\n\`\`\`"
+            fi
+            if [ "$attempt" -ge 3 ] && [ -f /tmp/patch_attempt_2.diff ]; then
+              prior_patches="${prior_patches}\n\n## Failed Patch — Attempt 2\n\`\`\`diff\n$(cat /tmp/patch_attempt_2.diff | head -c 5000)\n\`\`\`"
+            fi
+
+            local framing=""
+            if [ "$attempt" -eq 3 ]; then
+              framing=" This is the last attempt before human escalation."
+            fi
+
+            cat <<PROMPT
+          You are the GSD upstream-sync repair agent. Analyze the upstream diff and verifier errors below, then update \`scripts/generate-prompts.mjs\` and/or \`scripts/verify-prompts.mjs\` to make the verifier pass.${framing}
+
+          RULES:
+          - NEVER modify files under: commands/gsd/, get-shit-done/, agents/
+          - Only edit scripts/ and .github/prompts/ if needed
+          - After edits, run: node scripts/generate-prompts.mjs && node scripts/verify-prompts.mjs
+          - Open a PR targeting branch: automated/upstream-sync
+
+          ## Verifier Errors
+          \`\`\`
+          ${INITIAL_ERRORS}
+          \`\`\`
+
+          ## Upstream Diff (truncated to 20k chars)
+          \`\`\`diff
+          ${UPSTREAM_DIFF}
+          \`\`\`
+
+          ## scripts/generate-prompts.mjs (current)
+          \`\`\`js
+          ${GENERATOR_SRC}
+          \`\`\`
+
+          ## scripts/verify-prompts.mjs (current)
+          \`\`\`js
+          ${VERIFIER_SRC}
+          \`\`\`
+          ${prior_patches}
+          PROMPT
+          }
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "::group::Repair attempt $ATTEMPT of $MAX_ATTEMPTS"
+
+            PROMPT_TEXT=$(build_repair_prompt "$ATTEMPT")
+            printf '%s' "$PROMPT_TEXT" > /tmp/repair_prompt_${ATTEMPT}.txt
+
+            # Invoke Copilot agent (use --body-file to avoid shell escaping issues with JS source)
+            gh agent-task create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "automated/upstream-sync" \
+              --follow \
+              --body-file /tmp/repair_prompt_${ATTEMPT}.txt \
+              || true
+
+            # Capture what changed
+            git diff HEAD > /tmp/patch_attempt_${ATTEMPT}.diff 2>/dev/null || true
+
+            # Check verifier
+            if node scripts/verify-prompts.mjs > /tmp/verify_attempt_${ATTEMPT}.log 2>&1; then
+              echo "Verifier passed on attempt $ATTEMPT."
+              REPAIR_SUCCEEDED=true
+              echo "repair_succeeded=true" >> "$GITHUB_OUTPUT"
+              echo "repair_needed=true" >> "$GITHUB_OUTPUT"
+              echo "::endgroup::"
+              break
+            else
+              echo "::warning::Verifier failed after attempt $ATTEMPT."
+              INITIAL_ERRORS=$(cat /tmp/verify_attempt_${ATTEMPT}.log | head -c 5000)
+            fi
+
+            echo "::endgroup::"
+          done
+
+          # Write final outputs (repair_succeeded written in loop on success; write exhaustion flag here)
+          if [ "$REPAIR_SUCCEEDED" = false ] && [ "$REPAIR_NEEDED" = true ]; then
+            echo "repair_needed=true" >> "$GITHUB_OUTPUT"
+            echo "repair_succeeded=false" >> "$GITHUB_OUTPUT"
+            echo "attempts_exhausted=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Filesystem guard (post-repair)
+        if: steps.preflight.outputs.skip != 'true' && steps.repair_loop.outputs.repair_needed == 'true'
+        run: |
+          bash scripts/guard-upstream-files.sh post-commit
+
+      - name: Escalate — Create GitHub issue
+        if: >
+          steps.preflight.outputs.skip != 'true' &&
+          steps.repair_loop.outputs.attempts_exhausted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          set -euo pipefail
+          REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
+
+          # Deduplicate: skip if open sync-failed issue already exists
+          EXISTING=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --label "sync-failed" \
+            --state open \
+            --json number \
+            --jq 'length' 2>/dev/null || echo "0")
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "::warning::Open sync-failed issue already exists. Skipping duplicate creation."
+            exit 0
+          fi
+
+          # Build diagnostic dump (respecting 65,536 char limit)
+          UPSTREAM_DIFF=$(git diff HEAD upstream/main -- . \
+            ':(exclude)commands/gsd' ':(exclude)get-shit-done' ':(exclude)agents' \
+            2>/dev/null | head -c 15000 || true)
+
+          PATCH_1=$([ -f /tmp/patch_attempt_1.diff ] && cat /tmp/patch_attempt_1.diff | head -c 8000 || echo "(none)")
+          PATCH_2=$([ -f /tmp/patch_attempt_2.diff ] && cat /tmp/patch_attempt_2.diff | head -c 8000 || echo "(none)")
+          PATCH_3=$([ -f /tmp/patch_attempt_3.diff ] && cat /tmp/patch_attempt_3.diff | head -c 8000 || echo "(none)")
+
+          VERIFY_LOG=$(cat /tmp/verify_attempt_3.log 2>/dev/null | head -c 4000 || \
+                       cat /tmp/verify_initial.log 2>/dev/null | head -c 4000 || echo "(none)")
+
+          cat > /tmp/issue_body.md <<ISSUE
+          Self-repair agent failed after 3 attempts on run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+          @${REPO_OWNER} — manual intervention required.
+
+          ## Summary
+          The upstream sync detected changes that broke the compatibility layer (generate-prompts / verify-prompts). The Copilot repair agent was invoked 3 times with escalating context but could not produce a passing verifier run.
+
+          ---
+
+          ## Verifier Output (last attempt)
+          \`\`\`
+          ${VERIFY_LOG}
+          \`\`\`
+
+          ## Upstream Diff (truncated)
+          \`\`\`diff
+          ${UPSTREAM_DIFF}
+          \`\`\`
+
+          ## Patch — Attempt 1
+          \`\`\`diff
+          ${PATCH_1}
+          \`\`\`
+
+          ## Patch — Attempt 2
+          \`\`\`diff
+          ${PATCH_2}
+          \`\`\`
+
+          ## Patch — Attempt 3
+          \`\`\`diff
+          ${PATCH_3}
+          \`\`\`
+          ISSUE
+
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "sync-failed: Copilot repair exhausted after 3 attempts (run #${{ github.run_number }})" \
+            --label "sync-failed" \
+            --body-file /tmp/issue_body.md
+
+  guard:
+    name: Filesystem Guard (copilot/* branches)
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/copilot/')
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/gsd-build/get-shit-done.git 2>/dev/null || true
+          git fetch upstream
+
+      - name: Run filesystem guard
+        run: |
+          bash scripts/guard-upstream-files.sh post-commit
 
