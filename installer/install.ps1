@@ -120,8 +120,8 @@ if (-not $DryRun) {
         exit 1
     }
 
-    $claueSrcRoot = Join-Path $tmpDir ".claude"
-    if (-not (Test-Path $claueSrcRoot)) {
+    $claudeSrcRoot = Join-Path $tmpDir ".claude"
+    if (-not (Test-Path $claudeSrcRoot)) {
         Write-Error "Extracted zip does not contain a .claude/ directory. Unexpected asset structure."
         exit 1
     }
