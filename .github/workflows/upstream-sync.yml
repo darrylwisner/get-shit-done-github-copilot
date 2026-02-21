@@ -121,6 +121,7 @@ jobs:
           **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE_EOF
             gh issue create \
+              --repo "$GITHUB_REPOSITORY"
               --title "Upstream sync merge conflict (upstream@${{ steps.detect.outputs.short_sha }})" \
               --body-file /tmp/issue-body.md \
               --label "upstream-sync"
@@ -169,6 +170,7 @@ jobs:
           **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE_EOF
             gh issue create \
+              --repo "$GITHUB_REPOSITORY"
               --title "Upstream sync verifier failed (upstream@${{ steps.detect.outputs.short_sha }})" \
               --body-file /tmp/issue-body.md \
               --label "upstream-sync"
@@ -244,6 +246,7 @@ jobs:
             echo "Created new PR."
           else
             gh pr edit "$EXISTING_PR" \
+              --repo "$GITHUB_REPOSITORY"
               --title "${PR_TITLE}" \
               --body-file /tmp/pr-body.md
             echo "Updated existing PR #${EXISTING_PR}."
