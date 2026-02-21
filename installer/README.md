@@ -18,7 +18,7 @@ Open a PowerShell terminal in your project root, then:
 
 ```powershell
 # 1. Download the installer
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/maitaitime/get-shit-done-github-copilot/main/installer/install.ps1" -OutFile install.ps1
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/installer/install.ps1" -OutFile install.ps1
 
 # 2. Run it
 .\install.ps1
