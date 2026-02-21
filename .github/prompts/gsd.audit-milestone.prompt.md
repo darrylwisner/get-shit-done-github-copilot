@@ -26,12 +26,8 @@ Verify milestone achieved its definition of done. Check requirements coverage, c
 <context>
 Version: $ARGUMENTS (optional — defaults to current milestone)
 
-**Original Intent:**
-- Read file at: .planning/PROJECT.md
-- Read file at: .planning/REQUIREMENTS.md
-**Planned Work:**
-- Read file at: .planning/ROADMAP.md
-- Read file at: .planning/config.json (if exists)
+Core planning files are resolved in-workflow (`init milestone-op`) and loaded only as needed.
+
 **Completed Work:**
 Glob: .planning/phases/*/*-SUMMARY.md
 Glob: .planning/phases/*/*-VERIFICATION.md

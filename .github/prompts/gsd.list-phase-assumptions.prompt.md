@@ -27,10 +27,7 @@ Output: Conversational output only (no file creation) - ends with "What do you t
 <context>
 Phase number: $ARGUMENTS (required)
 
-**Load project state first:**
-- Read file at: .planning/STATE.md
-**Load roadmap:**
-- Read file at: .planning/ROADMAP.md
+Project state and roadmap are loaded in-workflow using targeted reads.
 </context>
 
 <process>

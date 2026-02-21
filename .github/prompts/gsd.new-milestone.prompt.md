@@ -58,13 +58,7 @@ Brownfield equivalent of new-project. Project exists, PROJECT.md has history. Ga
 <context>
 Milestone name: $ARGUMENTS (optional - will prompt if not provided)
 
-**Load project context:**
-- Read file at: .planning/PROJECT.md
-- Read file at: .planning/STATE.md
-- Read file at: .planning/MILESTONES.md
-- Read file at: .planning/config.json
-**Load milestone context (if exists, from /gsd:discuss-milestone):**
-- Read file at: .planning/MILESTONE-CONTEXT.md
+Project and milestone context files are resolved inside the workflow (`init new-milestone`) and delegated via `<files_to_read>` blocks where subagents are used.
 </context>
 
 <process>

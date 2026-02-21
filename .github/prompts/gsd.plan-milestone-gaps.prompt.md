@@ -48,12 +48,7 @@ One command creates all fix phases — no manual `/gsd:add-phase` per gap.
 **Audit results:**
 Glob: .planning/v*-MILESTONE-AUDIT.md (use most recent)
 
-**Original intent (for prioritization):**
-- Read file at: .planning/PROJECT.md
-- Read file at: .planning/REQUIREMENTS.md
-**Current state:**
-- Read file at: .planning/ROADMAP.md
-- Read file at: .planning/STATE.md
+Original intent and current planning state are loaded on demand inside the workflow.
 </context>
 
 <process>

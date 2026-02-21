@@ -50,8 +50,9 @@ Quick mode is the same system with a shorter path:
 </execution_context>
 
 <context>
-- Read file at: .planning/STATE.md
 $ARGUMENTS
+
+Context files are resolved inside the workflow (`init quick`) and delegated via `<files_to_read>` blocks.
 </context>
 
 <process>

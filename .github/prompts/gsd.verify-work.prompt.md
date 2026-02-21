@@ -30,8 +30,8 @@ Output: {phase_num}-UAT.md tracking all test results. If issues found: diagnosed
 Phase: $ARGUMENTS (optional)
 - If provided: Test specific phase (e.g., "4")
 - If not provided: Check for active sessions or prompt for phase
-- Read file at: .planning/STATE.md
-- Read file at: .planning/ROADMAP.md
+
+Context files are resolved inside the workflow (`init verify-work`) and delegated via `<files_to_read>` blocks.
 </context>
 
 <process>

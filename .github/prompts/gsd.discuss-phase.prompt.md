@@ -52,10 +52,7 @@ Extract implementation decisions that downstream agents need — researcher and 
 <context>
 Phase number: $ARGUMENTS (required)
 
-**Load project state:**
-- Read file at: .planning/STATE.md
-**Load roadmap:**
-- Read file at: .planning/ROADMAP.md
+Context files are resolved in-workflow using `init phase-op` and roadmap/state tool calls.
 </context>
 
 <process>

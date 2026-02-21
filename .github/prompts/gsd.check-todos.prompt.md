@@ -44,10 +44,14 @@ Routes to the check-todos workflow which handles:
 </objective>
 
 <execution_context>
-- Read file at: .planning/STATE.md
-- Read file at: .planning/ROADMAP.md
 - Read file at: ./.claude/get-shit-done/workflows/check-todos.md
 </execution_context>
+
+<context>
+Arguments: $ARGUMENTS (optional area filter)
+
+Todo state and roadmap correlation are loaded in-workflow using `init todos` and targeted reads.
+</context>
 
 <process>
 **Follow the check-todos workflow** from `@./.claude/get-shit-done/workflows/check-todos.md`.

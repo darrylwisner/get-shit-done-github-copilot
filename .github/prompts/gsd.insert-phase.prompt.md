@@ -27,8 +27,8 @@ Purpose: Handle urgent work discovered during execution without renumbering enti
 
 <context>
 Arguments: $ARGUMENTS (format: <after-phase-number> <description>)
-- Read file at: .planning/ROADMAP.md
-- Read file at: .planning/STATE.md
+
+Roadmap and state are resolved in-workflow via `init phase-op` and targeted tool calls.
 </context>
 
 <process>
