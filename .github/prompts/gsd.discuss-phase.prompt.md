@@ -60,8 +60,8 @@ Extract implementation decisions that downstream agents need — researcher and 
 </objective>
 
 <execution_context>
-- Read file at: ../.claude/get-shit-done/workflows/discuss-phase.md
-- Read file at: ../.claude/get-shit-done/templates/context.md
+- Read file at: ./.claude/get-shit-done/workflows/discuss-phase.md
+- Read file at: ./.claude/get-shit-done/templates/context.md
 </execution_context>
 
 <context>

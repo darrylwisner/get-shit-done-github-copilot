@@ -39,11 +39,11 @@ Routes to the set-profile workflow which handles:
 </objective>
 
 <execution_context>
-- Read file at: ../.claude/get-shit-done/workflows/set-profile.md
+- Read file at: ./.claude/get-shit-done/workflows/set-profile.md
 </execution_context>
 
 <process>
-**Follow the set-profile workflow** from `@../.claude/get-shit-done/workflows/set-profile.md`.
+**Follow the set-profile workflow** from `@./.claude/get-shit-done/workflows/set-profile.md`.
 
 The workflow handles all logic including:
 1. Profile argument validation

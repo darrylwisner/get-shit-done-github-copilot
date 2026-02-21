@@ -37,7 +37,7 @@ Purpose: Handle urgent work discovered during execution without renumbering enti
 </objective>
 
 <execution_context>
-- Read file at: ../.claude/get-shit-done/workflows/insert-phase.md
+- Read file at: ./.claude/get-shit-done/workflows/insert-phase.md
 </execution_context>
 
 <context>
@@ -47,6 +47,6 @@ Arguments: $ARGUMENTS (format: <after-phase-number> <description>)
 </context>
 
 <process>
-Execute the insert-phase workflow from @../.claude/get-shit-done/workflows/insert-phase.md end-to-end.
+Execute the insert-phase workflow from @./.claude/get-shit-done/workflows/insert-phase.md end-to-end.
 Preserve all validation gates (argument parsing, phase verification, decimal calculation, roadmap updates).
 </process>
