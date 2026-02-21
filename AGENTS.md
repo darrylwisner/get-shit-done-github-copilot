@@ -25,7 +25,30 @@ Only maintain the Copilot wrapper layer:
 - Prompt command names use dot-namespace: /gsd.new-project
 - Mapping is stable: gsd:<cmd> → gsd.<cmd>
 
-## Definition of done
-- PR contains upstream merge + updated Copilot wrapper layer
-- Generator + verification scripts pass
-- No manual edits to upstream files unless absolutely unavoidable and explained
+## Automated Sync Workflow
+
+The upstream sync is now **automated via GitHub Actions** (`upstream-sync.yml`):
+
+### Daily Schedule
+1. **Detection:** Compares fork HEAD with `upstream/main`
+2. **Merge:** `git merge upstream/main` (if changes exist)
+3. **Generation:** `node scripts/generate-prompts.mjs`
+4. **Verification:** `node scripts/verify-prompts.mjs`
+5. **PR Creation:** Submits PR if validation passes
+
+### If Validation Fails
+When generator or verifier fails:
+1. **Sync Agent Invoked:** `@gsd-upstream-sync` agent analyzes the problem
+2. **Diagnosis:** Agent reads failing scripts and upstream changes
+3. **Fix:** Agent updates generator/verifier scripts (never upstream content)
+4. **Verification:** Agent re-runs scripts to confirm fix works
+5. **Commit:** Changes committed and PR created
+
+See `.github/instructions/upstream-sync-guide.md` for full details and manual sync options.
+
+## Definition of Done
+- [ ] PR contains upstream merge + updated Copilot wrapper layer
+- [ ] Generator + verification scripts pass
+- [ ] No manual edits to upstream files unless absolutely unavoidable and explained
+- [ ] If upstream changes broke generator/verifier, sync agent fixed them
+- [ ] All generated prompts validated

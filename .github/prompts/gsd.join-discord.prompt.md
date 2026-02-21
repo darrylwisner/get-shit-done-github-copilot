@@ -5,6 +5,13 @@ argument-hint: ""
 agent: agent
 ---
 
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/join-discord.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: null (field absent in upstream command) -->
+
 <objective>
 Display the Discord invite link for the GSD community server.
 </objective>
@@ -18,4 +25,3 @@ Connect with other GSD users, get help, share what you're building, and stay upd
 
 Click the link or paste it into your browser to join.
 </output>
-

@@ -2,8 +2,16 @@
 name: gsd.insert-phase
 description: "Insert urgent work as decimal phase (e.g., 72.1) between existing phases"
 argument-hint: "<after> <description>"
+tools: ['edit', 'execute', 'read']
 agent: agent
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/insert-phase.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: ["Read","Write","Bash"] -->
 
 <objective>
 Insert a decimal phase for urgent work discovered mid-milestone that must be completed between existing integer phases.
@@ -13,15 +21,17 @@ Uses decimal numbering (72.1, 72.2, etc.) to preserve the logical sequence of pl
 Purpose: Handle urgent work discovered during execution without renumbering entire roadmap.
 </objective>
 
-<execution_context>- Read file at: ./.claude/get-shit-done/workflows/insert-phase.md
+<execution_context>
+- Read file at: ./.claude/get-shit-done/workflows/insert-phase.md
 </execution_context>
 
 <context>
-Arguments: $ARGUMENTS (format: <after-phase-number> <description>)- Read file at: .planning/ROADMAP.md- Read file at: .planning/STATE.md
+Arguments: $ARGUMENTS (format: <after-phase-number> <description>)
+- Read file at: .planning/ROADMAP.md
+- Read file at: .planning/STATE.md
 </context>
 
 <process>
-Execute the insert-phase workflow from workflows/insert-phase.md end-to-end.
+Execute the insert-phase workflow from @.claude/get-shit-done/workflows/insert-phase.md end-to-end.
 Preserve all validation gates (argument parsing, phase verification, decimal calculation, roadmap updates).
 </process>
-

@@ -2,8 +2,16 @@
 name: gsd.list-phase-assumptions
 description: "Surface Claude's assumptions about a phase approach before planning"
 argument-hint: "[phase]"
+tools: ['execute', 'read', 'search']
 agent: agent
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/list-phase-assumptions.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: ["Read","Bash","Grep","Glob"] -->
 
 <objective>
 Analyze a phase and present Claude's assumptions about technical approach, implementation order, scope boundaries, risk areas, and dependencies.
@@ -12,15 +20,17 @@ Purpose: Help users see what Claude thinks BEFORE planning begins - enabling cou
 Output: Conversational output only (no file creation) - ends with "What do you think?" prompt
 </objective>
 
-<execution_context>- Read file at: ./.claude/get-shit-done/workflows/list-phase-assumptions.md
+<execution_context>
+- Read file at: ./.claude/get-shit-done/workflows/list-phase-assumptions.md
 </execution_context>
 
 <context>
 Phase number: $ARGUMENTS (required)
 
-**Load project state first:**- Read file at: .planning/STATE.md
-
-**Load roadmap:**- Read file at: .planning/ROADMAP.md
+**Load project state first:**
+- Read file at: .planning/STATE.md
+**Load roadmap:**
+- Read file at: .planning/ROADMAP.md
 </context>
 
 <process>
@@ -41,4 +51,3 @@ Phase number: $ARGUMENTS (required)
 - User prompted for feedback
 - User knows next steps (discuss context, plan phase, or correct assumptions)
   </success_criteria>
-

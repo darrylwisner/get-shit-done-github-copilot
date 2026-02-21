@@ -2,8 +2,16 @@
 name: gsd.complete-milestone
 description: "Archive completed milestone and prepare for next version"
 argument-hint: "<version>"
+tools: ['edit', 'execute', 'read']
 agent: agent
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/complete-milestone.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: ["Read","Write","Bash"] -->
 
 <objective>
 Mark milestone {{version}} complete, archive to milestones/, and update ROADMAP.md and REQUIREMENTS.md.
@@ -15,8 +23,8 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 <execution_context>
 **Load these files NOW (before proceeding):**
 
-- workflows/complete-milestone.md (main workflow)
-- templates/milestone-archive.md (archive template)
+- @.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
+- @.claude/get-shit-done/templates/milestone-archive.md (archive template)
   </execution_context>
 
 <context>
@@ -130,4 +138,3 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 - **Context efficiency:** Archive keeps ROADMAP.md and REQUIREMENTS.md constant size per milestone
 - **Fresh requirements:** Next milestone starts with `/gsd:new-milestone` which includes requirements definition
   </critical_rules>
-

@@ -2,8 +2,16 @@
 name: gsd.pause-work
 description: "Create context handoff when pausing work mid-phase"
 argument-hint: ""
+tools: ['edit', 'execute', 'read']
 agent: agent
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/pause-work.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: ["Read","Write","Bash"] -->
 
 <objective>
 Create `.continue-here.md` handoff file to preserve complete work state across sessions.
@@ -16,11 +24,13 @@ Routes to the pause-work workflow which handles:
 - Resume instructions
 </objective>
 
-<execution_context>- Read file at: .planning/STATE.md- Read file at: ./.claude/get-shit-done/workflows/pause-work.md
+<execution_context>
+- Read file at: .planning/STATE.md
+- Read file at: ./.claude/get-shit-done/workflows/pause-work.md
 </execution_context>
 
 <process>
-**Follow the pause-work workflow** from `workflows/pause-work.md`.
+**Follow the pause-work workflow** from `@./.claude/get-shit-done/workflows/pause-work.md`.
 
 The workflow handles all logic including:
 1. Phase directory detection
@@ -29,4 +39,3 @@ The workflow handles all logic including:
 4. Git commit
 5. Confirmation with resume instructions
 </process>
-

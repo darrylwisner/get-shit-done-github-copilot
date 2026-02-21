@@ -2,8 +2,16 @@
 name: gsd.research-phase
 description: "Research how to implement a phase (standalone - usually use /gsd:plan-phase instead)"
 argument-hint: "[phase]"
+tools: ['agent', 'execute', 'read']
 agent: agent
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/research-phase.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: ["Read","Bash","Task"] -->
 
 <objective>
 Research how to implement a phase. Spawns gsd-phase-researcher agent with phase context.
@@ -182,4 +190,3 @@ Task(
 - [ ] Checkpoints handled correctly
 - [ ] User knows next steps
 </success_criteria>
-

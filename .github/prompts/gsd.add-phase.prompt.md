@@ -2,8 +2,16 @@
 name: gsd.add-phase
 description: "Add phase to end of current milestone in roadmap"
 argument-hint: "<description>"
+tools: ['edit', 'execute', 'read']
 agent: agent
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/add-phase.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: ["Read","Write","Bash"] -->
 
 <objective>
 Add a new integer phase to the end of the current milestone in the roadmap.
@@ -15,11 +23,14 @@ Routes to the add-phase workflow which handles:
 - STATE.md roadmap evolution tracking
 </objective>
 
-<execution_context>- Read file at: .planning/ROADMAP.md- Read file at: .planning/STATE.md- Read file at: ./.claude/get-shit-done/workflows/add-phase.md
+<execution_context>
+- Read file at: .planning/ROADMAP.md
+- Read file at: .planning/STATE.md
+- Read file at: ./.claude/get-shit-done/workflows/add-phase.md
 </execution_context>
 
 <process>
-**Follow the add-phase workflow** from `workflows/add-phase.md`.
+**Follow the add-phase workflow** from `@./.claude/get-shit-done/workflows/add-phase.md`.
 
 The workflow handles all logic including:
 1. Argument parsing and validation
@@ -31,4 +42,3 @@ The workflow handles all logic including:
 7. Roadmap entry insertion
 8. STATE.md updates
 </process>
-

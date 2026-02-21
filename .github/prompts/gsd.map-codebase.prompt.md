@@ -2,8 +2,16 @@
 name: gsd.map-codebase
 description: "Analyze codebase with parallel mapper agents to produce .planning/codebase/ documents"
 argument-hint: "[optional: specific area to map, e.g., 'api' or 'auth']"
+tools: ['agent', 'edit', 'execute', 'read', 'search']
 agent: agent
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT.
+Source: commands/gsd/map-codebase.md
+Regenerate: node scripts/generate-prompts.mjs
+-->
+
+<!-- upstream-tools: ["Read","Bash","Glob","Grep","Write","Task"] -->
 
 <objective>
 Analyze existing codebase using parallel gsd-codebase-mapper agents to produce structured codebase documents.
@@ -13,7 +21,8 @@ Each mapper agent explores a focus area and **writes documents directly** to `.p
 Output: .planning/codebase/ folder with 7 structured documents about the codebase state.
 </objective>
 
-<execution_context>- Read file at: ./.claude/get-shit-done/workflows/map-codebase.md
+<execution_context>
+- Read file at: ./.claude/get-shit-done/workflows/map-codebase.md
 </execution_context>
 
 <context>
@@ -62,4 +71,3 @@ Check for .planning/STATE.md - loads context if project already initialized
 - [ ] Parallel agents completed without errors
 - [ ] User knows next steps
 </success_criteria>
-
