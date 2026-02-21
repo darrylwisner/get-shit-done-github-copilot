@@ -19,7 +19,7 @@ Install GSD Copilot files into your VS Code workspace with a single PowerShell c
 Open a PowerShell terminal in your project root and run:
 
 ```powershell
-irm "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/installer/install.ps1" | iex
+irm "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/gsd-copilot-installer/install.ps1" | iex
 ```
 
 This pipes the script directly into PowerShell without saving it to disk, so execution policy is never an issue.
@@ -27,7 +27,7 @@ This pipes the script directly into PowerShell without saving it to disk, so exe
 To pass arguments (e.g. a specific tag):
 
 ```powershell
-& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/installer/install.ps1"))) -Tag v1.0.0
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/gsd-copilot-installer/install.ps1"))) -Tag v1.0.0
 ```
 
 ### Download-then-run
@@ -36,7 +36,7 @@ If you prefer to inspect the script first:
 
 ```powershell
 # 1. Download the installer
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/installer/install.ps1" -OutFile install.ps1
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/gsd-copilot-installer/install.ps1" -OutFile install.ps1
 
 # 2. Unblock it (removes the internet zone mark Windows adds to downloaded files)
 Unblock-File install.ps1
@@ -52,20 +52,20 @@ Remove-Item install.ps1
 
 ### Installing from the release zip
 
-If you extracted the release zip and want to run `install.ps1` from the extracted `installer/` folder, you **must** target your project root explicitly — running the installer from its own directory is blocked with a clear error.
+If you extracted the release zip and want to run `install.ps1` from the extracted `gsd-copilot-installer/` folder, you **must** target your project root explicitly — running the installer from its own directory is blocked with a clear error.
 
 ```powershell
 # Run from anywhere — point -WorkspaceDir at your project root
-Unblock-File .\installer\install.ps1
-.\installer\install.ps1 -WorkspaceDir "C:\path\to\your-project"
+Unblock-File .\gsd-copilot-installer\install.ps1
+.\gsd-copilot-installer\install.ps1 -WorkspaceDir "C:\path\to\your-project"
 ```
 
 Or `cd` to your project root first, then unblock and run:
 
 ```powershell
 cd "C:\path\to\your-project"
-Unblock-File .\path\to\installer\install.ps1
-.\path\to\installer\install.ps1
+Unblock-File .\path\to\gsd-copilot-installer\install.ps1
+.\path\to\gsd-copilot-installer\install.ps1
 ```
 
 That's it. GSD Copilot is now set up in your workspace.

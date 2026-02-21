@@ -34,7 +34,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # Guard: warn if the script is being run from its own directory
-# (common mistake when extracting the zip and running from inside installer/)
+# (common mistake when extracting the zip and running from inside gsd-copilot-installer/)
 if ($WorkspaceDir -eq $PSScriptRoot) {
     Write-Host ""
     Write-Host "WARNING: You are running this installer from its own directory:"
