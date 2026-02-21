@@ -14,17 +14,49 @@ Install GSD Copilot files into your VS Code workspace with a single PowerShell c
 
 ## Quick Start
 
-Open a PowerShell terminal in your project root, then:
+### One-liner (recommended)
+
+Open a PowerShell terminal in your project root and run:
+
+```powershell
+irm "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/installer/install.ps1" | iex
+```
+
+This pipes the script directly into PowerShell without saving it to disk, so execution policy is never an issue.
+
+To pass arguments (e.g. a specific tag):
+
+```powershell
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/installer/install.ps1"))) -Tag v1.0.0
+```
+
+### Download-then-run
+
+If you prefer to inspect the script first:
 
 ```powershell
 # 1. Download the installer
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/darrylwisner/get-shit-done-github-copilot/main/installer/install.ps1" -OutFile install.ps1
 
-# 2. Run it
+# 2. Unblock it (removes the internet zone mark Windows adds to downloaded files)
+Unblock-File install.ps1
+
+# 3. Run it
 .\install.ps1
 
-# 3. Clean up
+# 4. Clean up
 Remove-Item install.ps1
+```
+
+> **Note:** Step 2 (`Unblock-File`) is required. Without it, Windows blocks the script because it was downloaded from the internet and is not digitally signed.
+
+### Installing from the release zip
+
+If you extracted `install.ps1` from a downloaded GitHub release zip, run `Unblock-File` before executing it:
+
+```powershell
+Unblock-File .\installer\install.ps1
+.\installer\install.ps1
 ```
 
 That's it. GSD Copilot is now set up in your workspace.
