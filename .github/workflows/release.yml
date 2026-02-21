@@ -45,7 +45,7 @@ jobs:
           # --- Copilot layer: .github/ files ---
 
           # Prompts
-          cp -r .github/prompts staging/.github/prompts
+          cp -r .github/prompts/. staging/.github/prompts/
 
           # GSD-prefixed instruction files only (|| true: dir may be empty or missing)
           find .github/instructions -maxdepth 1 \( -name "gsd-*.instructions.md" -o -name "gsd.*.md" \) \
