@@ -1,14 +1,8 @@
 ---
-name: gsd.cleanup
+name: gsd:cleanup
 description: "Archive accumulated phase directories from completed milestones"
-argument-hint: ""
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/cleanup.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: null (field absent in upstream command) -->
 

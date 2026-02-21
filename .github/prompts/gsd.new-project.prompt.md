@@ -1,15 +1,10 @@
 ---
-name: gsd.new-project
+name: gsd:new-project
 description: "Initialize a new project with deep context gathering and PROJECT.md"
 argument-hint: "[--auto]"
 tools: ['agent', 'edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/new-project.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Bash","Write","Task","AskUserQuestion"] -->
 

@@ -159,6 +159,7 @@ git status
 ### Verifier Fails: "Prompt naming mismatch"
 - **Cause:** Upstream changed command naming convention
 - **Fix:** Sync agent updates `normalizeName()` function
+- **Note:** `normalizeName()` is now an identity function — it preserves the upstream `gsd:<cmd>` colon syntax as-is in the `name:` frontmatter field. File names on disk remain `gsd.<cmd>.prompt.md` (dot-separated, Windows-safe). If upstream diverges from `gsd:` prefix, update `normalizeName()` accordingly.
 
 ### PR Has Too Many Changes
 - **Cause:** Generator output changed (formatting, path normalization, etc.)
@@ -171,7 +172,7 @@ git status
 Once a year, review the generator and verifier for:
 - [ ] Are there edge cases in YAML parsing?
 - [ ] Could path normalization fail on edge cases?
-- [ ] Does `normalizeName()` handle all upstream naming?
+- [ ] Does `normalizeName()` correctly pass through upstream `gsd:<cmd>` colon syntax?
 - [ ] Are error messages helpful?
 
 ### Update Cron Schedule

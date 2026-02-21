@@ -1,15 +1,10 @@
 ---
-name: gsd.execute-phase
+name: gsd:execute-phase
 description: "Execute all plans in a phase with wave-based parallelization"
 argument-hint: "<phase-number> [--gaps-only]"
 tools: ['agent', 'edit', 'execute', 'read', 'search', 'todo', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/execute-phase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Task","TodoWrite","AskUserQuestion"] -->
 

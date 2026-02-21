@@ -1,15 +1,9 @@
 ---
-name: gsd.plan-milestone-gaps
+name: gsd:plan-milestone-gaps
 description: "Create phases to close all gaps identified by milestone audit"
-argument-hint: ""
 tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/plan-milestone-gaps.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion"] -->
 

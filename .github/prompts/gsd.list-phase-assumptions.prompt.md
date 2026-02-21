@@ -1,15 +1,10 @@
 ---
-name: gsd.list-phase-assumptions
+name: gsd:list-phase-assumptions
 description: "Surface Claude's assumptions about a phase approach before planning"
 argument-hint: "[phase]"
 tools: ['execute', 'read', 'search']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/list-phase-assumptions.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Bash","Grep","Glob"] -->
 

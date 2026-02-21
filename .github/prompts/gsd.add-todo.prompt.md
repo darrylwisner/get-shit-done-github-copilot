@@ -1,15 +1,10 @@
 ---
-name: gsd.add-todo
+name: gsd:add-todo
 description: "Capture idea or task as todo from current conversation context"
 argument-hint: "[optional description]"
 tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/add-todo.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash","AskUserQuestion"] -->
 

@@ -1,15 +1,10 @@
 ---
-name: gsd.new-milestone
+name: gsd:new-milestone
 description: "Start a new milestone cycle — update PROJECT.md and route to requirements"
 argument-hint: "[milestone name, e.g., 'v1.1 Notifications']"
 tools: ['agent', 'edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/new-milestone.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash","Task","AskUserQuestion"] -->
 

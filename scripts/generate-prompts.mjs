@@ -199,8 +199,8 @@ function mapTools(upstreamTools, filePath, toolMap, pendingStubs) {
 }
 
 function normalizeName(name) {
-  // upstream uses gsd:new-project; VS Code prompt uses gsd.new-project
-  return String(name).replace(/^gsd:/, "gsd.").replace(/:/g, ".");
+  // preserve upstream gsd:<cmd> colon syntax exactly
+  return String(name);
 }
 
 function convertIncludes(text) {
@@ -412,7 +412,7 @@ function stepAssemble(ctx) {
   const upstreamName = ctx.fm.name || '';
   const cmdName = upstreamName
     ? normalizeName(upstreamName)
-    : 'gsd.' + path.basename(ctx.cmdFile, '.md');
+    : 'gsd:' + path.basename(ctx.cmdFile, '.md');
 
   const description = ctx.fm.description || `GSD command ${cmdName}`;
   const argumentHint = ctx.fm['argument-hint'] || '';
@@ -438,19 +438,17 @@ function stepAssemble(ctx) {
   const frontmatterLines = [
     `name: ${cmdName}`,
     `description: "${escapeYamlString(description)}"`,
-    `argument-hint: "${escapeYamlString(argumentHint)}"`,
+    argumentHint ? `argument-hint: "${escapeYamlString(argumentHint)}"` : '',
     toolsYamlLine,
     `agent: agent`,
   ].filter(l => l.length > 0);
 
   const frontmatter = `---\n${frontmatterLines.join('\n')}\n---`;
 
-  const banner = generatedBanner(sourceRel);
   const annotations = [toolsAnnotation, omittedComment].filter(Boolean).join('\n');
 
   ctx.output = joinBlocks(
     frontmatter,
-    banner,
     annotations,
     needsAskTool ? adapterBlock().trimEnd() : '',
     ctx.body.trimEnd()

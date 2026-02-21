@@ -1,15 +1,10 @@
 ---
-name: gsd.health
+name: gsd:health
 description: "Diagnose planning directory health and optionally repair issues"
 argument-hint: "[--repair]"
 tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/health.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Bash","Write","AskUserQuestion"] -->
 

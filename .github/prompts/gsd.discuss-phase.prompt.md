@@ -1,15 +1,10 @@
 ---
-name: gsd.discuss-phase
+name: gsd:discuss-phase
 description: "Gather phase context through adaptive questioning before planning"
 argument-hint: "<phase> [--auto]"
 tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/discuss-phase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Task"] -->
 

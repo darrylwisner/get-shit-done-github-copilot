@@ -1,15 +1,10 @@
 ---
-name: gsd.set-profile
+name: gsd:set-profile
 description: "Switch model profile for GSD agents (quality/balanced/budget)"
 argument-hint: "<profile>"
 tools: ['edit', 'execute', 'read']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/set-profile.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash"] -->
 

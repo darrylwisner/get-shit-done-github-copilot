@@ -1,15 +1,10 @@
 ---
-name: gsd.map-codebase
+name: gsd:map-codebase
 description: "Analyze codebase with parallel mapper agents to produce .planning/codebase/ documents"
 argument-hint: "[optional: specific area to map, e.g., 'api' or 'auth']"
 tools: ['agent', 'edit', 'execute', 'read', 'search']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/map-codebase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Bash","Glob","Grep","Write","Task"] -->
 

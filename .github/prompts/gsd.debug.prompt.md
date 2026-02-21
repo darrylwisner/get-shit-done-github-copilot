@@ -1,15 +1,10 @@
 ---
-name: gsd.debug
+name: gsd:debug
 description: "Systematic debugging with persistent state across context resets"
 argument-hint: "[issue description]"
 tools: ['agent', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/debug.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Bash","Task","AskUserQuestion"] -->
 

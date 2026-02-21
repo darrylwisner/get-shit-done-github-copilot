@@ -1,15 +1,10 @@
 ---
-name: gsd.remove-phase
+name: gsd:remove-phase
 description: "Remove a future phase from roadmap and renumber subsequent phases"
 argument-hint: "<phase-number>"
 tools: ['edit', 'execute', 'read', 'search']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/remove-phase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash","Glob"] -->
 

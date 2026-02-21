@@ -1,15 +1,10 @@
 ---
-name: gsd.plan-phase
+name: gsd:plan-phase
 description: "Create detailed phase plan (PLAN.md) with verification loop"
 argument-hint: "[phase] [--auto] [--research] [--skip-research] [--gaps] [--skip-verify]"
 tools: ['agent', 'edit', 'execute', 'mcp__context7__*', 'read', 'search', 'web']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/plan-phase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Task","WebFetch","mcp__context7__*"] -->
 
