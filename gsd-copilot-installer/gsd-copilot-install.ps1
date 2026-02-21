@@ -235,11 +235,11 @@ if (-not $DryRun) {
                 Write-Host "[DRY-RUN] would write: .github/$rel"
             }
         }
-        $claueSrcRootDry = Join-Path $tmpDir ".claude"
-        if (Test-Path $claueSrcRootDry) {
-            $claudeFilesDry = Get-ChildItem -Recurse -File -Path $claueSrcRootDry
+        $claudeSrcRootDry = Join-Path $tmpDir ".claude"
+        if (Test-Path $claudeSrcRootDry) {
+            $claudeFilesDry = Get-ChildItem -Recurse -File -Path $claudeSrcRootDry
             foreach ($src in $claudeFilesDry) {
-                $rel  = $src.FullName.Substring($claueSrcRootDry.Length).TrimStart('\', '/')
+                $rel  = $src.FullName.Substring($claudeSrcRootDry.Length).TrimStart('\', '/')
                 $dest = Join-Path (Join-Path $WorkspaceDir ".claude") $rel
                 $exists = Test-Path $dest
                 if ($exists) {
