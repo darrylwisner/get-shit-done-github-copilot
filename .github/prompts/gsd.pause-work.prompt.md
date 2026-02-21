@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Write","Bash"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.pause-work`
-
----
-
 <objective>
 Create `.continue-here.md` handoff file to preserve complete work state across sessions.
 

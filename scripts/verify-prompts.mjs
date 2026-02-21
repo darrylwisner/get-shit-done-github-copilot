@@ -150,9 +150,6 @@ function checkToolAccuracy(promptName, promptContent, toolMap) {
 
 // VER-03: structural integrity
 function checkStructuralIntegrity(promptName, promptContent, upstreamSource) {
-  if (!promptContent.includes('If the local GSD install does not exist')) {
-    addError('VER-03', promptName, 'missing preflight block');
-  }
   // Only flag missing <execution_context> if the upstream source has one.
   // Some upstream commands (e.g. debug.md, join-discord.md, reapply-patches.md,
   // research-phase.md) have no <execution_context> block — their generated

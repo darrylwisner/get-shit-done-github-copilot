@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Task","WebFetch","mcp__context7__*"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.plan-phase`
-
----
-
 <objective>
 Create executable phase prompts (PLAN.md files) for a roadmap phase with integrated research and verification.
 
@@ -54,6 +39,6 @@ Normalize phase input in step 2 before any directory lookups.
 </context>
 
 <process>
-Execute the plan-phase workflow from @./.claude/get-shit-done/workflows/plan-phase.md end-to-end.
+Execute the plan-phase workflow from @.claude/get-shit-done/workflows/plan-phase.md end-to-end.
 Preserve all workflow gates (validation, research, planning, verification loop, routing).
 </process>

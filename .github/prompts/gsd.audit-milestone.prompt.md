@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Glob","Grep","Bash","Task","Write"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.audit-milestone`
-
----
-
 <objective>
 Verify milestone achieved its definition of done. Check requirements coverage, cross-phase integration, and end-to-end flows.
 
@@ -53,6 +38,6 @@ Glob: .planning/phases/*/*-VERIFICATION.md
 </context>
 
 <process>
-Execute the audit-milestone workflow from @./.claude/get-shit-done/workflows/audit-milestone.md end-to-end.
+Execute the audit-milestone workflow from @.claude/get-shit-done/workflows/audit-milestone.md end-to-end.
 Preserve all workflow gates (scope determination, verification reading, integration check, requirements coverage, routing).
 </process>

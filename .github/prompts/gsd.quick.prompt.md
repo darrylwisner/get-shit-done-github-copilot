@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Task","AskUserQuestion"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.quick`
-
----
-
 ## Copilot Runtime Adapter (important)
 
 Upstream GSD command sources may reference an `AskUserQuestion` tool (Claude/OpenCode runtime concept).
@@ -70,6 +55,6 @@ $ARGUMENTS
 </context>
 
 <process>
-Execute the quick workflow from @./.claude/get-shit-done/workflows/quick.md end-to-end.
+Execute the quick workflow from @.claude/get-shit-done/workflows/quick.md end-to-end.
 Preserve all workflow gates (validation, task description, planning, execution, state updates, commits).
 </process>

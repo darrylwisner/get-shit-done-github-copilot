@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Bash","Write","Task","AskUserQuestion"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.new-project`
-
----
-
 ## Copilot Runtime Adapter (important)
 
 Upstream GSD command sources may reference an `AskUserQuestion` tool (Claude/OpenCode runtime concept).
@@ -75,6 +60,6 @@ Initialize a new project through unified flow: questioning → research (optiona
 </execution_context>
 
 <process>
-Execute the new-project workflow from @./.claude/get-shit-done/workflows/new-project.md end-to-end.
+Execute the new-project workflow from @.claude/get-shit-done/workflows/new-project.md end-to-end.
 Preserve all workflow gates (validation, approvals, commits, routing).
 </process>

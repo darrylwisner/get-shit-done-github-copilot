@@ -222,24 +222,6 @@ function normalizeRuntimePathsForLocalInstall(text) {
     .replace(/(?<!\.)\/\.(claude|opencode|gemini)\//g, "./.$1/");
 }
 
-function preflightBlock(cmdName) {
-  return `## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: \`./.claude/get-shit-done/\`
-2. If missing, run:
-
-\`\`\`bash
-npx get-shit-done-cc --claude --local
-\`\`\`
-
-3. Then re-run the slash command: \`/${cmdName}\`
-
----
-`;
-}
-
 function adapterBlock() {
   // Universal shim: map upstream AskUserQuestion to VS Code's askQuestions tool.
   return `## Copilot Runtime Adapter (important)
@@ -470,7 +452,6 @@ function stepAssemble(ctx) {
     frontmatter,
     banner,
     annotations,
-    preflightBlock(cmdName).trimEnd(),
     needsAskTool ? adapterBlock().trimEnd() : '',
     ctx.body.trimEnd()
   ) + '\n';

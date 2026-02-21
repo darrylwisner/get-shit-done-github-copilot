@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Task","TodoWrite","AskUserQuestion"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.execute-phase`
-
----
-
 ## Copilot Runtime Adapter (important)
 
 Upstream GSD command sources may reference an `AskUserQuestion` tool (Claude/OpenCode runtime concept).
@@ -70,6 +55,6 @@ Phase: $ARGUMENTS
 </context>
 
 <process>
-Execute the execute-phase workflow from @./.claude/get-shit-done/workflows/execute-phase.md end-to-end.
+Execute the execute-phase workflow from @.claude/get-shit-done/workflows/execute-phase.md end-to-end.
 Preserve all workflow gates (wave execution, checkpoint handling, verification, state updates, routing).
 </process>

@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Write","Bash"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.complete-milestone`
-
----
-
 <objective>
 Mark milestone {{version}} complete, archive to milestones/, and update ROADMAP.md and REQUIREMENTS.md.
 
@@ -38,8 +23,8 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 <execution_context>
 **Load these files NOW (before proceeding):**
 
-- @./.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
-- @./.claude/get-shit-done/templates/milestone-archive.md (archive template)
+- @.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
+- @.claude/get-shit-done/templates/milestone-archive.md (archive template)
   </execution_context>
 
 <context>

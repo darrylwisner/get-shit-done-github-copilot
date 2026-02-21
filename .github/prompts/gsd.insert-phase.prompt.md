@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Write","Bash"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.insert-phase`
-
----
-
 <objective>
 Insert a decimal phase for urgent work discovered mid-milestone that must be completed between existing integer phases.
 
@@ -47,6 +32,6 @@ Arguments: $ARGUMENTS (format: <after-phase-number> <description>)
 </context>
 
 <process>
-Execute the insert-phase workflow from @./.claude/get-shit-done/workflows/insert-phase.md end-to-end.
+Execute the insert-phase workflow from @.claude/get-shit-done/workflows/insert-phase.md end-to-end.
 Preserve all validation gates (argument parsing, phase verification, decimal calculation, roadmap updates).
 </process>

@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Write","Bash","Glob"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.remove-phase`
-
----
-
 <objective>
 Remove an unstarted future phase from the roadmap and renumber all subsequent phases to maintain a clean, linear sequence.
 
@@ -46,6 +31,6 @@ Phase: $ARGUMENTS
 </context>
 
 <process>
-Execute the remove-phase workflow from @./.claude/get-shit-done/workflows/remove-phase.md end-to-end.
+Execute the remove-phase workflow from @.claude/get-shit-done/workflows/remove-phase.md end-to-end.
 Preserve all validation gates (future phase check, work check), renumbering logic, and commit.
 </process>

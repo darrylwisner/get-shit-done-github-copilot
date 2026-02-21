@@ -13,21 +13,6 @@ Regenerate: node scripts/generate-prompts.mjs
 
 <!-- upstream-tools: ["Read","Bash","Write","AskUserQuestion"] -->
 
-## Preflight (required)
-
-If the local GSD install does not exist in this workspace, do this **once**:
-
-1. Check for: `./.claude/get-shit-done/`
-2. If missing, run:
-
-```bash
-npx get-shit-done-cc --claude --local
-```
-
-3. Then re-run the slash command: `/gsd.health`
-
----
-
 ## Copilot Runtime Adapter (important)
 
 Upstream GSD command sources may reference an `AskUserQuestion` tool (Claude/OpenCode runtime concept).
@@ -56,6 +41,6 @@ Validate `.planning/` directory integrity and report actionable issues. Checks f
 </execution_context>
 
 <process>
-Execute the health workflow from @./.claude/get-shit-done/workflows/health.md end-to-end.
+Execute the health workflow from @.claude/get-shit-done/workflows/health.md end-to-end.
 Parse --repair flag from arguments and pass to workflow.
 </process>
