@@ -33,13 +33,21 @@ That's it. GSD Copilot is now set up in your workspace.
 
 ## What Gets Installed
 
-The installer writes only into three subdirectories of `.github/`:
+The installer writes into two top-level directories:
 
+**`.github/` (Copilot layer)**
 - `.github/prompts/` — VS Code slash command prompts (e.g. `/gsd.new-project`)
-- `.github/agents/` — Copilot agent profiles (e.g. `gsd-planner.agent.md`)
 - `.github/instructions/` — Reusable instruction files for Copilot context
 
+**`.claude/` (GSD runtime)**
+- `.claude/commands/gsd/` — Upstream GSD command definitions
+- `.claude/get-shit-done/` — GSD runtime: workflows, references, templates, bin
+- `.claude/agents/` — GSD agent definitions
+- `.claude/hooks/` — GSD hook scripts
+- `.claude/package.json` — CommonJS mode marker required by the GSD runtime
+
 Non-GSD files in `.github/` (your workflows, issue templates, etc.) are never touched.
+All files under `.claude/` in the workspace are GSD-owned and will be overwritten on upgrade.
 
 ---
 
