@@ -52,11 +52,20 @@ Remove-Item install.ps1
 
 ### Installing from the release zip
 
-If you extracted `install.ps1` from a downloaded GitHub release zip, run `Unblock-File` before executing it:
+If you extracted the release zip and want to run `install.ps1` from the extracted `installer/` folder, you **must** target your project root explicitly — running the installer from its own directory is blocked with a clear error.
 
 ```powershell
+# Run from anywhere — point -WorkspaceDir at your project root
 Unblock-File .\installer\install.ps1
-.\installer\install.ps1
+.\installer\install.ps1 -WorkspaceDir "C:\path\to\your-project"
+```
+
+Or `cd` to your project root first, then unblock and run:
+
+```powershell
+cd "C:\path\to\your-project"
+Unblock-File .\path\to\installer\install.ps1
+.\path\to\installer\install.ps1
 ```
 
 That's it. GSD Copilot is now set up in your workspace.

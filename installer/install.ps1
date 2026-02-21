@@ -33,6 +33,26 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Guard: warn if the script is being run from its own directory
+# (common mistake when extracting the zip and running from inside installer/)
+if ($WorkspaceDir -eq $PSScriptRoot) {
+    Write-Host ""
+    Write-Host "WARNING: You are running this installer from its own directory:"
+    Write-Host "  $PSScriptRoot"
+    Write-Host ""
+    Write-Host "GSD files will be installed into this folder, not your project."
+    Write-Host "Run the installer from your project root instead:"
+    Write-Host ""
+    Write-Host "  cd <your-project-root>"
+    Write-Host "  $PSCommandPath"
+    Write-Host ""
+    Write-Host "Or pass -WorkspaceDir explicitly:"
+    Write-Host ""
+    Write-Host "  .\installer\install.ps1 -WorkspaceDir '<your-project-root>'"
+    Write-Host ""
+    exit 1
+}
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 $REPO         = "darrylwisner/get-shit-done-github-copilot"
 $ASSET_NAME   = "gsd-copilot-*.zip"
@@ -238,14 +258,14 @@ if (-not $DryRun) {
 }
 
 # ── 7. Print summary ──────────────────────────────────────────────────────────
-Write-Host "──────────────────────────────────────────"
+Write-Host "------------------------------------------"
 if ($DryRun) {
     Write-Host "No files written (dry run)"
 } else {
     Write-Host "Done: $writtenCount written ($overwroteCount overwritten), $skippedCount skipped"
-    Write-Host "Version: $VERSION_FILE `u{2192} $releaseVersion"
+    Write-Host "Version: $VERSION_FILE -> $releaseVersion"
 }
-Write-Host "──────────────────────────────────────────"
+Write-Host "------------------------------------------"
 Write-Host ""
 
 # ── 8. Cleanup temp files ──────────────────────────────────────────────────────
