@@ -5,8 +5,10 @@
 
 .DESCRIPTION
     Downloads the GSD Copilot release zip from GitHub Releases and installs
-    .github/prompts/, .github/agents/, and .github/instructions/ into the
-    target workspace without touching non-GSD files.
+    .github/prompts/, .github/instructions/,
+    .claude/commands/gsd/, .claude/get-shit-done/, .claude/agents/,
+    .claude/hooks/, and .claude/package.json
+    into the target workspace without touching non-GSD files.
 
 .PARAMETER WorkspaceDir
     Path to the target workspace. Defaults to the current directory.
@@ -118,6 +120,12 @@ if (-not $DryRun) {
         exit 1
     }
 
+    $claudeSrcRoot = Join-Path $tmpDir ".claude"
+    if (-not (Test-Path $claudeSrcRoot)) {
+        Write-Error "Extracted zip does not contain a .claude/ directory. Unexpected asset structure."
+        exit 1
+    }
+
     # ── 5. Install files ──────────────────────────────────────────────────────
     try {
         $files = Get-ChildItem -Recurse -File -Path $srcRoot
@@ -150,6 +158,38 @@ if (-not $DryRun) {
         exit 1
     }
 
+    # ── 5b. Install .claude/ files ───────────────────────────────────────────
+    try {
+        $claudeFiles = Get-ChildItem -Recurse -File -Path $claueSrcRoot
+        foreach ($src in $claudeFiles) {
+            $rel  = $src.FullName.Substring($claueSrcRoot.Length).TrimStart('\', '/')
+            $dest = Join-Path $WorkspaceDir ".claude" $rel
+            $exists = Test-Path $dest
+
+            if ($exists) {
+                if ($Force) {
+                    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+                    Copy-Item -Path $src.FullName -Destination $dest -Force
+                    Write-Verbose "  Overwritten (--force): .claude/$rel"
+                } else {
+                    Write-Host "  `u{26A0} Overwriting: .claude/$rel"
+                    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+                    Copy-Item -Path $src.FullName -Destination $dest -Force
+                }
+                $writtenCount++
+                $overwroteCount++
+            } else {
+                New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+                Copy-Item -Path $src.FullName -Destination $dest -Force
+                Write-Verbose "  Written: .claude/$rel"
+                $writtenCount++
+            }
+        }
+    } catch {
+        Write-Error "Install failed writing .claude/$rel`: $_"
+        exit 1
+    }
+
     # ── 6. Write version marker ───────────────────────────────────────────────
     New-Item -ItemType Directory -Force -Path (Split-Path $versionFilePath) | Out-Null
     Set-Content -Path $versionFilePath -Value $releaseVersion -Encoding UTF8
@@ -173,6 +213,20 @@ if (-not $DryRun) {
                 Write-Host "[DRY-RUN] would overwrite: .github/$rel"
             } else {
                 Write-Host "[DRY-RUN] would write: .github/$rel"
+            }
+        }
+        $claueSrcRootDry = Join-Path $tmpDir ".claude"
+        if (Test-Path $claueSrcRootDry) {
+            $claudeFilesDry = Get-ChildItem -Recurse -File -Path $claueSrcRootDry
+            foreach ($src in $claudeFilesDry) {
+                $rel  = $src.FullName.Substring($claueSrcRootDry.Length).TrimStart('\', '/')
+                $dest = Join-Path $WorkspaceDir ".claude" $rel
+                $exists = Test-Path $dest
+                if ($exists) {
+                    Write-Host "[DRY-RUN] would overwrite: .claude/$rel"
+                } else {
+                    Write-Host "[DRY-RUN] would write: .claude/$rel"
+                }
             }
         }
         Remove-Item -Force $tmpZip -ErrorAction SilentlyContinue
