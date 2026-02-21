@@ -234,6 +234,7 @@ jobs:
 
           if [ -z "$EXISTING_PR" ]; then
             gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
               --base "${{ env.DEFAULT_BRANCH }}" \
               --head "automated/upstream-sync" \
               --title "${PR_TITLE}" \
