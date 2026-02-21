@@ -1,5 +1,5 @@
 ---
-name: gsd:plan-phase
+name: gsd.plan-phase
 description: "Create detailed phase plan (PLAN.md) with verification loop"
 argument-hint: "[phase] [--auto] [--research] [--skip-research] [--gaps] [--skip-verify]"
 tools: ['agent', 'edit', 'execute', 'mcp__context7__*', 'read', 'search', 'web']

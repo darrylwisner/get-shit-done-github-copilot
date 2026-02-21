@@ -1,5 +1,5 @@
 ---
-name: gsd:new-project
+name: gsd.new-project
 description: "Initialize a new project with deep context gathering and PROJECT.md"
 argument-hint: "[--auto]"
 tools: ['agent', 'edit', 'execute', 'read', 'vscode/askQuestions']

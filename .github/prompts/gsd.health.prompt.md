@@ -1,5 +1,5 @@
 ---
-name: gsd:health
+name: gsd.health
 description: "Diagnose planning directory health and optionally repair issues"
 argument-hint: "[--repair]"
 tools: ['edit', 'execute', 'read', 'vscode/askQuestions']

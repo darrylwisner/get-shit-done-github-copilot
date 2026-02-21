@@ -1,5 +1,5 @@
 ---
-name: gsd:pause-work
+name: gsd.pause-work
 description: "Create context handoff when pausing work mid-phase"
 tools: ['edit', 'execute', 'read']
 agent: agent

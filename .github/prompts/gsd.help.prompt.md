@@ -1,5 +1,5 @@
 ---
-name: gsd:help
+name: gsd.help
 description: "Show available GSD commands and usage guide"
 agent: agent
 ---

@@ -1,5 +1,5 @@
 ---
-name: gsd:reapply-patches
+name: gsd.reapply-patches
 description: "Reapply local modifications after a GSD update"
 tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent

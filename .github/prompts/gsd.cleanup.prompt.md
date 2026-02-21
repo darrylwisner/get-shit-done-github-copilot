@@ -1,5 +1,5 @@
 ---
-name: gsd:cleanup
+name: gsd.cleanup
 description: "Archive accumulated phase directories from completed milestones"
 agent: agent
 ---

@@ -1,5 +1,5 @@
 ---
-name: gsd:plan-milestone-gaps
+name: gsd.plan-milestone-gaps
 description: "Create phases to close all gaps identified by milestone audit"
 tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent

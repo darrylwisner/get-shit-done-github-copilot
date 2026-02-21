@@ -1,5 +1,5 @@
 ---
-name: gsd:progress
+name: gsd.progress
 description: "Check project progress, show context, and route to next action (execute or plan)"
 tools: ['execute', 'read', 'search']
 agent: agent

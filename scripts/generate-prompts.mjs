@@ -199,8 +199,8 @@ function mapTools(upstreamTools, filePath, toolMap, pendingStubs) {
 }
 
 function normalizeName(name) {
-  // preserve upstream gsd:<cmd> colon syntax exactly
-  return String(name);
+  // upstream uses gsd:new-project; VS Code prompt uses gsd.new-project
+  return String(name).replace(/^gsd:/, "gsd.").replace(/:/g, ".");
 }
 
 function convertIncludes(text) {
@@ -412,7 +412,7 @@ function stepAssemble(ctx) {
   const upstreamName = ctx.fm.name || '';
   const cmdName = upstreamName
     ? normalizeName(upstreamName)
-    : 'gsd:' + path.basename(ctx.cmdFile, '.md');
+    : 'gsd.' + path.basename(ctx.cmdFile, '.md');
 
   const description = ctx.fm.description || `GSD command ${cmdName}`;
   const argumentHint = ctx.fm['argument-hint'] || '';

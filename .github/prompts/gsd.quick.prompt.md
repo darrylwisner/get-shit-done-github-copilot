@@ -1,5 +1,5 @@
 ---
-name: gsd:quick
+name: gsd.quick
 description: "Execute a quick task with GSD guarantees (atomic commits, state tracking) but skip optional agents"
 argument-hint: "[--full]"
 tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']

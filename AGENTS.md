@@ -22,10 +22,8 @@ Only maintain the Copilot wrapper layer:
 5) If generator/verification fails due to upstream changes, fix the generator/verification scripts (do not rewrite upstream docs).
 
 ## Naming conventions
-This repo uses two intentionally different conventions:
-- **Slash command form** (what VS Code shows in the command palette): `gsd:<cmd>` — e.g. `/gsd:new-project`. This is the canonical command identity and appears in each prompt's `name:` frontmatter field.
-- **File naming** (disk-safe, Windows-compatible): `gsd.<cmd>.prompt.md` — e.g. `gsd.new-project.prompt.md`. The `name:` field and file name intentionally diverge.
-- Mapping: `gsd:<cmd>` (slash command) ↔ `gsd.<cmd>.prompt.md` (file name)
+- Prompt command names use dot-namespace: /gsd.new-project
+- Mapping is stable: gsd:<cmd> → gsd.<cmd>
 
 ## Automated Sync Workflow
 

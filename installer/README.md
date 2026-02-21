@@ -36,7 +36,7 @@ That's it. GSD Copilot is now set up in your workspace.
 The installer writes into two top-level directories:
 
 **`.github/` (Copilot layer)**
-- `.github/prompts/` — VS Code slash command prompts (e.g. `/gsd:new-project`)
+- `.github/prompts/` — VS Code slash command prompts (e.g. `/gsd.new-project`)
 - `.github/instructions/` — Reusable instruction files for Copilot context
 
 **`.claude/` (GSD runtime)**
