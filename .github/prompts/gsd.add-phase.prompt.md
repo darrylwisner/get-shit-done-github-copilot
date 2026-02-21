@@ -41,11 +41,11 @@ Routes to the add-phase workflow which handles:
 <execution_context>
 - Read file at: .planning/ROADMAP.md
 - Read file at: .planning/STATE.md
-- Read file at: ../.claude/get-shit-done/workflows/add-phase.md
+- Read file at: ./.claude/get-shit-done/workflows/add-phase.md
 </execution_context>
 
 <process>
-**Follow the add-phase workflow** from `@../.claude/get-shit-done/workflows/add-phase.md`.
+**Follow the add-phase workflow** from `@./.claude/get-shit-done/workflows/add-phase.md`.
 
 The workflow handles all logic including:
 1. Argument parsing and validation

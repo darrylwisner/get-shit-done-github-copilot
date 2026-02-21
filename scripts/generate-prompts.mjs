@@ -219,7 +219,7 @@ function normalizeRuntimePathsForLocalInstall(text) {
   // Also supports opencode/gemini if present.
   return text
     .replace(/~\/\.(claude|opencode|gemini)\//g, "./.$1/")
-    .replace(/\/\.(claude|opencode|gemini)\//g, "./.$1/");
+    .replace(/(?<!\.)\/\.(claude|opencode|gemini)\//g, "./.$1/");
 }
 
 function preflightBlock(cmdName) {

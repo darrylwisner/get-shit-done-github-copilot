@@ -61,11 +61,11 @@ Routes to the check-todos workflow which handles:
 <execution_context>
 - Read file at: .planning/STATE.md
 - Read file at: .planning/ROADMAP.md
-- Read file at: ../.claude/get-shit-done/workflows/check-todos.md
+- Read file at: ./.claude/get-shit-done/workflows/check-todos.md
 </execution_context>
 
 <process>
-**Follow the check-todos workflow** from `@../.claude/get-shit-done/workflows/check-todos.md`.
+**Follow the check-todos workflow** from `@./.claude/get-shit-done/workflows/check-todos.md`.
 
 The workflow handles all logic including:
 1. Todo existence checking

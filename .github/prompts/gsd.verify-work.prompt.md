@@ -37,8 +37,8 @@ Output: {phase_num}-UAT.md tracking all test results. If issues found: diagnosed
 </objective>
 
 <execution_context>
-- Read file at: ../.claude/get-shit-done/workflows/verify-work.md
-- Read file at: ../.claude/get-shit-done/templates/UAT.md
+- Read file at: ./.claude/get-shit-done/workflows/verify-work.md
+- Read file at: ./.claude/get-shit-done/templates/UAT.md
 </execution_context>
 
 <context>
@@ -50,6 +50,6 @@ Phase: $ARGUMENTS (optional)
 </context>
 
 <process>
-Execute the verify-work workflow from @../.claude/get-shit-done/workflows/verify-work.md end-to-end.
+Execute the verify-work workflow from @./.claude/get-shit-done/workflows/verify-work.md end-to-end.
 Preserve all workflow gates (session management, test presentation, diagnosis, fix planning, routing).
 </process>

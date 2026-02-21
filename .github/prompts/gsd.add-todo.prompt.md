@@ -62,11 +62,11 @@ Routes to the add-todo workflow which handles:
 
 <execution_context>
 - Read file at: .planning/STATE.md
-- Read file at: ../.claude/get-shit-done/workflows/add-todo.md
+- Read file at: ./.claude/get-shit-done/workflows/add-todo.md
 </execution_context>
 
 <process>
-**Follow the add-todo workflow** from `@../.claude/get-shit-done/workflows/add-todo.md`.
+**Follow the add-todo workflow** from `@./.claude/get-shit-done/workflows/add-todo.md`.
 
 The workflow handles all logic including:
 1. Directory ensuring

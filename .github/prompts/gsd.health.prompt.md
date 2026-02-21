@@ -52,10 +52,10 @@ Validate `.planning/` directory integrity and report actionable issues. Checks f
 </objective>
 
 <execution_context>
-- Read file at: ../.claude/get-shit-done/workflows/health.md
+- Read file at: ./.claude/get-shit-done/workflows/health.md
 </execution_context>
 
 <process>
-Execute the health workflow from @../.claude/get-shit-done/workflows/health.md end-to-end.
+Execute the health workflow from @./.claude/get-shit-done/workflows/health.md end-to-end.
 Parse --repair flag from arguments and pass to workflow.
 </process>
