@@ -1,15 +1,9 @@
 ---
 name: gsd.settings
 description: "Configure GSD workflow toggles and model profile"
-argument-hint: ""
 tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/settings.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash","AskUserQuestion"] -->
 

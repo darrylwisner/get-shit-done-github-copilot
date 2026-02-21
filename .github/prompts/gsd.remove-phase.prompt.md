@@ -6,11 +6,6 @@ tools: ['edit', 'execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/remove-phase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Write","Bash","Glob"] -->
 
 <objective>

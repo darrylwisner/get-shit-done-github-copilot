@@ -1,15 +1,9 @@
 ---
 name: gsd.reapply-patches
 description: "Reapply local modifications after a GSD update"
-argument-hint: ""
 tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/reapply-patches.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","AskUserQuestion"] -->
 

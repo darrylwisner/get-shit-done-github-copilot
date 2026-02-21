@@ -6,11 +6,6 @@ tools: ['execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/list-phase-assumptions.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Bash","Grep","Glob"] -->
 
 <objective>

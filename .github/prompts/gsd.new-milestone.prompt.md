@@ -6,11 +6,6 @@ tools: ['agent', 'edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/new-milestone.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Write","Bash","Task","AskUserQuestion"] -->
 
 ## Copilot Runtime Adapter (important)

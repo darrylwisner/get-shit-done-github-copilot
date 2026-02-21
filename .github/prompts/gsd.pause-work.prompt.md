@@ -1,15 +1,9 @@
 ---
 name: gsd.pause-work
 description: "Create context handoff when pausing work mid-phase"
-argument-hint: ""
 tools: ['edit', 'execute', 'read']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/pause-work.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Write","Bash"] -->
 

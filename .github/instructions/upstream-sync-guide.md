@@ -171,7 +171,7 @@ git status
 Once a year, review the generator and verifier for:
 - [ ] Are there edge cases in YAML parsing?
 - [ ] Could path normalization fail on edge cases?
-- [ ] Does `normalizeName()` handle all upstream naming?
+- [ ] Does `normalizeName()` correctly pass through upstream `gsd:<cmd>` colon syntax?
 - [ ] Are error messages helpful?
 
 ### Update Cron Schedule

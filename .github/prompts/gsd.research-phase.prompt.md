@@ -6,11 +6,6 @@ tools: ['agent', 'execute', 'read']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/research-phase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Bash","Task"] -->
 
 <objective>

@@ -1,15 +1,9 @@
 ---
 name: gsd.update
 description: "Update GSD to latest version with changelog display"
-argument-hint: ""
 tools: ['execute', 'vscode/askQuestions']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/update.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Bash","AskUserQuestion"] -->
 

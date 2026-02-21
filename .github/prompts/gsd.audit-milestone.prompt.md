@@ -6,11 +6,6 @@ tools: ['agent', 'edit', 'execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/audit-milestone.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Glob","Grep","Bash","Task","Write"] -->
 
 <objective>

@@ -1,14 +1,8 @@
 ---
 name: gsd.join-discord
 description: "Join the GSD Discord community"
-argument-hint: ""
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/join-discord.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: null (field absent in upstream command) -->
 

@@ -6,11 +6,6 @@ tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/check-todos.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Write","Bash","AskUserQuestion"] -->
 
 ## Copilot Runtime Adapter (important)

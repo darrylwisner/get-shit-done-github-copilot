@@ -6,11 +6,6 @@ tools: ['agent', 'edit', 'execute', 'mcp__context7__*', 'read', 'search', 'web']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/plan-phase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Task","WebFetch","mcp__context7__*"] -->
 
 <objective>

@@ -438,19 +438,17 @@ function stepAssemble(ctx) {
   const frontmatterLines = [
     `name: ${cmdName}`,
     `description: "${escapeYamlString(description)}"`,
-    `argument-hint: "${escapeYamlString(argumentHint)}"`,
+    argumentHint ? `argument-hint: "${escapeYamlString(argumentHint)}"` : '',
     toolsYamlLine,
     `agent: agent`,
   ].filter(l => l.length > 0);
 
   const frontmatter = `---\n${frontmatterLines.join('\n')}\n---`;
 
-  const banner = generatedBanner(sourceRel);
   const annotations = [toolsAnnotation, omittedComment].filter(Boolean).join('\n');
 
   ctx.output = joinBlocks(
     frontmatter,
-    banner,
     annotations,
     needsAskTool ? adapterBlock().trimEnd() : '',
     ctx.body.trimEnd()

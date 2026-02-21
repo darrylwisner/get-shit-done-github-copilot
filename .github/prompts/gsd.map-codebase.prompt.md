@@ -6,11 +6,6 @@ tools: ['agent', 'edit', 'execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/map-codebase.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Bash","Glob","Grep","Write","Task"] -->
 
 <objective>

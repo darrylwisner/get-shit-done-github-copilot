@@ -6,11 +6,6 @@ tools: ['edit', 'execute', 'read']
 agent: agent
 ---
 
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/complete-milestone.md
-Regenerate: node scripts/generate-prompts.mjs
--->
-
 <!-- upstream-tools: ["Read","Write","Bash"] -->
 
 <objective>

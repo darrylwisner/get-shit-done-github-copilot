@@ -1,15 +1,9 @@
 ---
 name: gsd.progress
 description: "Check project progress, show context, and route to next action (execute or plan)"
-argument-hint: ""
 tools: ['execute', 'read', 'search']
 agent: agent
 ---
-
-<!-- GENERATED FILE — DO NOT EDIT.
-Source: commands/gsd/progress.md
-Regenerate: node scripts/generate-prompts.mjs
--->
 
 <!-- upstream-tools: ["Read","Bash","Grep","Glob","SlashCommand"] -->
 <!-- omitted-tools: ["slashcommand"] — no Copilot equivalent found -->
