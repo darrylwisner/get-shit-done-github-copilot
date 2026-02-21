@@ -131,7 +131,7 @@ if (-not $DryRun) {
         $files = Get-ChildItem -Recurse -File -Path $srcRoot
         foreach ($src in $files) {
             $rel  = $src.FullName.Substring($srcRoot.Length).TrimStart('\', '/')
-            $dest = Join-Path $WorkspaceDir ".github" $rel
+            $dest = Join-Path (Join-Path $WorkspaceDir ".github") $rel
             $exists = Test-Path $dest
 
             if ($exists) {
@@ -160,10 +160,10 @@ if (-not $DryRun) {
 
     # ── 5b. Install .claude/ files ───────────────────────────────────────────
     try {
-        $claudeFiles = Get-ChildItem -Recurse -File -Path $claueSrcRoot
+        $claudeFiles = Get-ChildItem -Recurse -File -Path $claudeSrcRoot
         foreach ($src in $claudeFiles) {
-            $rel  = $src.FullName.Substring($claueSrcRoot.Length).TrimStart('\', '/')
-            $dest = Join-Path $WorkspaceDir ".claude" $rel
+            $rel  = $src.FullName.Substring($claudeSrcRoot.Length).TrimStart('\', '/')
+            $dest = Join-Path (Join-Path $WorkspaceDir ".claude") $rel
             $exists = Test-Path $dest
 
             if ($exists) {
@@ -207,7 +207,7 @@ if (-not $DryRun) {
         $files = Get-ChildItem -Recurse -File -Path $srcRoot
         foreach ($src in $files) {
             $rel  = $src.FullName.Substring($srcRoot.Length).TrimStart('\', '/')
-            $dest = Join-Path $WorkspaceDir ".github" $rel
+            $dest = Join-Path (Join-Path $WorkspaceDir ".github") $rel
             $exists = Test-Path $dest
             if ($exists) {
                 Write-Host "[DRY-RUN] would overwrite: .github/$rel"
@@ -220,7 +220,7 @@ if (-not $DryRun) {
             $claudeFilesDry = Get-ChildItem -Recurse -File -Path $claueSrcRootDry
             foreach ($src in $claudeFilesDry) {
                 $rel  = $src.FullName.Substring($claueSrcRootDry.Length).TrimStart('\', '/')
-                $dest = Join-Path $WorkspaceDir ".claude" $rel
+                $dest = Join-Path (Join-Path $WorkspaceDir ".claude") $rel
                 $exists = Test-Path $dest
                 if ($exists) {
                     Write-Host "[DRY-RUN] would overwrite: .claude/$rel"
