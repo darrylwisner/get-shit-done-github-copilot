@@ -25,9 +25,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  UPSTREAM_REPO: gsd-build/get-shit-done
-  UPSTREAM_BRANCH: main
   DEFAULT_BRANCH: main
+  EXPECTED_REPO: darrylwisner/get-shit-done-github-copilot
+  UPSTREAM_BRANCH: main
+  UPSTREAM_REPO: gsd-build/get-shit-done
 
 jobs:
   sync:
@@ -42,6 +43,15 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
+      # SAFETY: Always run this assertion first. Add --repo "$GITHUB_REPOSITORY" to any new gh command you add here.
+      - name: Assert fork context
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "${{ env.EXPECTED_REPO }}" ]; then
+            echo "ERROR: This workflow is running on '$GITHUB_REPOSITORY' but is only intended to run on '${{ env.EXPECTED_REPO }}'."
+            echo "Refusing to proceed — this prevents accidental writes to the wrong repository."
+            exit 1
+          fi
+
       - name: Checkout fork (full history)
         uses: actions/checkout@v4
         with:
@@ -121,7 +131,7 @@ jobs:
           **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE_EOF
             gh issue create \
-              --repo "$GITHUB_REPOSITORY"
+              --repo "$GITHUB_REPOSITORY" \
               --title "Upstream sync merge conflict (upstream@${{ steps.detect.outputs.short_sha }})" \
               --body-file /tmp/issue-body.md \
               --label "upstream-sync"
@@ -170,7 +180,7 @@ jobs:
           **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE_EOF
             gh issue create \
-              --repo "$GITHUB_REPOSITORY"
+              --repo "$GITHUB_REPOSITORY" \
               --title "Upstream sync verifier failed (upstream@${{ steps.detect.outputs.short_sha }})" \
               --body-file /tmp/issue-body.md \
               --label "upstream-sync"
@@ -241,7 +251,7 @@ jobs:
             echo "Created new PR."
           else
             gh pr edit "$EXISTING_PR" \
-              --repo "$GITHUB_REPOSITORY"
+              --repo "$GITHUB_REPOSITORY" \
               --title "${PR_TITLE}" \
               --body-file /tmp/pr-body.md
             echo "Updated existing PR #${EXISTING_PR}."
@@ -261,6 +271,15 @@ jobs:
       GH_TOKEN: ${{ secrets.COPILOT_PAT }}
 
     steps:
+      # SAFETY: Always run this assertion first. Add --repo "$GITHUB_REPOSITORY" to any new gh command you add here.
+      - name: Assert fork context
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "${{ env.EXPECTED_REPO }}" ]; then
+            echo "ERROR: This workflow is running on '$GITHUB_REPOSITORY' but is only intended to run on '${{ env.EXPECTED_REPO }}'."
+            echo "Refusing to proceed — this prevents accidental writes to the wrong repository."
+            exit 1
+          fi
+
       - name: Check COPILOT_PAT
         id: preflight
         run: |
@@ -487,6 +506,7 @@ jobs:
             --body-file /tmp/issue_body.md
 
   guard:
+    # SAFETY: Always run the 'Assert fork context' step first. Add --repo "$GITHUB_REPOSITORY" to any new gh command you add here.
     name: Filesystem Guard (copilot/* branches)
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/heads/copilot/')
@@ -495,6 +515,15 @@ jobs:
       contents: write
 
     steps:
+      # SAFETY: Always run this assertion first. Add --repo "$GITHUB_REPOSITORY" to any new gh command you add here.
+      - name: Assert fork context
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "${{ env.EXPECTED_REPO }}" ]; then
+            echo "ERROR: This workflow is running on '$GITHUB_REPOSITORY' but is only intended to run on '${{ env.EXPECTED_REPO }}'."
+            echo "Refusing to proceed — this prevents accidental writes to the wrong repository."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:

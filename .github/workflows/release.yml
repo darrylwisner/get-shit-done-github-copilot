@@ -12,10 +12,22 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  EXPECTED_REPO: darrylwisner/get-shit-done-github-copilot
+
 jobs:
   publish-release:
     runs-on: ubuntu-latest
     steps:
+      # SAFETY: Always run this assertion first. Add --repo "$GITHUB_REPOSITORY" to any new gh command you add here.
+      - name: Assert fork context
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "${{ env.EXPECTED_REPO }}" ]; then
+            echo "ERROR: This workflow is running on '$GITHUB_REPOSITORY' but is only intended to run on '${{ env.EXPECTED_REPO }}'."
+            echo "Refusing to proceed — this prevents accidental writes to the wrong repository."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -109,5 +121,6 @@ jobs:
         run: |
           gh release create ${{ github.ref_name }} \
             ./gsd-copilot-${{ github.ref_name }}.zip \
+            --repo "$GITHUB_REPOSITORY" \
             --title "GSD Copilot ${{ github.ref_name }}" \
             --generate-notes
