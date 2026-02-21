@@ -33,6 +33,26 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Guard: warn if the script is being run from its own directory
+# (common mistake when extracting the zip and running from inside gsd-copilot-installer/)
+if ($WorkspaceDir -eq $PSScriptRoot) {
+    Write-Host ""
+    Write-Host "WARNING: You are running this installer from its own directory:"
+    Write-Host "  $PSScriptRoot"
+    Write-Host ""
+    Write-Host "GSD files will be installed into this folder, not your project."
+    Write-Host "Run the installer from your project root instead:"
+    Write-Host ""
+    Write-Host "  cd <your-project-root>"
+    Write-Host "  $PSCommandPath"
+    Write-Host ""
+    Write-Host "Or pass -WorkspaceDir explicitly:"
+    Write-Host ""
+    Write-Host "  .\gsd-copilot-installer\gsd-copilot-install.ps1 -WorkspaceDir '<your-project-root>'"
+    Write-Host ""
+    exit 1
+}
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 $REPO         = "darrylwisner/get-shit-done-github-copilot"
 $ASSET_NAME   = "gsd-copilot-*.zip"
@@ -131,7 +151,7 @@ if (-not $DryRun) {
         $files = Get-ChildItem -Recurse -File -Path $srcRoot
         foreach ($src in $files) {
             $rel  = $src.FullName.Substring($srcRoot.Length).TrimStart('\', '/')
-            $dest = Join-Path $WorkspaceDir ".github" $rel
+            $dest = Join-Path (Join-Path $WorkspaceDir ".github") $rel
             $exists = Test-Path $dest
 
             if ($exists) {
@@ -160,10 +180,10 @@ if (-not $DryRun) {
 
     # ── 5b. Install .claude/ files ───────────────────────────────────────────
     try {
-        $claudeFiles = Get-ChildItem -Recurse -File -Path $claueSrcRoot
+        $claudeFiles = Get-ChildItem -Recurse -File -Path $claudeSrcRoot
         foreach ($src in $claudeFiles) {
-            $rel  = $src.FullName.Substring($claueSrcRoot.Length).TrimStart('\', '/')
-            $dest = Join-Path $WorkspaceDir ".claude" $rel
+            $rel  = $src.FullName.Substring($claudeSrcRoot.Length).TrimStart('\', '/')
+            $dest = Join-Path (Join-Path $WorkspaceDir ".claude") $rel
             $exists = Test-Path $dest
 
             if ($exists) {
@@ -207,7 +227,7 @@ if (-not $DryRun) {
         $files = Get-ChildItem -Recurse -File -Path $srcRoot
         foreach ($src in $files) {
             $rel  = $src.FullName.Substring($srcRoot.Length).TrimStart('\', '/')
-            $dest = Join-Path $WorkspaceDir ".github" $rel
+            $dest = Join-Path (Join-Path $WorkspaceDir ".github") $rel
             $exists = Test-Path $dest
             if ($exists) {
                 Write-Host "[DRY-RUN] would overwrite: .github/$rel"
@@ -215,12 +235,12 @@ if (-not $DryRun) {
                 Write-Host "[DRY-RUN] would write: .github/$rel"
             }
         }
-        $claueSrcRootDry = Join-Path $tmpDir ".claude"
-        if (Test-Path $claueSrcRootDry) {
-            $claudeFilesDry = Get-ChildItem -Recurse -File -Path $claueSrcRootDry
+        $claudeSrcRootDry = Join-Path $tmpDir ".claude"
+        if (Test-Path $claudeSrcRootDry) {
+            $claudeFilesDry = Get-ChildItem -Recurse -File -Path $claudeSrcRootDry
             foreach ($src in $claudeFilesDry) {
-                $rel  = $src.FullName.Substring($claueSrcRootDry.Length).TrimStart('\', '/')
-                $dest = Join-Path $WorkspaceDir ".claude" $rel
+                $rel  = $src.FullName.Substring($claudeSrcRootDry.Length).TrimStart('\', '/')
+                $dest = Join-Path (Join-Path $WorkspaceDir ".claude") $rel
                 $exists = Test-Path $dest
                 if ($exists) {
                     Write-Host "[DRY-RUN] would overwrite: .claude/$rel"
@@ -238,14 +258,14 @@ if (-not $DryRun) {
 }
 
 # ── 7. Print summary ──────────────────────────────────────────────────────────
-Write-Host "──────────────────────────────────────────"
+Write-Host "------------------------------------------"
 if ($DryRun) {
     Write-Host "No files written (dry run)"
 } else {
     Write-Host "Done: $writtenCount written ($overwroteCount overwritten), $skippedCount skipped"
-    Write-Host "Version: $VERSION_FILE `u{2192} $releaseVersion"
+    Write-Host "Version: $VERSION_FILE -> $releaseVersion"
 }
-Write-Host "──────────────────────────────────────────"
+Write-Host "------------------------------------------"
 Write-Host ""
 
 # ── 8. Cleanup temp files ──────────────────────────────────────────────────────

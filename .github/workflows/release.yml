@@ -40,7 +40,7 @@ jobs:
           mkdir -p staging/.claude/get-shit-done
           mkdir -p staging/.claude/agents
           mkdir -p staging/.claude/hooks
-          mkdir -p staging/installer
+          mkdir -p staging/gsd-copilot-installer
 
           # --- Copilot layer: .github/ files ---
 
@@ -71,8 +71,8 @@ jobs:
           echo '{"type":"commonjs"}' > staging/.claude/package.json
 
           # --- Installer files ---
-          cp installer/install.ps1 staging/installer/install.ps1
-          cp installer/README.md   staging/installer/README.md
+          cp gsd-copilot-installer/gsd-copilot-install.ps1 staging/gsd-copilot-installer/gsd-copilot-install.ps1
+          cp gsd-copilot-installer/README.md   staging/gsd-copilot-installer/README.md
 
           # --- Path replacement: rewrite ~/.claude/ → ./.claude/ in all .md files ---
           find staging/.claude -name "*.md" -exec sed -i 's|~/.claude/|./.claude/|g' {} \;
