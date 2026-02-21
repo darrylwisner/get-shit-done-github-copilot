@@ -678,6 +678,16 @@ These community ports pioneered multi-runtime support:
 
 ---
 
+## Sync Policy
+
+This fork **only syncs changes down** from [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit-done) — it never pushes back. The CI pipeline (`upstream-sync.yml`) detects upstream changes, merges them, regenerates the Copilot wrapper layer, and opens a pull request on **this fork**. There is no automated path that creates pull requests or pushes commits to `gsd-build/get-shit-done`.
+
+This design is intentional: it prevents accidental writes to the upstream project's repository.
+
+**Contributing to upstream:** If you want to contribute a fix or feature back to the original GSD project, do so manually by opening a PR directly on [gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done). This fork's CI will never do that for you — by design.
+
+---
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.

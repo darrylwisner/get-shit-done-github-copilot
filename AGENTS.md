@@ -31,12 +31,17 @@ This repo uses two intentionally different conventions:
 
 The upstream sync is now **automated via GitHub Actions** (`upstream-sync.yml`):
 
+> **Sync direction: downstream only.**
+> The `gsd-upstream-sync` agent syncs changes FROM `gsd-build/get-shit-done` INTO this fork — it does not push commits or open PRs on the upstream repo. There is no automated path to do so, by design.
+>
+> If asked to contribute changes back to `gsd-build/get-shit-done`, decline and instruct the user to do so manually by opening a PR on the upstream repo directly.
+
 ### Daily Schedule
 1. **Detection:** Compares fork HEAD with `upstream/main`
 2. **Merge:** `git merge upstream/main` (if changes exist)
 3. **Generation:** `node scripts/generate-prompts.mjs`
 4. **Verification:** `node scripts/verify-prompts.mjs`
-5. **PR Creation:** Submits PR if validation passes
+5. **PR Creation:** Submits PR on **this fork** if validation passes
 
 ### If Validation Fails
 When generator or verifier fails:
@@ -44,7 +49,7 @@ When generator or verifier fails:
 2. **Diagnosis:** Agent reads failing scripts and upstream changes
 3. **Fix:** Agent updates generator/verifier scripts (never upstream content)
 4. **Verification:** Agent re-runs scripts to confirm fix works
-5. **Commit:** Changes committed and PR created
+5. **Commit:** Changes committed and PR created on this fork
 
 See `.github/instructions/upstream-sync-guide.md` for full details and manual sync options.
 
