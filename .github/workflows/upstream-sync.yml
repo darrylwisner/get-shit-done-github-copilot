@@ -223,11 +223,6 @@ jobs:
           SHORT_SHA="${{ steps.detect.outputs.short_sha }}"
           PR_TITLE="sync: upstream changes from ${SHORT_SHA}"
 
-          #Debug Commands
-          gh repo view --json nameWithOwner
-          gh label list --limit 200 | grep -i upstream
-
-
           EXISTING_PR=$(gh pr list \
             --head "automated/upstream-sync" \
             --state open \
