@@ -1,0 +1,19 @@
+# guard-exemptions.txt — Files this fork intentionally diverges from upstream.
+#
+# The repair agent guard (guard-upstream-files.sh) treats all files present in
+# upstream/main as "upstream-owned" and fails on any commit that modifies them.
+# Files listed here are EXCLUDED from that check because the fork deliberately
+# overrides them for its own identity, audience, or configuration.
+#
+# Rules:
+#   - One path per line (relative to repo root, no leading slash)
+#   - Lines starting with # are comments
+#   - Only add files here when the fork intentionally and permanently diverges
+#   - If a file is temporarily diverged (e.g. mid-PR sync), do NOT add it here
+#
+# Files intentionally owned by this fork:
+README.md
+CHANGELOG.md
+AGENTS.md
+.github/FUNDING.yml
+.github/ISSUE_TEMPLATE/bug_report.yml
