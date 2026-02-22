@@ -9,10 +9,21 @@ MODE="${1:-post-commit}"
 # Dynamically detect upstream-owned files
 git ls-tree -r --name-only upstream/main | sort > /tmp/upstream-owned-files.txt
 
+# Load fork exemptions — files this fork intentionally diverges from upstream.
+# Defined in scripts/guard-exemptions.txt (one path per line, # = comment).
+EXEMPTIONS_FILE="$(dirname "$0")/guard-exemptions.txt"
+if [ -f "$EXEMPTIONS_FILE" ]; then
+  grep -v '^\s*#' "$EXEMPTIONS_FILE" | grep -v '^\s*$' | sort > /tmp/guard-exemptions.txt
+  # Remove exempted files from the upstream-owned list before violation checks
+  comm -23 /tmp/upstream-owned-files.txt /tmp/guard-exemptions.txt > /tmp/upstream-owned-filtered.txt
+else
+  cp /tmp/upstream-owned-files.txt /tmp/upstream-owned-filtered.txt
+fi
+
 if [ "$MODE" = "pre-commit" ]; then
   # Check staged files
   git diff --cached --name-only | sort > /tmp/staged-files.txt
-  VIOLATIONS=$(comm -12 /tmp/upstream-owned-files.txt /tmp/staged-files.txt || true)
+  VIOLATIONS=$(comm -12 /tmp/upstream-owned-filtered.txt /tmp/staged-files.txt || true)
   if [ -n "$VIOLATIONS" ]; then
     echo "::error::Filesystem guard (pre-commit): repair agent modified upstream-owned files:"
     echo "$VIOLATIONS"
@@ -24,7 +35,7 @@ if [ "$MODE" = "pre-commit" ]; then
 elif [ "$MODE" = "post-commit" ]; then
   # Check files changed relative to origin/main
   git diff --name-only origin/main HEAD | sort > /tmp/committed-files.txt
-  VIOLATIONS=$(comm -12 /tmp/upstream-owned-files.txt /tmp/committed-files.txt || true)
+  VIOLATIONS=$(comm -12 /tmp/upstream-owned-filtered.txt /tmp/committed-files.txt || true)
   if [ -n "$VIOLATIONS" ]; then
     echo "::error::Filesystem guard (post-commit): repair agent committed changes to upstream-owned files:"
     echo "$VIOLATIONS"
