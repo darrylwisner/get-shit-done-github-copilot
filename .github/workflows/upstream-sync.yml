@@ -818,6 +818,7 @@ jobs:
               echo "Release created (id=${RELEASE_ID}) after attempt ${i}."
               CREATED=true
               echo "created=true" >> "$GITHUB_OUTPUT"
+              echo "release_id=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
               break
             fi
             echo "  Waiting... attempt ${i}/20"
@@ -877,10 +878,12 @@ jobs:
 
           if [ "${{ steps.poll_release.outputs.created }}" = "true" ]; then
             # release.yml already created the release — overwrite auto-generated notes
-            gh release edit "$NEW_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --notes-file /tmp/release-body.md
-            echo "Release body updated via gh release edit."
+            # Use release ID (not tag name) to avoid 'release not found' from gh release edit's by-tag lookup
+            RELEASE_ID="${{ steps.poll_release.outputs.release_id }}"
+            jq -n --rawfile body /tmp/release-body.md '{"body": $body}' > /tmp/release-patch.json
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/${RELEASE_ID}" \
+              --input /tmp/release-patch.json
+            echo "Release body updated via gh api PATCH (id=${RELEASE_ID})."
           else
             # Fallback: release.yml timed out; create release directly with full body
             gh release create "$NEW_TAG" \
