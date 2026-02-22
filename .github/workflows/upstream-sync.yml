@@ -1,16 +1,20 @@
-# Upstream Sync Workflow
+# Upstream Sync + Release Mirror Workflow
 # Detects changes in upstream gsd-build/get-shit-done, merges them,
 # regenerates the Copilot wrapper layer, verifies it, and creates/updates a PR.
+# Also polls upstream for new releases and auto-publishes a matching fork release.
 #
-# One-time prerequisite: create GitHub labels before first run:
-#   gh label create upstream-sync --color 0075ca --description "Upstream sync PR"
-#   gh label create automated --color e4e669 --description "Automated workflow"
+# One-time prerequisites (run once before first execution):
+#   gh label create upstream-sync --color 0075ca --description "Upstream sync PR" --repo <fork>
+#   gh label create automated --color e4e669 --description "Automated workflow" --repo <fork>
+#   gh label create upstream-mirror --color d93f0b --description "Upstream release mirror" --repo <fork>
+#   Enable: Settings → General → Pull Requests → Allow auto-merge: ON
+#   Verify: COPILOT_PAT secret has 'repo' scope (required for tag push to trigger release.yml)
 #
-# Schedule: runs every 6 hours. The sync job exits silently if fork is already up-to-date with upstream.
+# Schedule: runs every 4 hours. Both sync and release-mirror jobs exit silently when nothing to do.
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+    - cron: '0 */4 * * *'  # Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
   workflow_dispatch:
   push:
     branches:
