@@ -219,6 +219,124 @@ jobs:
           echo "## Upstream Delta Analysis (upstream@${{ steps.detect.outputs.short_sha }})" >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/delta-analysis.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Proactive fork adaptation
+        if: >
+          steps.detect.outputs.no_changes != 'true' &&
+          secrets.COPILOT_PAT != ''
+        id: proactive_adapt
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          DELTA_ANALYSIS=$(cat /tmp/delta-analysis.md 2>/dev/null || echo "(delta analysis unavailable)")
+          HAS_NEW_COMMANDS="${{ steps.analyze_delta.outputs.has_new_commands }}"
+
+          # Build gap-filling addendum if new commands/agents detected
+          GAP_INSTRUCTIONS=""
+          if [ "${HAS_NEW_COMMANDS}" = "true" ]; then
+            GAP_INSTRUCTIONS="
+## Coverage Gap Filling (REQUIRED)
+
+New upstream commands or agents were detected with no fork equivalents.
+For each new file listed under 'New commands detected' or 'New agents detected' in the delta analysis above:
+1. Create a corresponding wrapper prompt in .github/prompts/ following the exact format of existing prompts.
+2. Run node scripts/verify-prompts.mjs after creating wrappers to confirm coverage.
+3. If scripts/verify-prompts.mjs reports any 'missing prompt' errors, fix them before finishing.
+"
+          fi
+
+          cat > /tmp/proactive_prompt.md << PROMPT_EOF
+You are the GSD upstream-sync proactive adaptation agent. An upstream merge just landed. Analyze the delta below and make ALL required changes to keep the fork's compatibility layer working correctly.
+
+## Authority — what you MAY modify
+- scripts/generate-prompts.mjs
+- scripts/verify-prompts.mjs
+- scripts/tools.json
+- .github/workflows/upstream-sync.yml
+- .github/prompts/**
+- .github/agents/**
+- .github/instructions/**
+- README.md
+- FORK-CHANGELOG.md
+- AGENTS.md
+
+## Hard limit — NEVER modify
+- commands/gsd/**
+- agents/**
+- get-shit-done/**
+
+## Required outcome
+1. Make any pre-emptive changes needed based on the upstream delta (e.g., if upstream added a new frontmatter field, update generate-prompts.mjs to handle it).
+2. Run: node scripts/generate-prompts.mjs && node scripts/verify-prompts.mjs
+3. Both must pass.
+4. Open a PR targeting branch: automated/upstream-sync
+5. Write a descriptive commit message explaining WHAT you changed and WHY.
+6. If you determine that no changes are needed (everything already works), make no commits.
+7. If you determine this problem requires human input, write "DEAD_END" to /tmp/repair-dead-end.txt and stop.
+
+${GAP_INSTRUCTIONS}
+
+## Upstream Delta Analysis
+${DELTA_ANALYSIS}
+PROMPT_EOF
+
+          echo "Invoking Copilot proactive adaptation agent..."
+          gh agent-task create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "automated/upstream-sync" \
+            --follow \
+            --body-file /tmp/proactive_prompt.md \
+            || true
+
+          echo "proactive_adapt_invoked=true" >> "$GITHUB_OUTPUT"
+
+      - name: Merge Copilot adaptation branch
+        if: >
+          steps.detect.outputs.no_changes != 'true' &&
+          steps.proactive_adapt.outputs.proactive_adapt_invoked == 'true'
+        id: merge_copilot_adapt
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          # Find open PR from copilot/* branch targeting automated/upstream-sync
+          COPILOT_PR=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "automated/upstream-sync" \
+            --state open \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+            2>/dev/null | head -1 || echo "")
+
+          if [ -z "$COPILOT_PR" ]; then
+            echo "No copilot/* PR found targeting automated/upstream-sync. No merge-back needed."
+            echo "copilot_merged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Found Copilot adaptation PR #${COPILOT_PR}. Merging into automated/upstream-sync..."
+
+          # Get the head ref name
+          COPILOT_BRANCH=$(gh pr view "$COPILOT_PR" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json headRefName \
+            --jq '.headRefName' 2>/dev/null || echo "")
+
+          if [ -n "$COPILOT_BRANCH" ]; then
+            git fetch origin "$COPILOT_BRANCH" 2>/dev/null || true
+            git merge "origin/$COPILOT_BRANCH" --no-edit --allow-unrelated-histories 2>/dev/null || true
+
+            # Close the copilot/* PR since we merged it directly
+            gh pr close "$COPILOT_PR" \
+              --repo "$GITHUB_REPOSITORY" \
+              --comment "Merged into automated/upstream-sync directly by upstream-sync workflow." \
+              || true
+
+            echo "copilot_merged=true" >> "$GITHUB_OUTPUT"
+            echo "Copilot adaptation branch merged successfully."
+          else
+            echo "::warning::Could not determine copilot branch name for PR #${COPILOT_PR}."
+            echo "copilot_merged=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run prompt generator
         if: steps.detect.outputs.no_changes != 'true'
         run: |
