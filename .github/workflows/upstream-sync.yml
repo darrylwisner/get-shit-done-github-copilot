@@ -566,7 +566,8 @@ PROMPT_EOF
         if: >
           steps.detect.outputs.no_changes != 'true' &&
           steps.create_pr.outputs.pr_number != '' &&
-          steps.check_escalations.outputs.has_escalation != 'true'
+          steps.check_escalations.outputs.has_escalation != 'true' &&
+          steps.analyze_delta.outputs.security_flagged != 'true'
         run: |
           gh pr merge "${{ steps.create_pr.outputs.pr_number }}" \
             --repo "$GITHUB_REPOSITORY" \
