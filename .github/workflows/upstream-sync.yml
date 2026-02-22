@@ -289,7 +289,9 @@ jobs:
             echo "pr_number=${EXISTING_PR}" >> "$GITHUB_OUTPUT"
           fi
 
-      # SYNC-01/02: Enable auto-merge on the PR (squash strategy keeps main history clean).
+      # SYNC-01/02: Enable auto-merge on the PR (merge commit strategy preserves upstream commit SHAs
+      # in main's ancestry, which is required for GitHub's 'X commits behind upstream' indicator to
+      # clear correctly after merge. Squash would create a new SHA and main would always appear behind.)
       # This is a no-op when auto-merge is already enabled; safe to run on every sync.
       - name: Enable auto-merge on sync PR
         if: steps.detect.outputs.no_changes != 'true' && steps.create_pr.outputs.pr_number != ''
@@ -297,7 +299,7 @@ jobs:
           gh pr merge "${{ steps.create_pr.outputs.pr_number }}" \
             --repo "$GITHUB_REPOSITORY" \
             --auto \
-            --squash
+            --merge
           echo "Auto-merge enabled on PR #${{ steps.create_pr.outputs.pr_number }}."
 
   repair:
