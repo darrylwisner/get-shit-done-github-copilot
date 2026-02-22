@@ -201,6 +201,27 @@ jobs:
             echo "No wrapper file changes to commit."
           fi
 
+      # SYNC-03: Close any open PRs for automated/upstream-sync before force-pushing so the
+      # replacement PR always reflects the current branch state cleanly.
+      - name: Close superseded sync PRs
+        if: steps.detect.outputs.no_changes != 'true'
+        run: |
+          OPEN_PRS=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "automated/upstream-sync" \
+            --state open \
+            --json number \
+            --jq '.[].number' 2>/dev/null || echo "")
+
+          for PR_NUM in $OPEN_PRS; do
+            gh pr comment "$PR_NUM" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "Closing — superseded by a new upstream sync run (upstream@${{ steps.detect.outputs.short_sha }}). A fresh PR will be created for this run."
+            gh pr close "$PR_NUM" \
+              --repo "$GITHUB_REPOSITORY"
+            echo "Closed stale PR #${PR_NUM}."
+          done
+
       - name: Force-push working branch
         if: steps.detect.outputs.no_changes != 'true'
         run: |
@@ -229,35 +250,55 @@ jobs:
           *See [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.*
           PR_EOF
 
+      # SYNC-01/02: Create (or update) the PR and immediately enable auto-merge so it lands on
+      # main without manual intervention as soon as required checks pass.
+      # Prerequisite: Settings → General → Pull Requests → "Allow auto-merge" must be ON.
       - name: Create or update PR
         if: steps.detect.outputs.no_changes != 'true'
+        id: create_pr
         run: |
           SHORT_SHA="${{ steps.detect.outputs.short_sha }}"
           PR_TITLE="sync: upstream changes from ${SHORT_SHA}"
 
+          # After the close-stale step, there should be no open PR, but guard defensively.
           EXISTING_PR=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
             --head "automated/upstream-sync" \
             --state open \
             --json number \
             --jq '.[0].number' 2>/dev/null || echo "")
 
           if [ -z "$EXISTING_PR" ]; then
-            gh pr create \
+            PR_URL=$(gh pr create \
               --repo "$GITHUB_REPOSITORY" \
               --base "${{ env.DEFAULT_BRANCH }}" \
               --head "automated/upstream-sync" \
               --title "${PR_TITLE}" \
               --body-file /tmp/pr-body.md \
               --label "upstream-sync" \
-              --label "automated"
-            echo "Created new PR."
+              --label "automated")
+            echo "Created new PR: ${PR_URL}"
+            PR_NUMBER=$(basename "$PR_URL")
+            echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           else
             gh pr edit "$EXISTING_PR" \
               --repo "$GITHUB_REPOSITORY" \
               --title "${PR_TITLE}" \
               --body-file /tmp/pr-body.md
             echo "Updated existing PR #${EXISTING_PR}."
+            echo "pr_number=${EXISTING_PR}" >> "$GITHUB_OUTPUT"
           fi
+
+      # SYNC-01/02: Enable auto-merge on the PR (squash strategy keeps main history clean).
+      # This is a no-op when auto-merge is already enabled; safe to run on every sync.
+      - name: Enable auto-merge on sync PR
+        if: steps.detect.outputs.no_changes != 'true' && steps.create_pr.outputs.pr_number != ''
+        run: |
+          gh pr merge "${{ steps.create_pr.outputs.pr_number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --auto \
+            --squash
+          echo "Auto-merge enabled on PR #${{ steps.create_pr.outputs.pr_number }}."
 
   repair:
     name: Self-Repair (Copilot Agent)
@@ -612,6 +653,94 @@ jobs:
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "New upstream release detected: ${UPSTREAM_TAG}"
+
+      # REL-06: Validate that the fork is no more than 1 release behind upstream.
+      # Runs regardless of whether the current upstream tag is already mirrored.
+      # A gap of 0 (fully current) or 1 (mirror job will handle it this run) is normal and silent.
+      # A gap > 1 means the mirror job has been failing silently — alert the maintainer.
+      - name: Lockstep validation
+        if: steps.preflight.outputs.skip != 'true' && steps.detect_release.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
+          REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
+
+          # Get the last 10 upstream release tag names (newest first)
+          UPSTREAM_TAGS=$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=10" \
+            --jq '[.[].tag_name]' 2>/dev/null || echo "[]")
+
+          # Get fork's latest release tag
+          FORK_LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+            --jq '.tag_name // empty' 2>/dev/null || echo "")
+
+          if [ -z "$FORK_LATEST" ] || [ "$FORK_LATEST" = "null" ]; then
+            # No fork releases yet — gap = total upstream count in our window
+            GAP=$(echo "$UPSTREAM_TAGS" | jq 'length')
+          else
+            # Extract the embedded upstream tag: "v0.0.3-upstream-v2.1.0" → "v2.1.0"
+            EMBEDDED=$(echo "$FORK_LATEST" | sed 's/.*-upstream-//' || echo "")
+
+            if [ -z "$EMBEDDED" ]; then
+              # Fork latest release is not a mirror release — treat as unknown gap
+              GAP=99
+            else
+              # Find position (0-indexed) of embedded tag in upstream releases list
+              # Position 0 = fully current, 1 = one behind (this run will fix it), >1 = alert
+              POSITION=$(echo "$UPSTREAM_TAGS" | jq --arg tag "$EMBEDDED" 'index($tag) // 99')
+              GAP=$POSITION
+            fi
+          fi
+
+          echo "Release lockstep gap: ${GAP} (fork is ${GAP} upstream release(s) behind)"
+
+          if [ "$GAP" -le 1 ]; then
+            echo "Gap is acceptable (≤1). No alert needed."
+            exit 0
+          fi
+
+          # Gap > 1: create or update a deduplicating alert issue
+          ISSUE_TITLE="[upstream-mirror] Release lockstep gap"
+          UPSTREAM_LATEST="${{ steps.detect_release.outputs.upstream_tag }}"
+
+          EXISTING=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --search "is:issue is:open \"${ISSUE_TITLE}\" in:title" \
+            --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+
+          cat > /tmp/lockstep-body.md << BODY_EOF
+          ## Release lockstep gap detected
+
+          The fork is **${GAP}** upstream release(s) behind. The release-mirror job should keep this gap at ≤1 on each run. A persistent gap suggests the mirror job has been failing silently.
+
+          | Field | Value |
+          |---|---|
+          | Upstream latest release | \`${UPSTREAM_LATEST}\` |
+          | Fork latest release | \`${FORK_LATEST:-"(none)"}\` |
+          | Gap | ${GAP} release(s) |
+          | Workflow run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          ### Resolution
+          1. Check the release-mirror job logs for the failing run.
+          2. If the release-mirror job completed successfully this run, the gap will reduce to 0 automatically.
+          3. Close this issue once the fork's latest release mirrors the upstream latest.
+          BODY_EOF
+
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body-file /tmp/lockstep-body.md
+            echo "::warning::Lockstep gap=${GAP}. Updated existing issue #${EXISTING}."
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "${ISSUE_TITLE}" \
+              --label "upstream-mirror" \
+              --label "bug" \
+              ${REPO_OWNER:+--assignee "$REPO_OWNER"} \
+              --body-file /tmp/lockstep-body.md
+            echo "::warning::Lockstep gap=${GAP}. Created new alert issue."
+          fi
 
       # Gate step: consolidates all skip signals into a single `proceed` output.
       # A skipped step emits empty-string outputs; 'someStep.outputs.x != true' is TRUE for empty string,
