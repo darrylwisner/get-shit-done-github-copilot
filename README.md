@@ -26,7 +26,7 @@ It exposes the full GSD command set as VS Code Copilot Chat slash commands (`/gs
 **This fork adds:**
 - VS Code Copilot prompt layer (`.github/prompts/gsd.*.prompt.md`)
 - Tool mapping from GSD XML task format to Copilot tool calls
-- PowerShell installer  no Node.js required
+- PowerShell installer
 - Daily upstream sync pipeline with auto-regeneration
 
 **Core GSD methodology, workflow engine, templates, and agents are upstream's work.** See [Credits & Attribution](#credits--attribution).
@@ -43,15 +43,7 @@ VS Code GitHub Copilot users who want to use GSD's spec-driven development workf
 
 ## Install
 
-### Option A: degit (recommended)
-
-```bash
-npx degit darrylwisner/get-shit-done-github-copilot/.github .github
-```
-
-This copies only the `.github/` directory (prompts, agents, instructions) into your project. No runtime files are written; VS Code picks up the slash commands automatically.
-
-### Option B: PowerShell installer (no Node.js required)
+### PowerShell Installer (recommended)
 
 Open a PowerShell terminal in your project root:
 
@@ -65,7 +57,7 @@ For full installer options, arguments, and troubleshooting, see [gsd-copilot-ins
 
 ## Getting Started with VS Code Copilot
 
-1. **Install** using one of the options above.
+1. **Install** using the option above.
 2. **Open** VS Code Copilot Chat (`` Ctrl+Shift+I `` or the chat icon).
 3. **Verify** the commands are available  type `/gsd` and you should see the command list in the slash command picker.
 4. **Initialize your project:**
