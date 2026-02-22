@@ -1,18 +1,20 @@
-# Upstream Sync Workflow
+# Upstream Sync + Release Mirror Workflow
 # Detects changes in upstream gsd-build/get-shit-done, merges them,
 # regenerates the Copilot wrapper layer, verifies it, and creates/updates a PR.
+# Also polls upstream for new releases and auto-publishes a matching fork release.
 #
-# One-time prerequisite: create GitHub labels before first run:
-#   gh label create upstream-sync --color 0075ca --description "Upstream sync PR"
-#   gh label create automated --color e4e669 --description "Automated workflow"
+# One-time prerequisites (run once before first execution):
+#   gh label create upstream-sync --color 0075ca --description "Upstream sync PR" --repo <fork>
+#   gh label create automated --color e4e669 --description "Automated workflow" --repo <fork>
+#   gh label create upstream-mirror --color d93f0b --description "Upstream release mirror" --repo <fork>
+#   Enable: Settings → General → Pull Requests → Allow auto-merge: ON
+#   Verify: COPILOT_PAT secret has 'repo' scope (required for tag push to trigger release.yml)
 #
-# To enable daily schedule, uncomment the schedule block below.
-
-# on:
-#   schedule:
-#     - cron: '0 6 * * *'  # Daily at 06:00 UTC
+# Schedule: runs every 4 hours. Both sync and release-mirror jobs exit silently when nothing to do.
 
 on:
+  schedule:
+    - cron: '0 */4 * * *'  # Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
   workflow_dispatch:
   push:
     branches:
@@ -199,6 +201,27 @@ jobs:
             echo "No wrapper file changes to commit."
           fi
 
+      # SYNC-03: Close any open PRs for automated/upstream-sync before force-pushing so the
+      # replacement PR always reflects the current branch state cleanly.
+      - name: Close superseded sync PRs
+        if: steps.detect.outputs.no_changes != 'true'
+        run: |
+          OPEN_PRS=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "automated/upstream-sync" \
+            --state open \
+            --json number \
+            --jq '.[].number' 2>/dev/null || echo "")
+
+          for PR_NUM in $OPEN_PRS; do
+            gh pr comment "$PR_NUM" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "Closing — superseded by a new upstream sync run (upstream@${{ steps.detect.outputs.short_sha }}). A fresh PR will be created for this run."
+            gh pr close "$PR_NUM" \
+              --repo "$GITHUB_REPOSITORY"
+            echo "Closed stale PR #${PR_NUM}."
+          done
+
       - name: Force-push working branch
         if: steps.detect.outputs.no_changes != 'true'
         run: |
@@ -227,35 +250,55 @@ jobs:
           *See [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.*
           PR_EOF
 
+      # SYNC-01/02: Create (or update) the PR and immediately enable auto-merge so it lands on
+      # main without manual intervention as soon as required checks pass.
+      # Prerequisite: Settings → General → Pull Requests → "Allow auto-merge" must be ON.
       - name: Create or update PR
         if: steps.detect.outputs.no_changes != 'true'
+        id: create_pr
         run: |
           SHORT_SHA="${{ steps.detect.outputs.short_sha }}"
           PR_TITLE="sync: upstream changes from ${SHORT_SHA}"
 
+          # After the close-stale step, there should be no open PR, but guard defensively.
           EXISTING_PR=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
             --head "automated/upstream-sync" \
             --state open \
             --json number \
             --jq '.[0].number' 2>/dev/null || echo "")
 
           if [ -z "$EXISTING_PR" ]; then
-            gh pr create \
+            PR_URL=$(gh pr create \
               --repo "$GITHUB_REPOSITORY" \
               --base "${{ env.DEFAULT_BRANCH }}" \
               --head "automated/upstream-sync" \
               --title "${PR_TITLE}" \
               --body-file /tmp/pr-body.md \
               --label "upstream-sync" \
-              --label "automated"
-            echo "Created new PR."
+              --label "automated")
+            echo "Created new PR: ${PR_URL}"
+            PR_NUMBER=$(basename "$PR_URL")
+            echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           else
             gh pr edit "$EXISTING_PR" \
               --repo "$GITHUB_REPOSITORY" \
               --title "${PR_TITLE}" \
               --body-file /tmp/pr-body.md
             echo "Updated existing PR #${EXISTING_PR}."
+            echo "pr_number=${EXISTING_PR}" >> "$GITHUB_OUTPUT"
           fi
+
+      # SYNC-01/02: Enable auto-merge on the PR (squash strategy keeps main history clean).
+      # This is a no-op when auto-merge is already enabled; safe to run on every sync.
+      - name: Enable auto-merge on sync PR
+        if: steps.detect.outputs.no_changes != 'true' && steps.create_pr.outputs.pr_number != ''
+        run: |
+          gh pr merge "${{ steps.create_pr.outputs.pr_number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --auto \
+            --squash
+          echo "Auto-merge enabled on PR #${{ steps.create_pr.outputs.pr_number }}."
 
   repair:
     name: Self-Repair (Copilot Agent)
@@ -537,4 +580,370 @@ jobs:
       - name: Run filesystem guard
         run: |
           bash scripts/guard-upstream-files.sh post-commit
+
+  release-mirror:
+    name: Release Mirror
+    runs-on: ubuntu-latest
+    needs: sync
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+
+    steps:
+      # SAFETY: Always run this assertion first. Add --repo "$GITHUB_REPOSITORY" to any new gh command you add here.
+      - name: Assert fork context
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "${{ env.EXPECTED_REPO }}" ]; then
+            echo "ERROR: This workflow is running on '$GITHUB_REPOSITORY' but is only intended to run on '${{ env.EXPECTED_REPO }}'."
+            echo "Refusing to proceed — this prevents accidental writes to the wrong repository."
+            exit 1
+          fi
+
+      - name: Check COPILOT_PAT
+        id: preflight
+        run: |
+          if [ -z "${{ secrets.COPILOT_PAT }}" ]; then
+            echo "::warning::COPILOT_PAT secret is not set. Skipping release-mirror job."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect upstream release
+        if: steps.preflight.outputs.skip != 'true'
+        id: detect_release
+        run: |
+          UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
+
+          UPSTREAM_TAG=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" \
+            --jq '.tag_name' 2>/dev/null || echo "")
+
+          if [ -z "$UPSTREAM_TAG" ] || [ "$UPSTREAM_TAG" = "null" ]; then
+            echo "No upstream release found. Exiting silently."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "upstream_tag=${UPSTREAM_TAG}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Upstream latest release: ${UPSTREAM_TAG}"
+
+      - name: Check if already mirrored
+        if: steps.preflight.outputs.skip != 'true' && steps.detect_release.outputs.skip != 'true'
+        id: check_mirror
+        run: |
+          UPSTREAM_TAG="${{ steps.detect_release.outputs.upstream_tag }}"
+
+          MIRRORED=$(gh release list \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 100 \
+            --json tagName \
+            --jq "[.[] | select(.tagName | contains(\"upstream-${UPSTREAM_TAG}\"))] | length" \
+            2>/dev/null || echo "0")
+
+          if [ "$MIRRORED" -gt 0 ]; then
+            echo "Already mirrored upstream release ${UPSTREAM_TAG}. Exiting silently."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "New upstream release detected: ${UPSTREAM_TAG}"
+
+      # REL-06: Validate that the fork is no more than 1 release behind upstream.
+      # Runs regardless of whether the current upstream tag is already mirrored.
+      # A gap of 0 (fully current) or 1 (mirror job will handle it this run) is normal and silent.
+      # A gap > 1 means the mirror job has been failing silently — alert the maintainer.
+      - name: Lockstep validation
+        if: steps.preflight.outputs.skip != 'true' && steps.detect_release.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
+          REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
+
+          # Get the last 10 upstream release tag names (newest first)
+          UPSTREAM_TAGS=$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=10" \
+            --jq '[.[].tag_name]' 2>/dev/null || echo "[]")
+
+          # Get fork's latest release tag
+          FORK_LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+            --jq '.tag_name // empty' 2>/dev/null || echo "")
+
+          if [ -z "$FORK_LATEST" ] || [ "$FORK_LATEST" = "null" ]; then
+            # No fork releases yet — gap = total upstream count in our window
+            GAP=$(echo "$UPSTREAM_TAGS" | jq 'length')
+          else
+            # Extract the embedded upstream tag: "v0.0.3-upstream-v2.1.0" → "v2.1.0"
+            EMBEDDED=$(echo "$FORK_LATEST" | sed 's/.*-upstream-//' || echo "")
+
+            if [ -z "$EMBEDDED" ]; then
+              # Fork latest release is not a mirror release — treat as unknown gap
+              GAP=99
+            else
+              # Find position (0-indexed) of embedded tag in upstream releases list
+              # Position 0 = fully current, 1 = one behind (this run will fix it), >1 = alert
+              POSITION=$(echo "$UPSTREAM_TAGS" | jq --arg tag "$EMBEDDED" 'index($tag) // 99')
+              GAP=$POSITION
+            fi
+          fi
+
+          echo "Release lockstep gap: ${GAP} (fork is ${GAP} upstream release(s) behind)"
+
+          if [ "$GAP" -le 1 ]; then
+            echo "Gap is acceptable (≤1). No alert needed."
+            exit 0
+          fi
+
+          # Gap > 1: create or update a deduplicating alert issue
+          ISSUE_TITLE="[upstream-mirror] Release lockstep gap"
+          UPSTREAM_LATEST="${{ steps.detect_release.outputs.upstream_tag }}"
+
+          EXISTING=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --search "is:issue is:open \"${ISSUE_TITLE}\" in:title" \
+            --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+
+          cat > /tmp/lockstep-body.md << BODY_EOF
+          ## Release lockstep gap detected
+
+          The fork is **${GAP}** upstream release(s) behind. The release-mirror job should keep this gap at ≤1 on each run. A persistent gap suggests the mirror job has been failing silently.
+
+          | Field | Value |
+          |---|---|
+          | Upstream latest release | \`${UPSTREAM_LATEST}\` |
+          | Fork latest release | \`${FORK_LATEST:-"(none)"}\` |
+          | Gap | ${GAP} release(s) |
+          | Workflow run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          ### Resolution
+          1. Check the release-mirror job logs for the failing run.
+          2. If the release-mirror job completed successfully this run, the gap will reduce to 0 automatically.
+          3. Close this issue once the fork's latest release mirrors the upstream latest.
+          BODY_EOF
+
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body-file /tmp/lockstep-body.md
+            echo "::warning::Lockstep gap=${GAP}. Updated existing issue #${EXISTING}."
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "${ISSUE_TITLE}" \
+              --label "upstream-mirror" \
+              --label "bug" \
+              ${REPO_OWNER:+--assignee "$REPO_OWNER"} \
+              --body-file /tmp/lockstep-body.md
+            echo "::warning::Lockstep gap=${GAP}. Created new alert issue."
+          fi
+
+      # Gate step: consolidates all skip signals into a single `proceed` output.
+      # A skipped step emits empty-string outputs; 'someStep.outputs.x != true' is TRUE for empty string,
+      # which would cause all downstream write-steps to fire incorrectly if gated only on check_mirror.
+      # Using == 'true' here means the gate itself being skipped (empty proceed) naturally blocks downstream.
+      - name: Gate — proceed only if release is new
+        if: steps.preflight.outputs.skip != 'true' && steps.detect_release.outputs.skip != 'true' && steps.check_mirror.outputs.skip != 'true'
+        id: gate
+        run: |
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+          echo "All guards passed — proceeding with tag push and release mirroring."
+
+      - name: Compute fork tag
+        if: steps.gate.outputs.proceed == 'true'
+        id: compute_tag
+        run: |
+          UPSTREAM_TAG="${{ steps.detect_release.outputs.upstream_tag }}"
+
+          FORK_LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+            --jq '.tag_name' 2>/dev/null || echo "")
+
+          if [ -z "$FORK_LATEST" ] || [ "$FORK_LATEST" = "null" ]; then
+            FORK_PATCH=0
+          else
+            BASE_VER="${FORK_LATEST%%-*}"     # "v0.0.3-upstream-v2.1.0" → "v0.0.3"
+            FORK_PATCH="${BASE_VER##*.}"       # "v0.0.3" → "3"
+          fi
+
+          NEXT_PATCH=$((FORK_PATCH + 1))
+          NEW_TAG="v0.0.${NEXT_PATCH}-upstream-${UPSTREAM_TAG}"
+
+          echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Computed new fork tag: ${NEW_TAG}"
+
+      - name: Checkout fork for tag push
+        if: steps.gate.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.COPILOT_PAT }}
+
+      - name: Configure git identity
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Push fork tag via COPILOT_PAT
+        # COPILOT_PAT REQUIRED: GITHUB_TOKEN tag pushes do NOT trigger downstream workflows.
+        # release.yml fires on push:tags:v* — this ONLY works if the tag is pushed via a PAT.
+        if: steps.gate.outputs.proceed == 'true'
+        id: push_tag
+        run: |
+          git remote set-url origin "https://x-access-token:${{ secrets.COPILOT_PAT }}@github.com/${{ github.repository }}.git"
+          NEW_TAG="${{ steps.compute_tag.outputs.new_tag }}"
+          UPSTREAM_TAG="${{ steps.detect_release.outputs.upstream_tag }}"
+
+          git tag -a "$NEW_TAG" -m "Mirror upstream release ${UPSTREAM_TAG}"
+          git push origin "$NEW_TAG"
+
+          echo "Pushed tag: ${NEW_TAG}"
+
+      - name: Poll for release.yml to create release
+        if: steps.gate.outputs.proceed == 'true'
+        id: poll_release
+        run: |
+          NEW_TAG="${{ steps.compute_tag.outputs.new_tag }}"
+          CREATED=false
+
+          echo "Polling for release creation by release.yml (max 5 min: 20 × 15s)..."
+          for i in $(seq 1 20); do
+            RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/${NEW_TAG}" \
+              --jq '.id // empty' 2>/dev/null || echo "")
+            if [ -n "$RELEASE_ID" ]; then
+              echo "Release created (id=${RELEASE_ID}) after attempt ${i}."
+              CREATED=true
+              echo "created=true" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            echo "  Waiting... attempt ${i}/20"
+            sleep 15
+          done
+
+          if [ "$CREATED" = "false" ]; then
+            echo "::warning::release.yml did not create release within 5 minutes. Will create directly."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release body
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          NEW_TAG="${{ steps.compute_tag.outputs.new_tag }}"
+          UPSTREAM_TAG="${{ steps.detect_release.outputs.upstream_tag }}"
+          UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
+
+          UPSTREAM_BODY=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" \
+            --jq '.body' 2>/dev/null || echo "")
+
+          # Guard: jq returns literal string "null" for JSON null fields (P2)
+          if [ -z "$UPSTREAM_BODY" ] || [ "$UPSTREAM_BODY" = "null" ]; then
+            UPSTREAM_BODY="_Upstream release notes unavailable._"
+          fi
+
+          # Quoted heredoc for static fork header — prevents expansion of any $ in fork-controlled text (P3)
+          cat > /tmp/release-body.md << 'HEADER_EOF'
+          ## Fork Mirror: __NEW_TAG__
+
+          | Field | Value |
+          |---|---|
+          | Fork tag | `__NEW_TAG__` |
+          | Upstream release | `__UPSTREAM_TAG__` |
+          | Upstream release URL | __UPSTREAM_URL__ |
+          | Sync status | ✅ Merged via upstream-sync |
+
+          ---
+
+          ## Upstream Release Notes (__UPSTREAM_TAG__)
+
+          HEADER_EOF
+
+          sed -i \
+            -e "s|__NEW_TAG__|${NEW_TAG}|g" \
+            -e "s|__UPSTREAM_TAG__|${UPSTREAM_TAG}|g" \
+            -e "s|__UPSTREAM_URL__|https://github.com/${UPSTREAM_REPO}/releases/tag/${UPSTREAM_TAG}|g" \
+            /tmp/release-body.md
+
+          # Append upstream body OUTSIDE heredoc to safely pass through $, backticks, etc. (P3)
+          printf '%s\n' "$UPSTREAM_BODY" >> /tmp/release-body.md
+
+      - name: Inject release body or create release directly
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          NEW_TAG="${{ steps.compute_tag.outputs.new_tag }}"
+
+          if [ "${{ steps.poll_release.outputs.created }}" = "true" ]; then
+            # release.yml already created the release — overwrite auto-generated notes
+            gh release edit "$NEW_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --notes-file /tmp/release-body.md
+            echo "Release body updated via gh release edit."
+          else
+            # Fallback: release.yml timed out; create release directly with full body
+            gh release create "$NEW_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "GSD Copilot ${NEW_TAG}" \
+              --notes-file /tmp/release-body.md
+            echo "Release created directly (fallback path)."
+          fi
+
+      - name: Handle failure — create or update GitHub issue
+        if: failure() && steps.preflight.outputs.skip != 'true'
+        run: |
+          UPSTREAM_TAG="${{ steps.detect_release.outputs.upstream_tag }}"
+          NEW_TAG="${{ steps.compute_tag.outputs.new_tag }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          REPO_OWNER=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.owner.login' 2>/dev/null || echo "")
+          RECENT_LOG=$(git log --oneline -5 2>/dev/null || echo "(unavailable)")
+
+          # Stable title — run number must NOT appear here or dedup search will never match a prior issue
+          ISSUE_TITLE="[upstream-mirror] Release mirror failure"
+
+          # Verbose diagnostic body written to file — never --body with inline multi-line string
+          cat > /tmp/failure-detail.md << BODY_EOF
+          ## upstream-mirror Failure — Run #${{ github.run_number }}
+
+          | Field | Value |
+          |---|---|
+          | Workflow run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          | Timestamp | ${TIMESTAMP} |
+          | Upstream tag checked | ${UPSTREAM_TAG:-"(not yet resolved)"} |
+          | Fork tag at failure | ${NEW_TAG:-"(not yet computed)"} |
+
+          ### Recent git log (last 5 commits)
+          \`\`\`
+          ${RECENT_LOG}
+          \`\`\`
+
+          ### Environment (secrets redacted)
+          - GITHUB_REPOSITORY: \`$GITHUB_REPOSITORY\`
+          - GITHUB_REF: \`$GITHUB_REF\`
+          - EXPECTED_REPO: \`${{ env.EXPECTED_REPO }}\`
+          BODY_EOF
+
+          # Deduplication: comment on existing open issue rather than create a duplicate
+          EXISTING=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --search "is:issue is:open \"${ISSUE_TITLE}\" in:title" \
+            --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body-file /tmp/failure-detail.md
+            echo "Commented on existing issue #${EXISTING}."
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "${ISSUE_TITLE}" \
+              --label "bug" \
+              --label "upstream-mirror" \
+              ${REPO_OWNER:+--assignee "$REPO_OWNER"} \
+              --body-file /tmp/failure-detail.md
+            echo "Created new issue."
+          fi
 
