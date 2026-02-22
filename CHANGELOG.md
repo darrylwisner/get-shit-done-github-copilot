@@ -4,6 +4,8 @@ Fork release history for **get-shit-done-github-copilot** — the VS Code GitHub
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+> **Upstream version history:** This changelog covers only fork-specific releases. For the full GSD upstream release history, see the [upstream CHANGELOG](https://github.com/gsd-build/get-shit-done/blob/main/CHANGELOG.md).
+
 ---
 
 ## [v1.4] - 2026-02-21 — Sync Pipeline Completion
