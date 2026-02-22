@@ -12,7 +12,7 @@
 ---
 
 > **This is a fork, not the upstream project.**
-> If you use **Claude Code**, **OpenCode**, or **Gemini CLI**, install GSD directly from upstream: [gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done) or `npx get-shit-done-cc@latest`.
+> If you use **Claude Code**, **OpenCode**, or **Gemini CLI**, install GSD directly from upstream: [gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done).
 > This fork is for **VS Code GitHub Copilot** users only.
 
 ---
