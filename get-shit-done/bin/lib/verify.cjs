@@ -410,7 +410,7 @@ function cmdValidateConsistency(cwd, raw) {
 
   // Extract phases from ROADMAP
   const roadmapPhases = new Set();
-  const phasePattern = /#{2,4}\s*Phase\s+(\d+(?:\.\d+)?)\s*:/gi;
+  const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)?)\s*:/gi;
   let m;
   while ((m = phasePattern.exec(roadmapContent)) !== null) {
     roadmapPhases.add(m[1]);
@@ -422,7 +422,7 @@ function cmdValidateConsistency(cwd, raw) {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
     const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
     for (const dir of dirs) {
-      const dm = dir.match(/^(\d+(?:\.\d+)?)/);
+      const dm = dir.match(/^(\d+[A-Z]?(?:\.\d+)?)/i);
       if (dm) diskPhases.add(dm[1]);
     }
   } catch {}
@@ -650,7 +650,7 @@ function cmdValidateHealth(cwd, options, raw) {
   if (fs.existsSync(roadmapPath)) {
     const roadmapContent = fs.readFileSync(roadmapPath, 'utf-8');
     const roadmapPhases = new Set();
-    const phasePattern = /#{2,4}\s*Phase\s+(\d+(?:\.\d+)?)\s*:/gi;
+    const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)?)\s*:/gi;
     let m;
     while ((m = phasePattern.exec(roadmapContent)) !== null) {
       roadmapPhases.add(m[1]);
@@ -661,7 +661,7 @@ function cmdValidateHealth(cwd, options, raw) {
       const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
       for (const e of entries) {
         if (e.isDirectory()) {
-          const dm = e.name.match(/^(\d+(?:\.\d+)?)/);
+          const dm = e.name.match(/^(\d+[A-Z]?(?:\.\d+)?)/i);
           if (dm) diskPhases.add(dm[1]);
         }
       }

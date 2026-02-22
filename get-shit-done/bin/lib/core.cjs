@@ -148,22 +148,42 @@ function execGit(cwd, args) {
 // ─── Phase utilities ──────────────────────────────────────────────────────────
 
 function normalizePhaseName(phase) {
-  const match = phase.match(/^(\d+(?:\.\d+)?)/);
+  const match = phase.match(/^(\d+)([A-Z])?(\.\d+)?/i);
   if (!match) return phase;
-  const num = match[1];
-  const parts = num.split('.');
-  const padded = parts[0].padStart(2, '0');
-  return parts.length > 1 ? `${padded}.${parts[1]}` : padded;
+  const padded = match[1].padStart(2, '0');
+  const letter = match[2] ? match[2].toUpperCase() : '';
+  const decimal = match[3] || '';
+  return padded + letter + decimal;
+}
+
+function comparePhaseNum(a, b) {
+  const pa = String(a).match(/^(\d+)([A-Z])?(\.\d+)?/i);
+  const pb = String(b).match(/^(\d+)([A-Z])?(\.\d+)?/i);
+  if (!pa || !pb) return String(a).localeCompare(String(b));
+  const intDiff = parseInt(pa[1], 10) - parseInt(pb[1], 10);
+  if (intDiff !== 0) return intDiff;
+  // No letter sorts before letter: 12 < 12A < 12B
+  const la = (pa[2] || '').toUpperCase();
+  const lb = (pb[2] || '').toUpperCase();
+  if (la !== lb) {
+    if (!la) return -1;
+    if (!lb) return 1;
+    return la < lb ? -1 : 1;
+  }
+  // No decimal sorts before decimal: 12A < 12A.1 < 12A.2
+  const da = pa[3] ? parseFloat(pa[3]) : -1;
+  const db = pb[3] ? parseFloat(pb[3]) : -1;
+  return da - db;
 }
 
 function searchPhaseInDir(baseDir, relBase, normalized) {
   try {
     const entries = fs.readdirSync(baseDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
     const match = dirs.find(d => d.startsWith(normalized));
     if (!match) return null;
 
-    const dirMatch = match.match(/^(\d+(?:\.\d+)?)-?(.*)/);
+    const dirMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)?)-?(.*)/i);
     const phaseNumber = dirMatch ? dirMatch[1] : normalized;
     const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
     const phaseDir = path.join(baseDir, match);
@@ -257,7 +277,7 @@ function getArchivedPhaseDirs(cwd) {
       const version = archiveName.match(/^(v[\d.]+)-phases$/)[1];
       const archivePath = path.join(milestonesDir, archiveName);
       const entries = fs.readdirSync(archivePath, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
 
       for (const dir of dirs) {
         results.push({
@@ -366,6 +386,7 @@ module.exports = {
   isGitIgnored,
   execGit,
   normalizePhaseName,
+  comparePhaseNum,
   searchPhaseInDir,
   findPhaseInternal,
   getArchivedPhaseDirs,
