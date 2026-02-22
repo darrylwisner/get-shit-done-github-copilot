@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { normalizePhaseName, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, output, error } = require('./core.cjs');
+const { normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, output, error } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 
 function cmdPhasesList(cwd, options, raw) {
@@ -34,12 +34,8 @@ function cmdPhasesList(cwd, options, raw) {
       }
     }
 
-    // Sort numerically (handles decimals: 01, 02, 02.1, 02.2, 03)
-    dirs.sort((a, b) => {
-      const aNum = parseFloat(a.match(/^(\d+(?:\.\d+)?)/)?.[1] || '0');
-      const bNum = parseFloat(b.match(/^(\d+(?:\.\d+)?)/)?.[1] || '0');
-      return aNum - bNum;
-    });
+    // Sort numerically (handles integers, decimals, letter-suffix, hybrids)
+    dirs.sort((a, b) => comparePhaseNum(a, b));
 
     // If filtering by phase number
     if (phase) {
@@ -168,7 +164,7 @@ function cmdFindPhase(cwd, phase, raw) {
 
   try {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
 
     const match = dirs.find(d => d.startsWith(normalized));
     if (!match) {
@@ -176,7 +172,7 @@ function cmdFindPhase(cwd, phase, raw) {
       return;
     }
 
-    const dirMatch = match.match(/^(\d+(?:\.\d+)?)-?(.*)/);
+    const dirMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)?)-?(.*)/i);
     const phaseNumber = dirMatch ? dirMatch[1] : normalized;
     const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
 
@@ -213,7 +209,7 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
   let phaseDirName = null;
   try {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
     const match = dirs.find(d => d.startsWith(normalized));
     if (match) {
       phaseDir = path.join(phasesDir, match);
@@ -322,7 +318,7 @@ function cmdPhaseAdd(cwd, description, raw) {
   const slug = generateSlugInternal(description);
 
   // Find highest integer phase number
-  const phasePattern = /#{2,4}\s*Phase\s+(\d+)(?:\.\d+)?:/gi;
+  const phasePattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)?:/gi;
   let maxPhase = 0;
   let m;
   while ((m = phasePattern.exec(content)) !== null) {
@@ -466,7 +462,7 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
   let targetDir = null;
   try {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
     targetDir = dirs.find(d => d.startsWith(normalized + '-') || d === normalized);
   } catch {}
 
@@ -497,7 +493,7 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
 
     try {
       const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
 
       // Find sibling decimals with higher numbers
       const decPattern = new RegExp(`^${baseInt}\\.(\\d+)-(.+)$`);
@@ -544,20 +540,21 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
 
     try {
       const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
 
-      // Collect directories that need renumbering (integer phases > removed, and their decimals)
+      // Collect directories that need renumbering (integer phases > removed, and their decimals/letters)
       const toRename = [];
       for (const dir of dirs) {
-        const dm = dir.match(/^(\d+)(?:\.(\d+))?-(.+)$/);
+        const dm = dir.match(/^(\d+)([A-Z])?(?:\.(\d+))?-(.+)$/i);
         if (!dm) continue;
         const dirInt = parseInt(dm[1], 10);
         if (dirInt > removedInt) {
           toRename.push({
             dir,
             oldInt: dirInt,
-            decimal: dm[2] ? parseInt(dm[2], 10) : null,
-            slug: dm[3],
+            letter: dm[2] ? dm[2].toUpperCase() : '',
+            decimal: dm[3] ? parseInt(dm[3], 10) : null,
+            slug: dm[4],
           });
         }
       }
@@ -572,9 +569,10 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
         const newInt = item.oldInt - 1;
         const newPadded = String(newInt).padStart(2, '0');
         const oldPadded = String(item.oldInt).padStart(2, '0');
+        const letterSuffix = item.letter || '';
         const decimalSuffix = item.decimal !== null ? `.${item.decimal}` : '';
-        const oldPrefix = `${oldPadded}${decimalSuffix}`;
-        const newPrefix = `${newPadded}${decimalSuffix}`;
+        const oldPrefix = `${oldPadded}${letterSuffix}${decimalSuffix}`;
+        const newPrefix = `${newPadded}${letterSuffix}${decimalSuffix}`;
         const newDirName = `${newPrefix}-${item.slug}`;
 
         // Rename directory
@@ -787,15 +785,13 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
 
   try {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
-    const currentFloat = parseFloat(phaseNum);
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
 
     // Find the next phase directory after current
     for (const dir of dirs) {
-      const dm = dir.match(/^(\d+(?:\.\d+)?)-?(.*)/);
+      const dm = dir.match(/^(\d+[A-Z]?(?:\.\d+)?)-?(.*)/i);
       if (dm) {
-        const dirFloat = parseFloat(dm[1]);
-        if (dirFloat > currentFloat) {
+        if (comparePhaseNum(dm[1], phaseNum) > 0) {
           nextPhaseNum = dm[1];
           nextPhaseName = dm[2] || null;
           isLastPhase = false;
