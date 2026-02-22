@@ -6,13 +6,11 @@
 #   gh label create upstream-sync --color 0075ca --description "Upstream sync PR"
 #   gh label create automated --color e4e669 --description "Automated workflow"
 #
-# To enable daily schedule, uncomment the schedule block below.
-
-# on:
-#   schedule:
-#     - cron: '0 6 * * *'  # Daily at 06:00 UTC
+# Schedule: runs every 6 hours. The sync job exits silently if fork is already up-to-date with upstream.
 
 on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
   workflow_dispatch:
   push:
     branches:
