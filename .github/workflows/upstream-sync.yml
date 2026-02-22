@@ -220,13 +220,17 @@ jobs:
           cat /tmp/delta-analysis.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Proactive fork adaptation
-        if: >
-          steps.detect.outputs.no_changes != 'true' &&
-          secrets.COPILOT_PAT != ''
+        if: steps.detect.outputs.no_changes != 'true'
         id: proactive_adapt
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
         run: |
+          # Skip gracefully if COPILOT_PAT is not set
+          if [ -z "$GH_TOKEN" ]; then
+            echo "COPILOT_PAT not configured — skipping proactive adaptation."
+            echo "proactive_adapt_invoked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           DELTA_ANALYSIS=$(cat /tmp/delta-analysis.md 2>/dev/null || echo "(delta analysis unavailable)")
           HAS_NEW_COMMANDS="${{ steps.analyze_delta.outputs.has_new_commands }}"
 
