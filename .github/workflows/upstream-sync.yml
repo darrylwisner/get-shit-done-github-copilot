@@ -579,16 +579,22 @@ PROMPT_EOF
         run: |
           set -euo pipefail
 
-          MAX_ATTEMPTS=3
-          ATTEMPT=0
+          STRATEGIES=("basic_verifier_fix" "contextual_generative_fix" "full_rewrite" "alt_approach")
+          STRATEGY_IDX=0
           REPAIR_NEEDED=false
           REPAIR_SUCCEEDED=false
-          REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
+          DEAD_END=false
 
           # Gather diagnostic context once
-          UPSTREAM_DIFF=$(git diff HEAD upstream/main -- . ':(exclude)commands/gsd' ':(exclude)get-shit-done' ':(exclude)agents' 2>/dev/null | head -c 20000 || true)
-          GENERATOR_SRC=$(cat scripts/generate-prompts.mjs)
-          VERIFIER_SRC=$(cat scripts/verify-prompts.mjs)
+          # UPSTREAM_DIFF is the primary context source — re-derived here because /tmp/delta-analysis.md
+          # from the sync job is NOT available cross-job (different runner). The git diff provides equivalent context.
+          UPSTREAM_DIFF=$(git diff HEAD upstream/main -- . \
+            ':(exclude)commands/gsd' ':(exclude)get-shit-done' ':(exclude)agents' \
+            2>/dev/null | head -c 20000 || true)
+          GENERATOR_SRC=$(cat scripts/generate-prompts.mjs 2>/dev/null || echo "(unavailable)")
+          VERIFIER_SRC=$(cat scripts/verify-prompts.mjs 2>/dev/null || echo "(unavailable)")
+          # Expected to fall back to "(delta analysis unavailable)" in the repair job — UPSTREAM_DIFF above is the primary source.
+          DELTA_ANALYSIS=$(cat /tmp/delta-analysis.md 2>/dev/null || echo "(delta analysis unavailable — different runner; see UPSTREAM_DIFF above)")
 
           # Run initial verify to see if repair is needed
           if node scripts/verify-prompts.mjs > /tmp/verify_initial.log 2>&1; then
@@ -598,36 +604,78 @@ PROMPT_EOF
           fi
 
           REPAIR_NEEDED=true
-          INITIAL_ERRORS=$(cat /tmp/verify_initial.log | head -c 5000)
+          CURRENT_ERRORS=$(cat /tmp/verify_initial.log | head -c 5000)
 
           build_repair_prompt() {
-            local attempt=$1
-            local prior_patches=""
-            if [ "$attempt" -ge 2 ] && [ -f /tmp/patch_attempt_1.diff ]; then
-              prior_patches="\n\n## Failed Patch — Attempt 1\n\`\`\`diff\n$(cat /tmp/patch_attempt_1.diff | head -c 5000)\n\`\`\`"
-            fi
-            if [ "$attempt" -ge 3 ] && [ -f /tmp/patch_attempt_2.diff ]; then
-              prior_patches="${prior_patches}\n\n## Failed Patch — Attempt 2\n\`\`\`diff\n$(cat /tmp/patch_attempt_2.diff | head -c 5000)\n\`\`\`"
-            fi
+            local strategy=$1
+            local attempt=$2
+            local current_errors=$3
 
+            # Collect prior patches for context
+            local prior_patches=""
+            for i in $(seq 1 $((attempt - 1))); do
+              if [ -f "/tmp/patch_attempt_${i}.diff" ]; then
+                prior_patches="${prior_patches}
+
+## Failed Patch — Attempt ${i} (strategy: ${STRATEGIES[$((i-1))]})"
+                prior_patches="${prior_patches}"$'\n'"$(cat /tmp/patch_attempt_${i}.diff | head -c 4000)"
+              fi
+            done
+
+            # Strategy-specific framing
             local framing=""
-            if [ "$attempt" -eq 3 ]; then
-              framing=" This is the last attempt before human escalation."
-            fi
+            case "$strategy" in
+              basic_verifier_fix)
+                framing="Focus on the exact verifier error messages. Make the smallest targeted fix that makes verify-prompts.mjs pass."
+                ;;
+              contextual_generative_fix)
+                framing="Prior targeted fix(es) did not work. Now consider the full upstream delta context. What structural change in upstream caused this? Fix generate-prompts.mjs or verify-prompts.mjs to handle the new upstream pattern."
+                ;;
+              full_rewrite)
+                framing="Prior fixes failed. Rewrite the failing section(s) of generate-prompts.mjs and/or verify-prompts.mjs from scratch. Ignore prior patches — take a clean approach. You may rewrite the entire file if needed."
+                ;;
+              alt_approach)
+                framing="All prior strategies failed. Try a completely different architectural approach. Consider whether a different data structure, parsing strategy, or output format would resolve the issue. Be creative."
+                ;;
+            esac
 
             cat <<PROMPT
-          You are the GSD upstream-sync repair agent. Analyze the upstream diff and verifier errors below, then update \`scripts/generate-prompts.mjs\` and/or \`scripts/verify-prompts.mjs\` to make the verifier pass.${framing}
+          You are the GSD upstream-sync repair agent. Attempt ${attempt}, strategy: ${strategy}.
 
-          RULES:
-          - NEVER modify files under: commands/gsd/, get-shit-done/, agents/
-          - Only edit scripts/ and .github/prompts/ if needed
-          - After edits, run: node scripts/generate-prompts.mjs && node scripts/verify-prompts.mjs
-          - Open a PR targeting branch: automated/upstream-sync
+          ${framing}
 
-          ## Verifier Errors
+          ## Authority — what you MAY modify
+          - scripts/generate-prompts.mjs
+          - scripts/verify-prompts.mjs
+          - scripts/tools.json
+          - .github/workflows/upstream-sync.yml
+          - .github/prompts/**
+          - .github/agents/**
+          - .github/instructions/**
+          - README.md
+          - FORK-CHANGELOG.md
+          - AGENTS.md
+
+          ## Hard limit — NEVER modify
+          - commands/gsd/**
+          - agents/**
+          - get-shit-done/**
+
+          ## Required steps
+          1. Fix the issue.
+          2. Run: node scripts/generate-prompts.mjs && node scripts/verify-prompts.mjs
+          3. Both must pass.
+          4. Open a PR targeting branch: automated/upstream-sync
+          5. Write a descriptive commit message explaining what you changed and why.
+          6. If you determine the problem requires human input or cannot be solved autonomously, write "DEAD_END" to /tmp/repair-dead-end.txt and stop immediately.
+
+          ## Current Verifier Errors
           \`\`\`
-          ${INITIAL_ERRORS}
+          ${current_errors}
           \`\`\`
+
+          ## Upstream Delta Analysis
+          ${DELTA_ANALYSIS}
 
           ## Upstream Diff (truncated to 20k chars)
           \`\`\`diff
@@ -647,14 +695,21 @@ PROMPT_EOF
           PROMPT
           }
 
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            echo "::group::Repair attempt $ATTEMPT of $MAX_ATTEMPTS"
+          # Strategy-pool loop
+          while [ "$STRATEGY_IDX" -lt "${#STRATEGIES[@]}" ]; do
+            STRATEGY="${STRATEGIES[$STRATEGY_IDX]}"
+            ATTEMPT=$((STRATEGY_IDX + 1))
+            STRATEGY_IDX=$((STRATEGY_IDX + 1))
 
-            PROMPT_TEXT=$(build_repair_prompt "$ATTEMPT")
-            printf '%s' "$PROMPT_TEXT" > /tmp/repair_prompt_${ATTEMPT}.txt
+            echo "::group::Repair attempt ${ATTEMPT} — strategy: ${STRATEGY}"
 
-            # Invoke Copilot agent (use --body-file to avoid shell escaping issues with JS source)
+            # Write prompt to file (avoids shell escaping issues)
+            build_repair_prompt "$STRATEGY" "$ATTEMPT" "$CURRENT_ERRORS" > /tmp/repair_prompt_${ATTEMPT}.txt
+
+            # Snapshot branch state before agent runs (for no-diff dead-end detection)
+            PRE_AGENT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+
+            # Invoke Copilot coding agent
             gh agent-task create \
               --repo "$GITHUB_REPOSITORY" \
               --base "automated/upstream-sync" \
@@ -662,31 +717,98 @@ PROMPT_EOF
               --body-file /tmp/repair_prompt_${ATTEMPT}.txt \
               || true
 
-            # Capture what changed
-            git diff HEAD > /tmp/patch_attempt_${ATTEMPT}.diff 2>/dev/null || true
+            # Merge back any copilot/* PR the agent created
+            COPILOT_PR=$(gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "automated/upstream-sync" \
+              --state open \
+              --json number,headRefName \
+              --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+              2>/dev/null | head -1 || echo "")
 
-            # Check verifier
+            if [ -n "$COPILOT_PR" ]; then
+              COPILOT_BRANCH=$(gh pr view "$COPILOT_PR" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json headRefName \
+                --jq '.headRefName' 2>/dev/null || echo "")
+              if [ -n "$COPILOT_BRANCH" ]; then
+                git fetch origin "$COPILOT_BRANCH" 2>/dev/null || true
+                git merge "origin/$COPILOT_BRANCH" --no-edit --allow-unrelated-histories 2>/dev/null || true
+                gh pr close "$COPILOT_PR" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --comment "Merged into automated/upstream-sync by repair loop (attempt ${ATTEMPT}, strategy: ${STRATEGY})." \
+                  || true
+              fi
+            else
+              # Pull any direct commits from agent
+              git pull origin automated/upstream-sync --rebase 2>/dev/null || true
+            fi
+
+            # Capture what the agent did
+            git diff "$PRE_AGENT_SHA" HEAD > /tmp/patch_attempt_${ATTEMPT}.diff 2>/dev/null || true
+
+            # Dead-end sentinel check
+            if [ -f /tmp/repair-dead-end.txt ]; then
+              DEAD_END=true
+              echo "::warning::Agent wrote DEAD_END sentinel on strategy ${STRATEGY}. Escalating."
+              echo "::endgroup::"
+              break
+            fi
+
+            # No-diff dead-end: agent ran but made no changes AND verifier still fails
+            if [ ! -s /tmp/patch_attempt_${ATTEMPT}.diff ]; then
+              echo "::warning::Agent made no changes on strategy ${STRATEGY}."
+              # Don't immediately dead-end — try next strategy
+            fi
+
+            # Re-run verifier
             if node scripts/verify-prompts.mjs > /tmp/verify_attempt_${ATTEMPT}.log 2>&1; then
-              echo "Verifier passed on attempt $ATTEMPT."
+              echo "Verifier passed on attempt ${ATTEMPT} (strategy: ${STRATEGY})."
               REPAIR_SUCCEEDED=true
+
+              # Push the repaired branch
+              git push origin HEAD:automated/upstream-sync --force-with-lease
+
+              # Create or update the PR (if it doesn't already exist from the sync job's normal flow)
+              EXISTING_PR=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+                --head "automated/upstream-sync" --json number --jq '.[0].number' 2>/dev/null || echo "")
+              if [ -z "$EXISTING_PR" ]; then
+                gh pr create \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --base main \
+                  --head "automated/upstream-sync" \
+                  --title "sync: upstream changes (autonomous repair)" \
+                  --body-file /tmp/pr-body.md \
+                  --label "upstream-sync" \
+                  --label "automated" || true
+              fi
+
               echo "repair_succeeded=true" >> "$GITHUB_OUTPUT"
               echo "repair_needed=true" >> "$GITHUB_OUTPUT"
               echo "::endgroup::"
               break
-            else
-              echo "::warning::Verifier failed after attempt $ATTEMPT."
-              INITIAL_ERRORS=$(cat /tmp/verify_attempt_${ATTEMPT}.log | head -c 5000)
             fi
 
+            echo "::warning::Verifier failed after attempt ${ATTEMPT} (strategy: ${STRATEGY})."
+            CURRENT_ERRORS=$(cat /tmp/verify_attempt_${ATTEMPT}.log | head -c 5000)
             echo "::endgroup::"
           done
 
-          # Write final outputs (repair_succeeded written in loop on success; write exhaustion flag here)
-          if [ "$REPAIR_SUCCEEDED" = false ] && [ "$REPAIR_NEEDED" = true ]; then
-            echo "repair_needed=true" >> "$GITHUB_OUTPUT"
+          # Write final outputs
+          echo "repair_needed=true" >> "$GITHUB_OUTPUT"
+          if [ "$DEAD_END" = "true" ]; then
+            echo "dead_end=true" >> "$GITHUB_OUTPUT"
             echo "repair_succeeded=false" >> "$GITHUB_OUTPUT"
+          elif [ "$REPAIR_SUCCEEDED" = "false" ]; then
             echo "attempts_exhausted=true" >> "$GITHUB_OUTPUT"
+            echo "repair_succeeded=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # Write repair summary to step summary
+          echo "## Repair Loop Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "Strategies tried: ${STRATEGY_IDX} of ${#STRATEGIES[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Repair succeeded: ${REPAIR_SUCCEEDED}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Dead end: ${DEAD_END}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Filesystem guard (post-repair)
         if: steps.preflight.outputs.skip != 'true' && steps.repair_loop.outputs.repair_needed == 'true'
@@ -696,22 +818,24 @@ PROMPT_EOF
       - name: Escalate — Create GitHub issue
         if: >
           steps.preflight.outputs.skip != 'true' &&
-          steps.repair_loop.outputs.attempts_exhausted == 'true'
+          (steps.repair_loop.outputs.attempts_exhausted == 'true' ||
+           steps.repair_loop.outputs.dead_end == 'true')
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
         run: |
           set -euo pipefail
           REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
 
-          # Deduplicate: skip if open sync-failed issue already exists
+          # Deduplicate: skip if open escalation issue already exists
           EXISTING=$(gh issue list \
             --repo "$GITHUB_REPOSITORY" \
-            --label "sync-failed" \
+            --label "escalation" \
+            --search "sync-escalation" \
             --state open \
             --json number \
             --jq 'length' 2>/dev/null || echo "0")
           if [ "$EXISTING" -gt 0 ]; then
-            echo "::warning::Open sync-failed issue already exists. Skipping duplicate creation."
+            echo "::warning::Open escalation issue already exists. Skipping duplicate creation."
             exit 0
           fi
 
@@ -720,20 +844,39 @@ PROMPT_EOF
             ':(exclude)commands/gsd' ':(exclude)get-shit-done' ':(exclude)agents' \
             2>/dev/null | head -c 15000 || true)
 
-          PATCH_1=$([ -f /tmp/patch_attempt_1.diff ] && cat /tmp/patch_attempt_1.diff | head -c 8000 || echo "(none)")
-          PATCH_2=$([ -f /tmp/patch_attempt_2.diff ] && cat /tmp/patch_attempt_2.diff | head -c 8000 || echo "(none)")
-          PATCH_3=$([ -f /tmp/patch_attempt_3.diff ] && cat /tmp/patch_attempt_3.diff | head -c 8000 || echo "(none)")
+          # Collect all strategy patches (up to 4 strategies)
+          PATCHES=""
+          for i in 1 2 3 4; do
+            if [ -f "/tmp/patch_attempt_${i}.diff" ]; then
+              PATCHES="${PATCHES}\n\n## Patch — Attempt ${i}\n\`\`\`diff\n$(cat /tmp/patch_attempt_${i}.diff | head -c 6000)\n\`\`\`"
+            fi
+          done
 
-          VERIFY_LOG=$(cat /tmp/verify_attempt_3.log 2>/dev/null | head -c 4000 || \
-                       cat /tmp/verify_initial.log 2>/dev/null | head -c 4000 || echo "(none)")
+          # Find latest verifier log
+          VERIFY_LOG=""
+          for i in 4 3 2 1; do
+            if [ -f "/tmp/verify_attempt_${i}.log" ]; then
+              VERIFY_LOG=$(cat "/tmp/verify_attempt_${i}.log" | head -c 4000)
+              break
+            fi
+          done
+          VERIFY_LOG=${VERIFY_LOG:-$(cat /tmp/verify_initial.log 2>/dev/null | head -c 4000 || echo "(none)")}
+
+          # Determine escalation reason
+          ESCALATION_REASON="strategies-exhausted (${STRATEGY_IDX} of ${#STRATEGIES[@]} tried)"
+          if [ -f /tmp/repair-dead-end.txt ]; then
+            ESCALATION_REASON="dead-end sentinel written by repair agent"
+          fi
 
           cat > /tmp/issue_body.md <<ISSUE
-          Self-repair agent failed after 3 attempts on run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          Self-repair agent escalated on run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+          **Reason:** ${ESCALATION_REASON}
 
           @${REPO_OWNER} — manual intervention required.
 
           ## Summary
-          The upstream sync detected changes that broke the compatibility layer (generate-prompts / verify-prompts). The Copilot repair agent was invoked 3 times with escalating context but could not produce a passing verifier run.
+          The upstream sync detected changes that broke the compatibility layer (generate-prompts / verify-prompts). The Copilot repair agent exhausted all available strategies without producing a passing verifier run.
 
           ---
 
@@ -746,27 +889,13 @@ PROMPT_EOF
           \`\`\`diff
           ${UPSTREAM_DIFF}
           \`\`\`
-
-          ## Patch — Attempt 1
-          \`\`\`diff
-          ${PATCH_1}
-          \`\`\`
-
-          ## Patch — Attempt 2
-          \`\`\`diff
-          ${PATCH_2}
-          \`\`\`
-
-          ## Patch — Attempt 3
-          \`\`\`diff
-          ${PATCH_3}
-          \`\`\`
+          ${PATCHES}
           ISSUE
 
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --title "sync-failed: Copilot repair exhausted after 3 attempts (run #${{ github.run_number }})" \
-            --label "sync-failed" \
+            --title "sync-escalation: autonomous maintenance dead-end" \
+            --label "escalation" \
             --body-file /tmp/issue_body.md
 
   guard:
