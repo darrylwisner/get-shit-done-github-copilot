@@ -750,8 +750,8 @@ jobs:
       - name: Configure git identity
         if: steps.preflight.outputs.skip != 'true'
         run: |
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch upstream
         if: steps.preflight.outputs.skip != 'true'
@@ -901,7 +901,7 @@ jobs:
 
           # Abort early if agent auth is known-bad to avoid wasting all 4 strategies
           if [ "${{ steps.agent_auth.outputs.agent_auth_ok }}" = "false" ]; then
-            echo "::error::Skipping repair loop — COPILOT_PAT is a fine-grained token and cannot authenticate gh agent-task. See validate-agent-task-auth step for instructions."
+            echo "::error::Skipping repair loop — COPILOT_PAT is a fine-grained token and cannot authenticate gh agent-task. See 'Validate agent-task auth' step for instructions."
             echo "dead_end=true" >> "$GITHUB_OUTPUT"
             echo "repair_needed=true" >> "$GITHUB_OUTPUT"
             echo "repair_succeeded=false" >> "$GITHUB_OUTPUT"
@@ -1046,7 +1046,7 @@ jobs:
             AGENT_TASK_EXIT=${AGENT_TASK_EXIT:-0}
             echo "$AGENT_TASK_OUTPUT"
             # Detect auth failures — if the token is wrong type, no amount of retrying will help
-            if echo "$AGENT_TASK_OUTPUT" | grep -qi "requires an OAuth token\|re-authenticate\|auth login"; then
+            if echo "$AGENT_TASK_OUTPUT" | grep -qi "requires an OAuth token\|re-authenticate\|auth login\|authentication failed\|invalid token\|HTTP 401\|HTTP 403"; then
               echo "::error::gh agent-task authentication failed. COPILOT_PAT must be a classic OAuth PAT (ghp_...). Fine-grained tokens are not accepted by gh agent-task."
               DEAD_END=true
               echo "::endgroup::"
