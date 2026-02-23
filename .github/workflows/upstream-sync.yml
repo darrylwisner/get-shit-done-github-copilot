@@ -178,8 +178,24 @@ jobs:
 
           if [ -z "$REMAINING" ]; then
             echo "All conflicts auto-resolved. Committing merge..."
-            git commit --no-edit -m "chore: merge upstream/main (auto-resolved fork-owned conflicts)"
+            git commit -m "chore: merge upstream/main (auto-resolved fork-owned conflicts)"
             echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
+
+            # Close any open conflict issue for this SHA — same logic as clean merge path
+            OPEN_CONFLICT=$(gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --label "upstream-sync" \
+              --state open \
+              --search "\"Upstream sync merge conflict (upstream@${CONFLICT_SHA})\" in:title" \
+              --json number \
+              --jq '.[0].number' 2>/dev/null || echo "")
+            if [ -n "$OPEN_CONFLICT" ] && [ "$OPEN_CONFLICT" != "null" ]; then
+              echo "Closing resolved conflict issue #${OPEN_CONFLICT}..."
+              gh issue close "$OPEN_CONFLICT" \
+                --repo "$GITHUB_REPOSITORY" \
+                --comment "Closed automatically: upstream@${CONFLICT_SHA} auto-resolved in run ${{ github.run_id }}."
+            fi
+
             exit 0
           fi
 
@@ -251,7 +267,7 @@ jobs:
           fi
 
       - name: Analyze upstream delta
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         id: analyze_delta
         run: |
           FORK_HEAD="${{ steps.detect.outputs.fork_head }}"
@@ -324,7 +340,7 @@ jobs:
           cat /tmp/delta-analysis.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Proactive fork adaptation
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         id: proactive_adapt
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
@@ -400,6 +416,7 @@ jobs:
       - name: Merge Copilot adaptation branch
         if: >
           steps.detect.outputs.no_changes != 'true' &&
+          steps.merge.outcome == 'success' &&
           steps.proactive_adapt.outputs.proactive_adapt_invoked == 'true'
         id: merge_copilot_adapt
         env:
@@ -446,14 +463,14 @@ jobs:
           fi
 
       - name: Run prompt generator
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         run: |
           node scripts/generate-prompts.mjs > /tmp/gen_output.txt 2>&1
           echo "Generator output:"
           cat /tmp/gen_output.txt
 
       - name: Run prompt verifier
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         id: verify
         run: |
           if ! node scripts/verify-prompts.mjs > /tmp/ver_output.txt 2>&1; then
@@ -497,7 +514,7 @@ jobs:
           cat /tmp/ver_output.txt
 
       - name: Commit regenerated wrapper files
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         run: |
           git add .github/prompts/ .github/agents/ .github/instructions/ || true
           if ! git diff --cached --quiet; then
@@ -509,7 +526,7 @@ jobs:
       # SYNC-03: Close any open PRs for automated/upstream-sync before force-pushing so the
       # replacement PR always reflects the current branch state cleanly.
       - name: Close superseded sync PRs
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         run: |
           OPEN_PRS=$(gh pr list \
             --repo "$GITHUB_REPOSITORY" \
@@ -528,12 +545,12 @@ jobs:
           done
 
       - name: Force-push working branch
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         run: |
           git push --force-with-lease origin automated/upstream-sync
 
       - name: Check open escalations
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         id: check_escalations
         run: |
           OPEN_COUNT=$(gh issue list \
@@ -552,7 +569,7 @@ jobs:
           fi
 
       - name: Build PR body
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         run: |
           NOTIFY="${{ vars.NOTIFY_MAINTAINER }}"
           # Default: tag the user unless NOTIFY_MAINTAINER explicitly set to "false"
@@ -631,7 +648,7 @@ jobs:
       # main without manual intervention as soon as required checks pass.
       # Prerequisite: Settings → General → Pull Requests → "Allow auto-merge" must be ON.
       - name: Create or update PR
-        if: steps.detect.outputs.no_changes != 'true'
+        if: steps.detect.outputs.no_changes != 'true' && steps.merge.outcome == 'success'
         id: create_pr
         run: |
           SHORT_SHA="${{ steps.detect.outputs.short_sha }}"
@@ -673,6 +690,7 @@ jobs:
       - name: Enable auto-merge on sync PR
         if: >
           steps.detect.outputs.no_changes != 'true' &&
+          steps.merge.outcome == 'success' &&
           steps.create_pr.outputs.pr_number != '' &&
           steps.check_escalations.outputs.has_escalation != 'true' &&
           steps.analyze_delta.outputs.security_flagged != 'true'
@@ -787,19 +805,20 @@ jobs:
           - get-shit-done/**
 
           ## Fork identity rules for conflict resolution
-          - In fork-owned files (package.json, README.md, CHANGELOG.md, AGENTS.md):
+          - In fork-owned files (package.json, README.md, FORK-CHANGELOG.md, AGENTS.md):
             the fork's content takes precedence. Accept upstream changes only where they
             don't conflict with the fork's identity (e.g., accept upstream version bumps
             to dependency fields, but keep fork-specific description/repository fields).
-          - In upstream-owned content that somehow drifted: accept --theirs.
+          - CHANGELOG.md is upstream-owned: accept --theirs (the fork maintains FORK-CHANGELOG.md separately).
+          - In any other upstream-owned content that somehow drifted: accept --theirs.
 
           ## Required steps
           1. Resolve all conflicts in the listed files.
-          2. Run: git add -A && git commit --no-edit -m "chore: resolve merge conflict with upstream/${UPSTREAM_SHA}"
+          2. Run: git add -A && git commit -m "chore: resolve merge conflict with upstream/${UPSTREAM_SHA}"
           3. Run: node scripts/generate-prompts.mjs
           4. Run: node scripts/verify-prompts.mjs
           5. Both must pass.
-          6. Open a PR targeting branch: automated/upstream-sync (base: main).
+          6. Open a PR from your working branch targeting base: automated/upstream-sync (NOT main).
           7. PR title: "sync: upstream changes (conflict resolved by agent)"
           8. If the conflict cannot be resolved autonomously, write "DEAD_END" to /tmp/repair-dead-end.txt and stop.
 
