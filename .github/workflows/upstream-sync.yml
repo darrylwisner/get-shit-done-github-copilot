@@ -1480,6 +1480,9 @@ jobs:
           for i in $(seq 1 20); do
             RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/${NEW_TAG}" \
               --jq '.id // empty' 2>/dev/null || echo "")
+            # Guard: gh api writes error JSON to stdout on non-200 responses;
+            # reject anything that is not a bare integer (e.g. JSON 404 payloads).
+            [[ "$RELEASE_ID" =~ ^[0-9]+$ ]] || RELEASE_ID=""
             if [ -n "$RELEASE_ID" ]; then
               echo "Release created (id=${RELEASE_ID}) after attempt ${i}."
               CREATED=true
@@ -1546,6 +1549,11 @@ jobs:
             # release.yml already created the release — overwrite auto-generated notes
             # Use release ID (not tag name) to avoid 'release not found' from gh release edit's by-tag lookup
             RELEASE_ID="${{ steps.poll_release.outputs.release_id }}"
+            # Sanity-check: must be a numeric ID — fail loudly rather than corrupt the API call
+            if [[ ! "$RELEASE_ID" =~ ^[0-9]+$ ]]; then
+              echo "::error::RELEASE_ID '$RELEASE_ID' is not a valid numeric ID. Aborting release body patch."
+              exit 1
+            fi
             jq -n --rawfile body /tmp/release-body.md '{"body": $body}' > /tmp/release-patch.json
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/${RELEASE_ID}" \
               --input /tmp/release-patch.json
