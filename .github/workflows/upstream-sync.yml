@@ -747,11 +747,39 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Configure git identity
+        if: steps.preflight.outputs.skip != 'true'
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
       - name: Fetch upstream
         if: steps.preflight.outputs.skip != 'true'
         run: |
           git remote add upstream https://github.com/gsd-build/get-shit-done.git 2>/dev/null || true
           git fetch upstream
+
+      - name: Validate agent-task auth
+        if: steps.preflight.outputs.skip != 'true'
+        id: agent_auth
+        run: |
+          # gh agent-task requires a classic OAuth PAT (ghp_...).
+          # Fine-grained tokens (github_pat_...) and GITHUB_TOKEN are rejected.
+          # Validate early so failures surface clearly rather than silently
+          # exhausting all repair strategies.
+          AUTH_STATUS=$(gh auth status 2>&1 || true)
+          TOKEN_TYPE=$(echo "$AUTH_STATUS" | grep -oP '(ghp_|github_pat_|ghs_)[^\s]+' | head -1 || echo "")
+          if echo "$TOKEN_TYPE" | grep -q '^github_pat_'; then
+            echo "::error::COPILOT_PAT is a fine-grained token (github_pat_...). gh agent-task requires a classic OAuth PAT (ghp_...). Regenerate COPILOT_PAT as a classic PAT with repo + codespace scopes."
+            echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$TOKEN_TYPE" ]; then
+            echo "::warning::Could not determine COPILOT_PAT token type from gh auth status. Proceeding, but agent-task calls may fail."
+            echo "$AUTH_STATUS"
+            echo "agent_auth_ok=unknown" >> "$GITHUB_OUTPUT"
+          else
+            echo "Token type looks OK (${TOKEN_TYPE:0:6}...). Proceeding."
+            echo "agent_auth_ok=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Resolve merge conflict via Copilot agent
         if: steps.preflight.outputs.skip != 'true' && needs.sync.outputs.merge_conflict == 'true'
@@ -871,6 +899,15 @@ jobs:
           git fetch origin automated/upstream-sync 2>/dev/null || true
           git checkout -B automated/upstream-sync origin/automated/upstream-sync 2>/dev/null || \
             git checkout -B automated/upstream-sync origin/${{ env.DEFAULT_BRANCH }} 2>/dev/null || true
+
+          # Abort early if agent auth is known-bad to avoid wasting all 4 strategies
+          if [ "${{ steps.agent_auth.outputs.agent_auth_ok }}" = "false" ]; then
+            echo "::error::Skipping repair loop — COPILOT_PAT is a fine-grained token and cannot authenticate gh agent-task. See validate-agent-task-auth step for instructions."
+            echo "dead_end=true" >> "$GITHUB_OUTPUT"
+            echo "repair_needed=true" >> "$GITHUB_OUTPUT"
+            echo "repair_succeeded=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           STRATEGIES=("basic_verifier_fix" "contextual_generative_fix" "full_rewrite" "alt_approach")
           STRATEGY_IDX=0
@@ -1001,12 +1038,21 @@ jobs:
             PRE_AGENT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
 
             # Invoke Copilot coding agent
-            gh agent-task create \
+            AGENT_TASK_OUTPUT=$(gh agent-task create \
               --repo "$GITHUB_REPOSITORY" \
               --base "automated/upstream-sync" \
               --follow \
               -F /tmp/repair_prompt_${ATTEMPT}.txt \
-              || true
+              2>&1) || AGENT_TASK_EXIT=$?
+            AGENT_TASK_EXIT=${AGENT_TASK_EXIT:-0}
+            echo "$AGENT_TASK_OUTPUT"
+            # Detect auth failures — if the token is wrong type, no amount of retrying will help
+            if echo "$AGENT_TASK_OUTPUT" | grep -qi "requires an OAuth token\|re-authenticate\|auth login"; then
+              echo "::error::gh agent-task authentication failed. COPILOT_PAT must be a classic OAuth PAT (ghp_...). Fine-grained tokens are not accepted by gh agent-task."
+              DEAD_END=true
+              echo "::endgroup::"
+              break
+            fi
 
             # Merge back any copilot/* PR the agent created
             COPILOT_PR=$(gh pr list \
