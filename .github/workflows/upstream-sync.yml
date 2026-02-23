@@ -971,7 +971,7 @@ jobs:
 
       - name: Escalate — Create GitHub issue
         if: >
-          needs.sync.result == 'failure' ||
+          (needs.sync.result == 'failure' && needs.sync.outputs.merge_conflict != 'true') ||
           steps.repair_loop.outputs.attempts_exhausted == 'true' ||
           steps.repair_loop.outputs.dead_end == 'true' ||
           needs.sync.outputs.security_flagged == 'true'
@@ -1042,12 +1042,24 @@ jobs:
             ISSUE_REF="$EXISTING_ISSUE"
           else
             echo "Creating new escalation issue..."
+            # Ensure the label exists (idempotent — never fails if already present)
+            gh label create "escalation" \
+              --color "d93f0b" \
+              --description "Escalation required: autonomous maintenance dead-end" \
+              --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+
+            # Create issue without label flag (so creation never fails due to missing label)
             NEW_ISSUE_URL=$(gh issue create \
               --repo "$GITHUB_REPOSITORY" \
               --title "${ISSUE_TITLE}" \
-              --label "escalation" \
               --body-file /tmp/escalation-body.md)
             ISSUE_REF=$(basename "$NEW_ISSUE_URL")
+
+            # Apply label separately — failure here is non-fatal
+            gh issue edit "$ISSUE_REF" \
+              --repo "$GITHUB_REPOSITORY" \
+              --add-label "escalation" 2>/dev/null || true
+
             echo "Created escalation issue #${ISSUE_REF}."
           fi
 
