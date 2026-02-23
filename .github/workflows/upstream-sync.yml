@@ -404,6 +404,9 @@ jobs:
           PROMPT_EOF
 
           echo "Invoking Copilot proactive adaptation agent..."
+          _COPILOT_TOKEN="${GH_TOKEN:-}"
+          echo "$_COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN \
+            gh auth login --with-token --hostname github.com 2>&1 || true
           env -u GH_TOKEN -u GITHUB_TOKEN gh agent-task create \
             --repo "$GITHUB_REPOSITORY" \
             --base "automated/upstream-sync" \
@@ -863,6 +866,9 @@ jobs:
           \`\`\`
           PROMPT_EOF
 
+          _COPILOT_TOKEN="${GH_TOKEN:-}"
+          echo "$_COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN \
+            gh auth login --with-token --hostname github.com 2>&1 || true
           env -u GH_TOKEN -u GITHUB_TOKEN gh agent-task create \
             --repo "$GITHUB_REPOSITORY" \
             --base "automated/upstream-sync" \
@@ -1057,10 +1063,18 @@ jobs:
             PRE_AGENT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
 
             # Invoke Copilot coding agent
-            # Unset GH_TOKEN and GITHUB_TOKEN so gh agent-task uses the stored
-            # credential (from 'Validate agent-task auth') rather than the env
-            # vars. GitHub Actions injects both; gh CLI prefers env vars over
-            # the credential store, so both must be cleared.
+            # gh agent-task requires a classic OAuth PAT; it ignores GH_TOKEN
+            # and GITHUB_TOKEN env vars and reads only from the gh credential
+            # store. Re-authenticate inline (not just in a prior step) so the
+            # store is guaranteed fresh regardless of runner config or GH_CONFIG_DIR.
+            # Both GH_TOKEN and GITHUB_TOKEN must be cleared when calling
+            # gh auth login and gh agent-task — GitHub Actions Runner injects
+            # both and gh CLI prefers env vars over the credential store.
+            _COPILOT_TOKEN="${GH_TOKEN:-}"
+            echo "$_COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN \
+              gh auth login --with-token --hostname github.com 2>&1 || true
+            echo "DEBUG — gh auth status (env vars cleared):"
+            env -u GH_TOKEN -u GITHUB_TOKEN gh auth status 2>&1 || true
             AGENT_TASK_OUTPUT=$(env -u GH_TOKEN -u GITHUB_TOKEN gh agent-task create \
               --repo "$GITHUB_REPOSITORY" \
               --base "automated/upstream-sync" \
