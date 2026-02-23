@@ -47,7 +47,7 @@ elif [ "$MODE" = "post-commit" ]; then
     #   - If the file exists in upstream/main: restore it to that state.
     #   - If the file was created by the agent (doesn't exist in upstream/main): delete it.
     echo "$VIOLATIONS" | while IFS= read -r f; do
-      if git ls-tree -r --name-only upstream/main | grep -qxF "$f"; then
+      if git cat-file -e "upstream/main:$f" 2>/dev/null; then
         git checkout upstream/main -- "$f"
       else
         git rm -f -- "$f" 2>/dev/null || rm -f -- "$f"
