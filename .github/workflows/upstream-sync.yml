@@ -776,7 +776,11 @@ jobs:
 
           # 2. Log in explicitly — gh agent-task does not respect GH_TOKEN env var;
           #    it requires credentials in the gh credential store.
-          if echo "${GH_TOKEN:-}" | gh auth login --with-token --hostname github.com 2>&1; then
+          #    gh auth login refuses to store credentials when GH_TOKEN is set in
+          #    the environment, so we must capture the token value and unset the
+          #    env var before calling auth login.
+          COPILOT_TOKEN="${GH_TOKEN:-}"
+          if echo "$COPILOT_TOKEN" | env -u GH_TOKEN gh auth login --with-token --hostname github.com 2>&1; then
             echo "Successfully logged in with COPILOT_PAT."
             echo "agent_auth_ok=true" >> "$GITHUB_OUTPUT"
           else
@@ -903,9 +907,22 @@ jobs:
           git checkout -B automated/upstream-sync origin/automated/upstream-sync 2>/dev/null || \
             git checkout -B automated/upstream-sync origin/${{ env.DEFAULT_BRANCH }} 2>/dev/null || true
 
-          # Abort early if agent auth is known-bad to avoid wasting all 4 strategies
+          # Run initial verify to see if repair is needed.
+          # Do this BEFORE the auth gate: if the verifier passes there is nothing
+          # for the agent to do and a bad/missing auth token is irrelevant.
+          if node scripts/verify-prompts.mjs > /tmp/verify_initial.log 2>&1; then
+            echo "Verifier passed — no repair needed."
+            echo "repair_needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          REPAIR_NEEDED=true
+          CURRENT_ERRORS=$(cat /tmp/verify_initial.log | head -c 5000)
+
+          # Verifier failed — we need the agent. Now check auth.
           if [ "${{ steps.agent_auth.outputs.agent_auth_ok }}" = "false" ]; then
-            echo "::error::Skipping repair loop — COPILOT_PAT is a fine-grained token and cannot authenticate gh agent-task. See 'Validate agent-task auth' step for instructions."
+            echo "::error::Repair needed but COPILOT_PAT auth failed. See 'Validate agent-task auth' step. Verifier errors:"
+            cat /tmp/verify_initial.log
             echo "dead_end=true" >> "$GITHUB_OUTPUT"
             echo "repair_needed=true" >> "$GITHUB_OUTPUT"
             echo "repair_succeeded=false" >> "$GITHUB_OUTPUT"
@@ -937,16 +954,6 @@ jobs:
           VERIFIER_SRC=$(cat scripts/verify-prompts.mjs 2>/dev/null || echo "(unavailable)")
           # Expected to fall back to "(delta analysis unavailable)" in the repair job — UPSTREAM_DIFF above is the primary source.
           DELTA_ANALYSIS=$(cat /tmp/delta-analysis.md 2>/dev/null || echo "(delta analysis unavailable — different runner; see UPSTREAM_DIFF above)")
-
-          # Run initial verify to see if repair is needed
-          if node scripts/verify-prompts.mjs > /tmp/verify_initial.log 2>&1; then
-            echo "Verifier passed — no repair needed."
-            echo "repair_needed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          REPAIR_NEEDED=true
-          CURRENT_ERRORS=$(cat /tmp/verify_initial.log | head -c 5000)
 
           build_repair_prompt() {
             local strategy=$1
@@ -1050,7 +1057,9 @@ jobs:
             PRE_AGENT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
 
             # Invoke Copilot coding agent
-            AGENT_TASK_OUTPUT=$(gh agent-task create \
+            # Unset GH_TOKEN so gh agent-task uses the stored credential (from
+            # the 'Validate agent-task auth' step) rather than the env var.
+            AGENT_TASK_OUTPUT=$(env -u GH_TOKEN gh agent-task create \
               --repo "$GITHUB_REPOSITORY" \
               --base "automated/upstream-sync" \
               --follow \
