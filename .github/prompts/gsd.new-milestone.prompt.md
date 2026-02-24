@@ -57,6 +57,6 @@ Project and milestone context files are resolved inside the workflow (`init new-
 </context>
 
 <process>
-Execute the new-milestone workflow from @.claude/get-shit-done/workflows/new-milestone.md end-to-end.
+Execute the new-milestone workflow from @./.claude/get-shit-done/workflows/new-milestone.md end-to-end.
 Preserve all workflow gates (validation, questioning, research, requirements, roadmap approval, commits).
 </process>
