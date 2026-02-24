@@ -403,21 +403,77 @@ jobs:
           ${DELTA_ANALYSIS}
           PROMPT_EOF
 
-          echo "Invoking Copilot proactive adaptation agent..."
-          COPILOT_TOKEN="${GH_TOKEN:-}"
-          echo "$COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN \
-            gh auth login --with-token --hostname github.com 2>&1 || true
-          echo "DEBUG — gh auth status (env vars cleared):"
-          env -u GH_TOKEN -u GITHUB_TOKEN gh auth status 2>&1 || true
-          ADAPT_OUTPUT=$(env -u GH_TOKEN -u GITHUB_TOKEN gh agent-task create \
+          # Trigger Copilot coding agent via issue assignment.
+          # gh agent-task create cannot be used in CI — it requires an interactive
+          # OAuth token (browser/device flow) regardless of PAT scopes.
+          # In this repository, we trigger the Copilot coding agent by creating a
+          # GitHub issue assigned to 'copilot'; when enabled, the agent should pick
+          # it up and open a copilot/* PR. This behavior depends on repository
+          # Copilot configuration and is not guaranteed by this workflow.
+          echo "Creating Copilot adaptation issue..."
+          ADAPT_ISSUE_URL=$(gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --base "automated/upstream-sync" \
-            --follow \
-            -F /tmp/proactive_prompt.md \
-            2>&1) || true
-          echo "$ADAPT_OUTPUT"
-          if echo "$ADAPT_OUTPUT" | grep -qi "requires an OAuth token\|re-authenticate\|auth login\|authentication failed\|invalid token\|HTTP 401\|HTTP 403"; then
-            echo "::warning::gh agent-task authentication failed for proactive adaptation. COPILOT_PAT must be a classic OAuth PAT (ghp_...)."
+            --title "adapt(upstream-sync): proactive fork adaptation [$(date -u +%Y-%m-%dT%H:%M)]" \
+            --body-file /tmp/proactive_prompt.md \
+            --assignee "copilot" \
+            --label "upstream-sync" \
+            2>/dev/null || echo "")
+          ADAPT_ISSUE=$(echo "$ADAPT_ISSUE_URL" | grep -oP '/issues/\K[0-9]+' || echo "")
+          [[ "$ADAPT_ISSUE" =~ ^[0-9]+$ ]] || ADAPT_ISSUE=""
+
+          if [ -z "$ADAPT_ISSUE" ]; then
+            echo "::warning::Failed to create Copilot adaptation issue. Copilot coding agent may not be enabled for this repository."
+            echo "proactive_adapt_invoked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ISSUE_CREATED_AT=$(gh issue view "$ADAPT_ISSUE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json createdAt \
+            --jq '.createdAt' 2>/dev/null || echo "")
+
+          if [ -z "$ISSUE_CREATED_AT" ]; then
+            echo "::warning::Failed to retrieve creation time for issue #${ADAPT_ISSUE}. Proceeding without PR association filter."
+          fi
+
+          echo "Created issue #${ADAPT_ISSUE}. Waiting up to 20 minutes for Copilot coding agent to open a PR..."
+          POLL_MAX=24
+          POLL_COUNT=0
+          ADAPT_PR=""
+          while [ $POLL_COUNT -lt $POLL_MAX ]; do
+            if [ -n "$ISSUE_CREATED_AT" ]; then
+              export ISSUE_CREATED_AT
+              ADAPT_PR=$(gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --base "automated/upstream-sync" \
+                --state open \
+                --json number,headRefName,createdAt \
+                --jq '.[] | select((.headRefName | startswith("copilot/")) and (.createdAt >= env.ISSUE_CREATED_AT)) | .number' \
+                2>/dev/null | head -1 || echo "")
+            else
+              ADAPT_PR=$(gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --base "automated/upstream-sync" \
+                --state open \
+                --json number,headRefName \
+                --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+                2>/dev/null | head -1 || echo "")
+            fi
+            if [ -n "$ADAPT_PR" ]; then
+              echo "Copilot PR #${ADAPT_PR} found after ~$((POLL_COUNT * 50))s."
+              break
+            fi
+            sleep 50
+            POLL_COUNT=$((POLL_COUNT + 1))
+          done
+
+          if [ -n "${ADAPT_PR:-}" ]; then
+            gh issue close "$ADAPT_ISSUE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --comment "Processed by upstream-sync proactive adaptation step." \
+              2>/dev/null || true
+          else
+            echo "::warning::Copilot coding agent did not open a PR within 20 minutes. Leaving issue #${ADAPT_ISSUE} open."
           fi
 
           echo "proactive_adapt_invoked=true" >> "$GITHUB_OUTPUT"
@@ -772,42 +828,53 @@ jobs:
         if: steps.preflight.outputs.skip != 'true'
         id: agent_auth
         run: |
-          # gh agent-task requires a classic OAuth PAT (ghp_...) AND the token
-          # must be stored via gh auth login — setting GH_TOKEN env var alone is
-          # not sufficient for this subcommand.
+          # The Copilot coding agent is triggered by creating a GitHub issue
+          # assigned to 'copilot'. This requires a classic OAuth PAT (ghp_...)
+          # with 'repo' scope — no codespace scope, no interactive login needed.
+          #
+          # IMPORTANT: gh agent-task create is NOT used. Despite having a valid
+          # ghp_... PAT with all required scopes stored in the credential store,
+          # gh agent-task still fails with "this command requires an OAuth token"
+          # because it internally requires a token obtained via the OAuth
+          # device/browser flow — which is impossible in CI. This is a gh CLI
+          # design constraint with no workaround.
 
-          # 1. Detect token type directly from the env var (fast, no API call)
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::COPILOT_PAT secret is not set. Cannot invoke Copilot coding agent."
+            echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if echo "${GH_TOKEN:-}" | grep -q '^github_pat_'; then
-            echo "::error::COPILOT_PAT is a fine-grained token (github_pat_...). gh agent-task requires a classic OAuth PAT (ghp_...) with scopes: repo, codespace, workflow. Regenerate COPILOT_PAT as a classic PAT at github.com/settings/tokens."
+            echo "::error::COPILOT_PAT is a fine-grained token (github_pat_...). The Copilot issue-assignment trigger requires a classic OAuth PAT (ghp_...) with 'repo' scope. Regenerate at github.com/settings/tokens."
             echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # 2. Log in explicitly — gh agent-task does not respect GH_TOKEN env var;
-          #    it requires credentials in the gh credential store.
-          #    gh auth login refuses to store credentials when GH_TOKEN is set in
-          #    the environment, so we must capture the token value and unset the
-          #    env var before calling auth login.
-          COPILOT_TOKEN="${GH_TOKEN:-}"
-          if ! echo "$COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN gh auth login --with-token --hostname github.com 2>&1; then
-            echo "::error::gh auth login failed with COPILOT_PAT. Token may be expired or lack required scopes (repo, codespace, workflow)."
-            echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "Successfully logged in with COPILOT_PAT."
-
-          # 3. Verify required scopes — gh agent-task REQUIRES 'codespace' scope
-          #    in addition to 'repo'. Missing this scope produces the misleading
-          #    error "this command requires an OAuth token" even with a valid ghp_...
-          #    token. Check now and fail fast with a clear message.
-          AUTH_SCOPES=$(env -u GH_TOKEN -u GITHUB_TOKEN gh auth status 2>&1 || true)
-          echo "Token info: $AUTH_SCOPES"
-          if ! echo "$AUTH_SCOPES" | grep -q "'codespace'"; then
-            echo "::error::COPILOT_PAT is missing the 'codespace' scope. gh agent-task requires: repo, codespace, workflow. Current scopes: $(echo "$AUTH_SCOPES" | grep 'Token scopes' || echo 'unknown'). Regenerate COPILOT_PAT on github.com/settings/tokens and add the 'codespace' scope."
+          if ! echo "${GH_TOKEN:-}" | grep -q '^ghp_'; then
+            echo "::error::COPILOT_PAT does not appear to be a classic OAuth PAT (expected ghp_... prefix). Regenerate at github.com/settings/tokens."
             echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          # Validate that the classic PAT has the required 'repo' scope.
+          # gh auth status -t prints the token scopes on a dedicated line, e.g.:
+          #   Token scopes: repo, read:org
+          if ! gh auth status -t >/tmp/gh_auth_status 2>&1; then
+            echo "::error::gh auth status failed for COPILOT_PAT. Ensure the token is valid and has 'repo' scope."
+            cat /tmp/gh_auth_status || true
+            echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! grep -E '^ *Token scopes: .*\brepo\b' /tmp/gh_auth_status >/dev/null 2>&1; then
+            echo "::error::COPILOT_PAT is a classic OAuth PAT but does not have the required 'repo' scope. Update the token at https://github.com/settings/tokens."
+            cat /tmp/gh_auth_status || true
+            echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "COPILOT_PAT is a valid classic OAuth PAT with 'repo' scope. Ready for issue-based Copilot agent invocation."
           echo "agent_auth_ok=true" >> "$GITHUB_OUTPUT"
 
       - name: Resolve merge conflict via Copilot agent
@@ -885,20 +952,70 @@ jobs:
           \`\`\`
           PROMPT_EOF
 
-          COPILOT_TOKEN="${GH_TOKEN:-}"
-          echo "$COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN \
-            gh auth login --with-token --hostname github.com 2>&1 || true
-          echo "DEBUG — gh auth status (env vars cleared):"
-          env -u GH_TOKEN -u GITHUB_TOKEN gh auth status 2>&1 || true
-          CONFLICT_OUTPUT=$(env -u GH_TOKEN -u GITHUB_TOKEN gh agent-task create \
+          # Trigger Copilot coding agent via issue assignment.
+          # gh agent-task create cannot be used in CI — it requires an interactive
+          # OAuth token (browser/device flow) regardless of PAT scopes.
+          echo "Creating Copilot conflict-resolution issue..."
+          CONFLICT_ISSUE_URL=$(gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --base "automated/upstream-sync" \
-            --follow \
-            -F /tmp/conflict-resolve-prompt.md \
-            2>&1) || true
-          echo "$CONFLICT_OUTPUT"
-          if echo "$CONFLICT_OUTPUT" | grep -qi "requires an OAuth token\|re-authenticate\|auth login\|authentication failed\|invalid token\|HTTP 401\|HTTP 403"; then
-            echo "::warning::gh agent-task authentication failed for conflict resolution. COPILOT_PAT must be a classic OAuth PAT (ghp_...)."
+            --title "fix(upstream-sync): resolve merge conflict [${{ needs.sync.outputs.short_sha || 'unknown' }}]" \
+            --body-file /tmp/conflict-resolve-prompt.md \
+            --assignee "copilot" \
+            --label "upstream-sync" \
+            2>/dev/null || echo "")
+          CONFLICT_ISSUE=$(echo "$CONFLICT_ISSUE_URL" | grep -oP '/issues/\K[0-9]+' || echo "")
+          [[ "$CONFLICT_ISSUE" =~ ^[0-9]+$ ]] || CONFLICT_ISSUE=""
+
+          if [ -n "$CONFLICT_ISSUE" ]; then
+            CONFLICT_ISSUE_CREATED_AT=$(gh issue view "$CONFLICT_ISSUE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json createdAt \
+              --jq '.createdAt' 2>/dev/null || echo "")
+
+            if [ -z "$CONFLICT_ISSUE_CREATED_AT" ]; then
+              echo "::warning::Failed to retrieve creation time for issue #${CONFLICT_ISSUE}. Proceeding without PR association filter."
+            fi
+
+            echo "Created issue #${CONFLICT_ISSUE}. Waiting up to 20 minutes for Copilot to open a PR..."
+            POLL_MAX=24
+            POLL_COUNT=0
+            AGENT_PR=""
+            while [ $POLL_COUNT -lt $POLL_MAX ]; do
+              if [ -n "$CONFLICT_ISSUE_CREATED_AT" ]; then
+                export CONFLICT_ISSUE_CREATED_AT
+                AGENT_PR=$(gh pr list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --base "automated/upstream-sync" \
+                  --state open \
+                  --json number,headRefName,createdAt \
+                  --jq '.[] | select((.headRefName | startswith("copilot/")) and (.createdAt >= env.CONFLICT_ISSUE_CREATED_AT)) | .number' \
+                  2>/dev/null | head -1 || echo "")
+              else
+                AGENT_PR=$(gh pr list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --base "automated/upstream-sync" \
+                  --state open \
+                  --json number,headRefName \
+                  --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+                  2>/dev/null | head -1 || echo "")
+              fi
+              if [ -n "$AGENT_PR" ]; then
+                echo "Copilot PR #${AGENT_PR} found after ~$((POLL_COUNT * 50))s."
+                break
+              fi
+              sleep 50
+              POLL_COUNT=$((POLL_COUNT + 1))
+            done
+            if [ -n "$AGENT_PR" ]; then
+              gh issue close "$CONFLICT_ISSUE" \
+                --repo "$GITHUB_REPOSITORY" \
+                --comment "Processed by upstream-sync conflict resolution step." \
+                2>/dev/null || true
+            else
+              echo "::warning::Copilot coding agent did not open a PR within 20 minutes. Leaving issue #${CONFLICT_ISSUE} open."
+            fi
+          else
+            echo "::warning::Failed to create conflict resolution issue."
           fi
 
           # Check if agent resolved conflicts (dead-end sentinel)
@@ -1087,45 +1204,79 @@ jobs:
             # Snapshot branch state before agent runs (for no-diff dead-end detection)
             PRE_AGENT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
 
-            # Invoke Copilot coding agent
-            # gh agent-task requires a classic OAuth PAT and relies on the
-            # standard gh CLI authentication mechanism. The gh CLI prefers
-            # GH_TOKEN/GITHUB_TOKEN env vars over the credential store, so we
-            # must ensure the env vars are cleared and the store contains the
-            # desired PAT. Re-authenticate inline (not just in a prior step)
-            # so the store is guaranteed fresh regardless of runner config or GH_CONFIG_DIR.
-            # Both GH_TOKEN and GITHUB_TOKEN must be cleared when calling
-            # gh auth login and gh agent-task — GitHub Actions Runner injects
-            # both and gh CLI prefers env vars over the credential store.
-            COPILOT_TOKEN="${GH_TOKEN:-}"
-            echo "$COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN \
-              gh auth login --with-token --hostname github.com 2>&1 || true
-            echo "DEBUG — gh auth status (env vars cleared):"
-            env -u GH_TOKEN -u GITHUB_TOKEN gh auth status 2>&1 || true
-            AGENT_TASK_OUTPUT=$(env -u GH_TOKEN -u GITHUB_TOKEN gh agent-task create \
+            # Trigger Copilot coding agent via issue assignment.
+            # IMPORTANT: gh agent-task create is intentionally NOT used.
+            # gh agent-task requires a token from the OAuth device/browser flow —
+            # it internally checks the token's origin, not just its scopes. A ghp_...
+            # PAT with every required scope (codespace, repo, workflow) stored in
+            # the gh credential store is still rejected with "this command requires
+            # an OAuth token". This is a gh CLI design constraint with no workaround.
+            # The supported CI/CD path is: create a GitHub issue assigned to
+            # 'copilot'; the agent picks it up and opens a copilot/* PR.
+            COPILOT_PR=""
+            REPAIR_ISSUE_URL=$(gh issue create \
               --repo "$GITHUB_REPOSITORY" \
-              --base "automated/upstream-sync" \
-              --follow \
-              -F /tmp/repair_prompt_${ATTEMPT}.txt \
-              2>&1) || AGENT_TASK_EXIT=$?
-            AGENT_TASK_EXIT=${AGENT_TASK_EXIT:-0}
-            echo "$AGENT_TASK_OUTPUT"
-            # Detect auth failures — if the token is wrong type, no amount of retrying will help
-            if echo "$AGENT_TASK_OUTPUT" | grep -qi "requires an OAuth token\|re-authenticate\|auth login\|authentication failed\|invalid token\|HTTP 401\|HTTP 403"; then
-              echo "::error::gh agent-task authentication failed. COPILOT_PAT must be a classic OAuth PAT (ghp_...). Fine-grained tokens are not accepted by gh agent-task."
-              DEAD_END=true
+              --title "repair(upstream-sync): fix verifier [attempt ${ATTEMPT}, ${STRATEGY}]" \
+              --body-file /tmp/repair_prompt_${ATTEMPT}.txt \
+              --assignee "copilot" \
+              --label "upstream-sync" \
+              2>/dev/null || echo "")
+            REPAIR_ISSUE=$(echo "$REPAIR_ISSUE_URL" | grep -oP '/issues/\K[0-9]+' || echo "")
+            [[ "$REPAIR_ISSUE" =~ ^[0-9]+$ ]] || REPAIR_ISSUE=""
+
+            if [ -z "$REPAIR_ISSUE" ]; then
+              echo "::warning::Failed to create Copilot repair issue. Copilot coding agent may not be enabled for this repository, or COPILOT_PAT lacks 'repo' scope."
               echo "::endgroup::"
-              break
+              continue
             fi
 
-            # Merge back any copilot/* PR the agent created
-            COPILOT_PR=$(gh pr list \
+            REPAIR_ISSUE_CREATED_AT=$(gh issue view "$REPAIR_ISSUE" \
               --repo "$GITHUB_REPOSITORY" \
-              --base "automated/upstream-sync" \
-              --state open \
-              --json number,headRefName \
-              --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
-              2>/dev/null | head -1 || echo "")
+              --json createdAt \
+              --jq '.createdAt' 2>/dev/null || echo "")
+
+            if [ -z "$REPAIR_ISSUE_CREATED_AT" ]; then
+              echo "::warning::Failed to retrieve creation time for issue #${REPAIR_ISSUE}. Proceeding without PR association filter."
+            fi
+
+            echo "Created issue #${REPAIR_ISSUE}. Waiting up to 20 minutes for Copilot coding agent to open a PR..."
+            POLL_MAX=24
+            POLL_COUNT=0
+            while [ $POLL_COUNT -lt $POLL_MAX ]; do
+              if [ -n "$REPAIR_ISSUE_CREATED_AT" ]; then
+                export REPAIR_ISSUE_CREATED_AT
+                COPILOT_PR=$(gh pr list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --base "automated/upstream-sync" \
+                  --state open \
+                  --json number,headRefName,createdAt \
+                  --jq '.[] | select((.headRefName | startswith("copilot/")) and (.createdAt >= env.REPAIR_ISSUE_CREATED_AT)) | .number' \
+                  2>/dev/null | head -1 || echo "")
+              else
+                COPILOT_PR=$(gh pr list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --base "automated/upstream-sync" \
+                  --state open \
+                  --json number,headRefName \
+                  --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+                  2>/dev/null | head -1 || echo "")
+              fi
+              if [ -n "$COPILOT_PR" ]; then
+                echo "Copilot PR #${COPILOT_PR} found after ~$((POLL_COUNT * 50))s."
+                break
+              fi
+              sleep 50
+              POLL_COUNT=$((POLL_COUNT + 1))
+            done
+
+            if [ -n "$COPILOT_PR" ]; then
+              gh issue close "$REPAIR_ISSUE" \
+                --repo "$GITHUB_REPOSITORY" \
+                --comment "Processed by upstream-sync repair loop (attempt ${ATTEMPT}, strategy: ${STRATEGY})." \
+                2>/dev/null || true
+            else
+              echo "::warning::Copilot coding agent did not open a PR within 20 minutes on strategy ${STRATEGY}. Leaving issue #${REPAIR_ISSUE} open."
+            fi
 
             if [ -n "$COPILOT_PR" ]; then
               COPILOT_BRANCH=$(gh pr view "$COPILOT_PR" \
