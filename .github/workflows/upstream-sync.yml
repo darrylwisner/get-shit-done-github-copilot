@@ -778,7 +778,7 @@ jobs:
 
           # 1. Detect token type directly from the env var (fast, no API call)
           if echo "${GH_TOKEN:-}" | grep -q '^github_pat_'; then
-            echo "::error::COPILOT_PAT is a fine-grained token (github_pat_...). gh agent-task requires a classic OAuth PAT (ghp_...). Regenerate COPILOT_PAT as a classic PAT with repo + codespace scopes."
+            echo "::error::COPILOT_PAT is a fine-grained token (github_pat_...). gh agent-task requires a classic OAuth PAT (ghp_...) with scopes: repo, codespace, workflow. Regenerate COPILOT_PAT as a classic PAT at github.com/settings/tokens."
             echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -789,13 +789,26 @@ jobs:
           #    the environment, so we must capture the token value and unset the
           #    env var before calling auth login.
           COPILOT_TOKEN="${GH_TOKEN:-}"
-          if echo "$COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN gh auth login --with-token --hostname github.com 2>&1; then
-            echo "Successfully logged in with COPILOT_PAT."
-            echo "agent_auth_ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::gh auth login failed with COPILOT_PAT. Token may be expired or lack required scopes (repo, codespace)."
+          if ! echo "$COPILOT_TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN gh auth login --with-token --hostname github.com 2>&1; then
+            echo "::error::gh auth login failed with COPILOT_PAT. Token may be expired or lack required scopes (repo, codespace, workflow)."
             echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "Successfully logged in with COPILOT_PAT."
+
+          # 3. Verify required scopes — gh agent-task REQUIRES 'codespace' scope
+          #    in addition to 'repo'. Missing this scope produces the misleading
+          #    error "this command requires an OAuth token" even with a valid ghp_...
+          #    token. Check now and fail fast with a clear message.
+          AUTH_SCOPES=$(env -u GH_TOKEN -u GITHUB_TOKEN gh auth status 2>&1 || true)
+          echo "Token info: $AUTH_SCOPES"
+          if ! echo "$AUTH_SCOPES" | grep -q "'codespace'"; then
+            echo "::error::COPILOT_PAT is missing the 'codespace' scope. gh agent-task requires: repo, codespace, workflow. Current scopes: $(echo "$AUTH_SCOPES" | grep 'Token scopes' || echo 'unknown'). Regenerate COPILOT_PAT on github.com/settings/tokens and add the 'codespace' scope."
+            echo "agent_auth_ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "agent_auth_ok=true" >> "$GITHUB_OUTPUT"
 
       - name: Resolve merge conflict via Copilot agent
         if: steps.preflight.outputs.skip != 'true' && needs.sync.outputs.merge_conflict == 'true'
