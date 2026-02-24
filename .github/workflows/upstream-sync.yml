@@ -1114,6 +1114,10 @@ jobs:
               else
                 echo "PR #${EXISTING_PR} already exists for automated/upstream-sync."
               fi
+              # Enable auto-merge on the upstream-sync PR so it lands once checks pass.
+              gh pr merge "automated/upstream-sync" \
+                --repo "$GITHUB_REPOSITORY" \
+                --auto --merge 2>&1 || echo "::warning::Failed to enable auto-merge for automated/upstream-sync PR."
               echo "repair_needed=true" >> "$GITHUB_OUTPUT"
               echo "repair_succeeded=true" >> "$GITHUB_OUTPUT"
               exit 0
