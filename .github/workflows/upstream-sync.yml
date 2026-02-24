@@ -409,6 +409,7 @@ jobs:
           # The documented automation path is: create a GitHub issue assigned to
           # 'copilot'; the agent picks it up and opens a copilot/* PR.
           echo "Creating Copilot adaptation issue..."
+          POLL_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           ADAPT_ISSUE=$(gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "adapt(upstream-sync): proactive fork adaptation [$(date -u +%Y-%m-%dT%H:%M)]" \
@@ -424,6 +425,7 @@ jobs:
           fi
 
           echo "Created issue #${ADAPT_ISSUE}. Waiting up to 20 minutes for Copilot coding agent to open a PR..."
+          ADAPT_PR=""
           POLL_MAX=24
           POLL_COUNT=0
           while [ $POLL_COUNT -lt $POLL_MAX ]; do
@@ -431,8 +433,9 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --base "automated/upstream-sync" \
               --state open \
-              --json number,headRefName \
-              --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+              --json number,headRefName,createdAt \
+              --jq --arg since "$POLL_SINCE" \
+              '.[] | select(.headRefName | startswith("copilot/")) | select(.createdAt >= $since) | .number' \
               2>/dev/null | head -1 || echo "")
             if [ -n "$ADAPT_PR" ]; then
               echo "Copilot PR #${ADAPT_PR} found after ~$((POLL_COUNT * 50))s."
@@ -451,6 +454,7 @@ jobs:
             echo "::warning::Copilot coding agent did not open a PR within 20 minutes."
           fi
 
+          echo "adapt_pr=${ADAPT_PR:-}" >> "$GITHUB_OUTPUT"
           echo "proactive_adapt_invoked=true" >> "$GITHUB_OUTPUT"
 
       - name: Merge Copilot adaptation branch
@@ -461,15 +465,11 @@ jobs:
         id: merge_copilot_adapt
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+          ADAPT_PR_FROM_STEP: ${{ steps.proactive_adapt.outputs.adapt_pr }}
         run: |
-          # Find open PR from copilot/* branch targeting automated/upstream-sync
-          COPILOT_PR=$(gh pr list \
-            --repo "$GITHUB_REPOSITORY" \
-            --base "automated/upstream-sync" \
-            --state open \
-            --json number,headRefName \
-            --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
-            2>/dev/null | head -1 || echo "")
+          # Use the PR number recorded by the proactive_adapt step to avoid matching
+          # stale PRs from previous runs or concurrent invocations.
+          COPILOT_PR="${ADAPT_PR_FROM_STEP:-}"
 
           if [ -z "$COPILOT_PR" ]; then
             echo "No copilot/* PR found targeting automated/upstream-sync. No merge-back needed."
@@ -914,6 +914,7 @@ jobs:
           # gh agent-task create cannot be used in CI — it requires an interactive
           # OAuth token (browser/device flow) regardless of PAT scopes.
           echo "Creating Copilot conflict-resolution issue..."
+          POLL_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           CONFLICT_ISSUE=$(gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "fix(upstream-sync): resolve merge conflict [${{ needs.sync.outputs.short_sha || 'unknown' }}]" \
@@ -922,6 +923,7 @@ jobs:
             --label "upstream-sync" \
             2>/dev/null | grep -oE '[0-9]+$' || echo "")
 
+          AGENT_PR=""
           if [ -n "$CONFLICT_ISSUE" ]; then
             echo "Created issue #${CONFLICT_ISSUE}. Waiting up to 20 minutes for Copilot to open a PR..."
             POLL_MAX=24
@@ -931,8 +933,9 @@ jobs:
                 --repo "$GITHUB_REPOSITORY" \
                 --base "automated/upstream-sync" \
                 --state open \
-                --json number,headRefName \
-                --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+                --json number,headRefName,createdAt \
+                --jq --arg since "$POLL_SINCE" \
+                '.[] | select(.headRefName | startswith("copilot/")) | select(.createdAt >= $since) | .number' \
                 2>/dev/null | head -1 || echo "")
               if [ -n "$AGENT_PR" ]; then
                 echo "Copilot PR #${AGENT_PR} found after ~$((POLL_COUNT * 50))s."
@@ -957,13 +960,17 @@ jobs:
             # Agent creates a copilot/* branch PR targeting automated/upstream-sync.
             # Check for that PR's existence as the success signal — do NOT check local
             # git state, which still reflects the unresolved merge from this runner.
-            AGENT_PR=$(gh pr list \
-              --repo "$GITHUB_REPOSITORY" \
-              --base "automated/upstream-sync" \
-              --state open \
-              --json number,headRefName \
-              --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
-              2>/dev/null | head -1 || echo "")
+            # Re-query with the same POLL_SINCE guard to avoid matching stale PRs.
+            if [ -z "${AGENT_PR:-}" ]; then
+              AGENT_PR=$(gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --base "automated/upstream-sync" \
+                --state open \
+                --json number,headRefName,createdAt \
+                --jq --arg since "$POLL_SINCE" \
+                '.[] | select(.headRefName | startswith("copilot/")) | select(.createdAt >= $since) | .number' \
+                2>/dev/null | head -1 || echo "")
+            fi
             if [ -n "$AGENT_PR" ]; then
               echo "Agent created PR #${AGENT_PR} — conflict resolution submitted."
               echo "conflict_resolved=true" >> "$GITHUB_OUTPUT"
@@ -1145,6 +1152,7 @@ jobs:
             # The supported CI/CD path is: create a GitHub issue assigned to
             # 'copilot'; the agent picks it up and opens a copilot/* PR.
             COPILOT_PR=""
+            POLL_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             REPAIR_ISSUE=$(gh issue create \
               --repo "$GITHUB_REPOSITORY" \
               --title "repair(upstream-sync): fix verifier [attempt ${ATTEMPT}, ${STRATEGY}]" \
@@ -1167,8 +1175,9 @@ jobs:
                 --repo "$GITHUB_REPOSITORY" \
                 --base "automated/upstream-sync" \
                 --state open \
-                --json number,headRefName \
-                --jq '.[] | select(.headRefName | startswith("copilot/")) | .number' \
+                --json number,headRefName,createdAt \
+                --jq --arg since "$POLL_SINCE" \
+                '.[] | select(.headRefName | startswith("copilot/")) | select(.createdAt >= $since) | .number' \
                 2>/dev/null | head -1 || echo "")
               if [ -n "$COPILOT_PR" ]; then
                 echo "Copilot PR #${COPILOT_PR} found after ~$((POLL_COUNT * 50))s."
