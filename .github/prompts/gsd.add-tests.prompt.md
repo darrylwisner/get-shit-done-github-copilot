@@ -1,12 +1,12 @@
 ---
-name: gsd.quick
-description: "Execute a quick task with GSD guarantees (atomic commits, state tracking) but skip optional agents"
-argument-hint: "[--full]"
+name: gsd.add-tests
+description: "Generate tests for a completed phase based on UAT criteria and implementation"
+argument-hint: "<phase> [additional instructions]"
 tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Task","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","Task","AskUserQuestion"] -->
 
 ## Copilot Runtime Adapter (important)
 
@@ -28,29 +28,24 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Execute small, ad-hoc tasks with GSD guarantees (atomic commits, STATE.md tracking).
+Generate unit and E2E tests for a completed phase, using its SUMMARY.md, CONTEXT.md, and VERIFICATION.md as specifications.
 
-Quick mode is the same system with a shorter path:
-- Spawns gsd-planner (quick mode) + gsd-executor(s)
-- Quick tasks live in `.planning/quick/` separate from planned phases
-- Updates STATE.md "Quick Tasks Completed" table (NOT ROADMAP.md)
+Analyzes implementation files, classifies them into TDD (unit), E2E (browser), or Skip categories, presents a test plan for user approval, then generates tests following RED-GREEN conventions.
 
-**Default:** Skips research, plan-checker, verifier. Use when you know exactly what to do.
-
-**`--full` flag:** Enables plan-checking (max 2 iterations) and post-execution verification. Use when you want quality guarantees without full milestone ceremony.
+Output: Test files committed with message `test(phase-{N}): add unit and E2E tests from add-tests command`
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/quick.md
+- Read file at: ./.claude/get-shit-done/workflows/add-tests.md
 </execution_context>
 
 <context>
-$ARGUMENTS
-
-Context files are resolved inside the workflow (`init quick`) and delegated via `<files_to_read>` blocks.
+Phase: $ARGUMENTS
+- Read file at: .planning/STATE.md
+- Read file at: .planning/ROADMAP.md
 </context>
 
 <process>
-Execute the quick workflow from @./.claude/get-shit-done/workflows/quick.md end-to-end.
-Preserve all workflow gates (validation, task description, planning, execution, state updates, commits).
+Execute the add-tests workflow from @./.claude/get-shit-done/workflows/add-tests.md end-to-end.
+Preserve all workflow gates (classification approval, test plan approval, RED-GREEN verification, gap reporting).
 </process>
