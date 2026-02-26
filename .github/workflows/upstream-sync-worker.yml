@@ -21,7 +21,7 @@ env:
   BASE_BRANCH: main
   EXEMPTIONS_FILE: scripts/guard-exemptions.txt
   PROMPTS_DIR: .github/prompts
-  REPAIR_WORKFLOW: upstream-sync-repair-agent
+  REPAIR_WORKFLOW: upstream-sync-repair-agent.yml
 
 jobs:
   sync:
@@ -247,7 +247,7 @@ jobs:
               --body "$BODY" \
               --label "upstream-sync" \
               --label "automated"
-            PR_NUM=$(gh pr list --state open --head "${BRANCH}" --base "${BASE_BRANCH}" --json number --jq '.[0].number')
+            PR_NUM=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "${BRANCH}" --base "${BASE_BRANCH}" --json number --jq '.[0].number')
           else
             gh pr edit "$PR_NUM" --title "$TITLE" --body "$BODY" --repo "$GITHUB_REPOSITORY"
           fi
@@ -264,11 +264,18 @@ jobs:
         run: |
           set -euo pipefail
           PR="${{ steps.pr.outputs.pr_number }}"
-          gh pr merge "$PR" --auto --merge --delete-branch=false || true
-          STATE=$(gh pr view "$PR" --json mergeStateStatus --jq '.mergeStateStatus')
+
+          if [ -z "$PR" ]; then
+            echo "No PR number available; skipping auto-merge."
+            exit 0
+          fi
+
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --merge --delete-branch=false || true
+          STATE=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json mergeStateStatus --jq '.mergeStateStatus')
+
           echo "mergeStateStatus=$STATE"
           if [ "$STATE" = "CLEAN" ]; then
-            gh pr merge "$PR" --merge --delete-branch=false || true
+            gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --delete-branch=false || true
           fi
 
       - name: Dispatch repair agent if PR merge did not complete
