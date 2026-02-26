@@ -45,6 +45,7 @@ steps:
       # Hard-code upstream + fork defaults (matches your current intent)
       UPSTREAM_REPO="gsd-build/get-shit-done"
       UPSTREAM_BRANCH="main"
+      UPSTREAM_OWNER="${UPSTREAM_REPO%%/*}"
       FORK_REPO="${GITHUB_REPOSITORY}"
       FORK_BRANCH="main"
 
@@ -58,7 +59,7 @@ steps:
 
       # Compare fork main..upstream main (what's behind)
       # Note: compare endpoint is a standard GitHub API surface; we store the JSON for the agent. [3](https://github.github.com/gh-aw/patterns/data-ops/)
-      gh api "repos/${UPSTREAM_REPO}/compare/${FORK_BRANCH}...${UPSTREAM_BRANCH}" \
+      gh api "repos/${FORK_REPO}/compare/${FORK_BRANCH}...${UPSTREAM_OWNER}:${UPSTREAM_BRANCH}" \
         > /tmp/gh-aw/upstream-sync/compare.json || true
 
 # Safe outputs declare validated GitHub write operations that happen *after* the agent finishes. [2](https://github.github.io/gh-aw/reference/safe-outputs/)[5](https://deepwiki.com/github/gh-aw/7.4-safe-outputs-configuration)

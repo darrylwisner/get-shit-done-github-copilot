@@ -23,7 +23,7 @@
 #
 # Sync fork with upstream, regenerate wrapper layer, and open/update a PR safely.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"788bf8936ca43fefe943fb0c7f9db023becffd78cb44745c4432014e5e60ff23","compiler_version":"v0.50.4"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"99a6b2261fcf80122334da530e8a485a3c2fee04ebf92de27c8806451df7e8f5","compiler_version":"v0.50.4"}
 
 name: "upstream-sync-agent"
 "on":
@@ -253,7 +253,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         name: Fetch upstream release + compare snapshot (API only)
-        run: "set -euo pipefail\nmkdir -p /tmp/gh-aw/upstream-sync\n\n# Hard-code upstream + fork defaults (matches your current intent)\nUPSTREAM_REPO=\"gsd-build/get-shit-done\"\nUPSTREAM_BRANCH=\"main\"\nFORK_REPO=\"${GITHUB_REPOSITORY}\"\nFORK_BRANCH=\"main\"\n\n# Upstream HEAD SHA\ngh api \"repos/${UPSTREAM_REPO}/commits/${UPSTREAM_BRANCH}\" --jq '{sha: .sha, commit: .commit.message, author: .commit.author.name, date: .commit.author.date}' \\\n  > /tmp/gh-aw/upstream-sync/upstream-head.json\n\n# Fork HEAD SHA\ngh api \"repos/${FORK_REPO}/commits/${FORK_BRANCH}\" --jq '{sha: .sha, commit: .commit.message, author: .commit.author.name, date: .commit.author.date}' \\\n  > /tmp/gh-aw/upstream-sync/fork-head.json\n\n# Compare fork main..upstream main (what's behind)\n# Note: compare endpoint is a standard GitHub API surface; we store the JSON for the agent. [3](https://github.github.com/gh-aw/patterns/data-ops/)\ngh api \"repos/${UPSTREAM_REPO}/compare/${FORK_BRANCH}...${UPSTREAM_BRANCH}\" \\\n  > /tmp/gh-aw/upstream-sync/compare.json || true\n"
+        run: "set -euo pipefail\nmkdir -p /tmp/gh-aw/upstream-sync\n\n# Hard-code upstream + fork defaults (matches your current intent)\nUPSTREAM_REPO=\"gsd-build/get-shit-done\"\nUPSTREAM_BRANCH=\"main\"\nUPSTREAM_OWNER=\"${UPSTREAM_REPO%%/*}\"\nFORK_REPO=\"${GITHUB_REPOSITORY}\"\nFORK_BRANCH=\"main\"\n\n# Upstream HEAD SHA\ngh api \"repos/${UPSTREAM_REPO}/commits/${UPSTREAM_BRANCH}\" --jq '{sha: .sha, commit: .commit.message, author: .commit.author.name, date: .commit.author.date}' \\\n  > /tmp/gh-aw/upstream-sync/upstream-head.json\n\n# Fork HEAD SHA\ngh api \"repos/${FORK_REPO}/commits/${FORK_BRANCH}\" --jq '{sha: .sha, commit: .commit.message, author: .commit.author.name, date: .commit.author.date}' \\\n  > /tmp/gh-aw/upstream-sync/fork-head.json\n\n# Compare fork main..upstream main (what's behind)\n# Note: compare endpoint is a standard GitHub API surface; we store the JSON for the agent. [3](https://github.github.com/gh-aw/patterns/data-ops/)\ngh api \"repos/${FORK_REPO}/compare/${FORK_BRANCH}...${UPSTREAM_OWNER}:${UPSTREAM_BRANCH}\" \\\n  > /tmp/gh-aw/upstream-sync/compare.json || true\n"
 
       - name: Configure Git credentials
         env:
