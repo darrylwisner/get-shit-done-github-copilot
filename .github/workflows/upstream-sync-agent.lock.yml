@@ -23,7 +23,7 @@
 #
 # Sync fork with upstream, regenerate wrapper layer, and open/update a PR safely.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"56f8868174e6b6cae735266164a0b20a66746e85ce2baea45ac6ced861ad5657","compiler_version":"v0.50.4"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"9ad1e1072eaab9960d775a9970f8ca891d40c0ecf9003890ad5ef24dde52a9fc","compiler_version":"v0.50.4"}
 
 name: "upstream-sync-agent"
 "on":
@@ -1432,8 +1432,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          BASE="$BASE_INPUT"
+          REPO="${GITHUB_REPOSITORY}"
+          BASE="${BASE_INPUT:-main}"
           PR_JSON=$(gh pr list \
+            --repo "$REPO" \
             --state open \
             --base "$BASE" \
             --json number,headRefName,autoMergeRequest,mergeStateStatus,url \
@@ -1457,12 +1459,12 @@ jobs:
           fi
 
           if [ "$PR_STATE" = "CLEAN" ]; then
-            gh pr merge "$PR_NUMBER" --merge --delete-branch=false
+            gh pr merge "$PR_NUMBER" --repo "$REPO" --merge --delete-branch=false
             echo "Merged clean sync PR #$PR_NUMBER directly."
             exit 0
           fi
 
-          gh pr merge "$PR_NUMBER" --auto --merge --delete-branch=false
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --merge --delete-branch=false
           echo "Enabled auto-merge for sync PR #$PR_NUMBER."
         env:
           BASE_INPUT: ${{ inputs.base }}

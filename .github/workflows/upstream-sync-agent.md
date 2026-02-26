@@ -106,8 +106,10 @@ safe-outputs:
           run: |
             set -euo pipefail
 
-            BASE="$BASE_INPUT"
+            REPO="${GITHUB_REPOSITORY}"
+            BASE="${BASE_INPUT:-main}"
             PR_JSON=$(gh pr list \
+              --repo "$REPO" \
               --state open \
               --base "$BASE" \
               --json number,headRefName,autoMergeRequest,mergeStateStatus,url \
@@ -131,12 +133,12 @@ safe-outputs:
             fi
 
             if [ "$PR_STATE" = "CLEAN" ]; then
-              gh pr merge "$PR_NUMBER" --merge --delete-branch=false
+              gh pr merge "$PR_NUMBER" --repo "$REPO" --merge --delete-branch=false
               echo "Merged clean sync PR #$PR_NUMBER directly."
               exit 0
             fi
 
-            gh pr merge "$PR_NUMBER" --auto --merge --delete-branch=false
+            gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --merge --delete-branch=false
             echo "Enabled auto-merge for sync PR #$PR_NUMBER."
 
   update-pull-request:
