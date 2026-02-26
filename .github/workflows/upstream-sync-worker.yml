@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
-          git fetch upstream "${UPSTREAM_BRANCH}" --tags --prune
+          git fetch upstream "${UPSTREAM_BRANCH}" --prune --no-tags
           git fetch origin "${BASE_BRANCH}" --prune
 
       - name: Detect upstream delta
