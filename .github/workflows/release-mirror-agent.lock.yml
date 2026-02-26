@@ -487,6 +487,11 @@ jobs:
                     "description": "Force mirror (for auditing only)",
                     "type": "string"
                   },
+                  "target_ref": {
+                    "default": "main",
+                    "description": "Ref/branch to tag in the fork (default: main)",
+                    "type": "string"
+                  },
                   "upstream_repo": {
                     "description": "Upstream repo, e.g. gsd-build/get-shit-done",
                     "type": "string"
@@ -497,8 +502,8 @@ jobs:
                   }
                 },
                 "required": [
-                  "upstream_repo",
-                  "upstream_tag"
+                  "upstream_tag",
+                  "upstream_repo"
                 ],
                 "type": "object"
               },

@@ -3,8 +3,8 @@ name: upstream-sync-agent
 description: "Sync fork with upstream, regenerate wrapper layer, and open/update a PR safely."
 
 on:
-  schedule:
-    - cron: "every 4h"
+  #schedule:
+  #  - cron: "every 4h"
   workflow_dispatch:
 
 # Agentic workflows are markdown + frontmatter, compiled to .lock.yml. [1](https://cicube.io/blog/github-actions-outputs/)

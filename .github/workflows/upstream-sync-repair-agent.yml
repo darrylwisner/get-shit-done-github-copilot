@@ -1,0 +1,209 @@
+name: upstream-sync-repair-agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Target branch to repair (e.g. automated/upstream-sync-abc123 or automated/release-align-v2.1.0)"
+        required: true
+        type: string
+      reason:
+        description: "merge_conflicts | verify_failed | pr_merge_failed | release_verify_failed"
+        required: true
+        type: string
+      upstream_repo:
+        description: "Upstream repo (e.g. gsd-build/get-shit-done)"
+        required: false
+        default: "gsd-build/get-shit-done"
+        type: string
+      upstream_branch:
+        description: "Upstream branch (default main)"
+        required: false
+        default: "main"
+        type: string
+      upstream_sha:
+        description: "Optional upstream short SHA (logging only)"
+        required: false
+        default: ""
+        type: string
+      upstream_tag:
+        description: "Optional upstream release tag (for release_verify_failed)"
+        required: false
+        default: ""
+        type: string
+      base_branch:
+        description: "Fork base branch (default main)"
+        required: false
+        default: "main"
+        type: string
+      pr_number:
+        description: "Optional PR number (for pr_merge_failed)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync-repair-agent
+  cancel-in-progress: false
+
+env:
+  EXEMPTIONS_FILE: scripts/guard-exemptions.txt
+  PROMPTS_DIR: .github/prompts
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch remotes
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ inputs.base_branch }}" --prune
+          git remote add upstream "https://github.com/${{ inputs.upstream_repo }}.git" || true
+          git fetch upstream "${{ inputs.upstream_branch }}" --tags --prune
+
+      - name: Checkout target branch
+        run: |
+          set -euo pipefail
+          BR="${{ inputs.branch }}"
+          if git show-ref --verify --quiet "refs/remotes/origin/${BR}"; then
+            git checkout -B "$BR" "origin/${BR}"
+          else
+            # If it somehow doesn't exist, create from base
+            git checkout -B "$BR" "origin/${{ inputs.base_branch }}"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup gh-aw scripts (for Copilot CLI install helpers)
+        uses: github/gh-aw/actions/setup@90ebf8057e8e005103b8d123732d2c64c30e9b27
+        with:
+          destination: /opt/gh-aw/actions
+
+      - name: Install GitHub Copilot CLI
+        run: /opt/gh-aw/actions/install_copilot_cli.sh 0.0.417
+
+      - name: Install awf binary
+        run: bash /opt/gh-aw/actions/install_awf_binary.sh v0.23.0
+
+      - name: Write agent prompt
+        run: |
+          set -euo pipefail
+          cat > /tmp/repair-prompt.txt <<'EOF'
+          You are the autonomous repair agent for this repository.
+
+          Context:
+          - reason: ${{ inputs.reason }}
+          - branch: ${{ inputs.branch }}
+          - base_branch: ${{ inputs.base_branch }}
+          - upstream_repo: ${{ inputs.upstream_repo }}
+          - upstream_branch: ${{ inputs.upstream_branch }}
+          - upstream_tag: ${{ inputs.upstream_tag }}
+          - upstream_sha: ${{ inputs.upstream_sha }}
+          - pr_number: ${{ inputs.pr_number }}
+
+          Non-negotiables:
+          - NEVER push to the fork base branch (e.g. main). Work only on the provided branch.
+          - For files listed in scripts/guard-exemptions.txt: ALWAYS keep the version from origin/${{ inputs.base_branch }} (fork canonical).
+          - After repairs, regenerate prompts:
+            - delete .github/prompts/*
+            - node scripts/generate-prompts.mjs
+            - node scripts/verify-prompts.mjs
+            Repeat until verify is clean.
+          - Commit changes with clear messages and push the branch.
+
+          Required actions by reason:
+          1) merge_conflicts:
+             - merge upstream/${{ inputs.upstream_branch }} into this branch
+             - resolve conflicts
+             - enforce exemptions from origin/${{ inputs.base_branch }}
+             - commit the merge
+          2) verify_failed or release_verify_failed:
+             - run the prompt regeneration + verify loop until clean
+             - if generator/verifier needs change, do so minimally
+          3) pr_merge_failed:
+             - if pr_number is provided, attempt to enable auto-merge; if CLEAN, merge directly.
+
+          EOF
+
+      - name: Execute Copilot repair agent
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ALLOW_DOMAINS="api.github.com,github.com,raw.githubusercontent.com,registry.npmjs.org,api.githubcopilot.com,api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.individual.githubcopilot.com,telemetry.enterprise.githubcopilot.com"
+          sudo -E awf --env-all --container-workdir "${GITHUB_WORKSPACE}" --allow-domains "$ALLOW_DOMAINS" --log-level info --enable-host-access --image-tag 0.23.0 --enable-api-proxy \
+            -- /bin/bash -c '/usr/local/bin/copilot --add-dir "${GITHUB_WORKSPACE}" --allow-all-tools --allow-all-paths --prompt "$(cat /tmp/repair-prompt.txt)"'
+
+      - name: Enforce exemptions from fork base branch (post-agent)
+        run: |
+          set -euo pipefail
+          BASE="${{ inputs.base_branch }}"
+          if [ -f "${EXEMPTIONS_FILE}" ]; then
+            grep -vE '^\s*($|#)' "${EXEMPTIONS_FILE}" > /tmp/exemptions.txt || true
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              if git cat-file -e "origin/${BASE}:$f" 2>/dev/null; then
+                git checkout "origin/${BASE}" -- "$f"
+                git add "$f"
+              fi
+            done < /tmp/exemptions.txt
+          fi
+
+      - name: Final generate + verify pass (must be clean)
+        run: |
+          set -euo pipefail
+          rm -rf "${PROMPTS_DIR:?}/"* || true
+          node scripts/generate-prompts.mjs
+          node scripts/verify-prompts.mjs
+          git add -A "${PROMPTS_DIR}" || true
+
+      - name: Commit any remaining changes
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "repair: ${{ inputs.reason }}" || true
+
+      - name: Push repaired branch
+        run: |
+          set -euo pipefail
+          git push -u origin "${{ inputs.branch }}" --force-with-lease
+
+      - name: (Optional) Re-arm PR auto-merge if requested
+        if: inputs.reason == 'pr_merge_failed' && inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR="${{ inputs.pr_number }}"
+          gh pr merge "$PR" --auto --merge --delete-branch=false || true
+          STATE=$(gh pr view "$PR" --json mergeStateStatus --jq '.mergeStateStatus')
+          if [ "$STATE" = "CLEAN" ]; then
+            gh pr merge "$PR" --merge --delete-branch=false || true
+          fi

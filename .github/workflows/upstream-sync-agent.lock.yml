@@ -23,13 +23,10 @@
 #
 # Sync fork with upstream, regenerate wrapper layer, and open/update a PR safely.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"49483b74be74d4849094aa437756b11b9c953bc8cadede790475f012a9ab447f","compiler_version":"v0.50.4"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"f13a56a6c3e6a945149b73402f55d84e51ad0da3143024c879aeaac25df01c04","compiler_version":"v0.50.4"}
 
 name: "upstream-sync-agent"
 "on":
-  schedule:
-  - cron: "27 */4 * * *"
-    # Friendly format: every 4h (scattered)
   workflow_dispatch:
 
 permissions: {}
@@ -210,8 +207,6 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    concurrency:
-      group: "gh-aw-copilot-${{ github.workflow }}"
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       GH_AW_ASSETS_ALLOWED_EXTS: ""

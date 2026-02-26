@@ -1,0 +1,221 @@
+name: Release Align Worker
+
+on:
+  schedule:
+    # check for new upstream releases hourly
+    - cron: "13 * * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Optional: align to this upstream release tag (blank = latest)"
+        required: false
+        default: ""
+
+concurrency:
+  group: release-align-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  UPSTREAM_REPO: gsd-build/get-shit-done
+  BASE_BRANCH: main
+  EXEMPTIONS_FILE: scripts/guard-exemptions.txt
+  PROMPTS_DIR: .github/prompts
+  REPAIR_WORKFLOW: upstream-sync-repair-agent
+  MIRROR_WORKFLOW: release-mirror-worker
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (fork repo)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve upstream release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          IN_TAG="${{ inputs.upstream_tag }}"
+          if [ -n "$IN_TAG" ]; then
+            UP_TAG="$IN_TAG"
+          else
+            UP_TAG=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq '.tag_name // empty' 2>/dev/null || true)
+          fi
+
+          if [ -z "$UP_TAG" ]; then
+            echo "No upstream release tag found; exiting."
+            echo "upstream_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "upstream_tag=$UP_TAG" >> "$GITHUB_OUTPUT"
+          echo "Upstream release tag: $UP_TAG"
+
+      - name: Exit if no upstream tag resolved
+        if: steps.tag.outputs.upstream_tag == ''
+        run: echo "Nothing to do."
+
+      - name: Skip if already mirrored
+        if: steps.tag.outputs.upstream_tag != ''
+        id: mirrored
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          UP_TAG="${{ steps.tag.outputs.upstream_tag }}"
+          if gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -q "upstream-${UP_TAG}"; then
+            echo "needs_mirror=false" >> "$GITHUB_OUTPUT"
+            echo "Already mirrored upstream tag $UP_TAG."
+          else
+            echo "needs_mirror=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stop if already mirrored
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'false'
+        run: echo "Release already mirrored."
+
+      - name: Add upstream remote + fetch tags
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        run: |
+          set -euo pipefail
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
+          git fetch upstream --tags --prune
+          git fetch origin "${BASE_BRANCH}" --prune
+
+      - name: Create release-align branch at upstream tag
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        run: |
+          set -euo pipefail
+          UP_TAG="${{ steps.tag.outputs.upstream_tag }}"
+          SAFE_TAG=$(echo "$UP_TAG" | sed 's/[^A-Za-z0-9._-]/-/g')
+          BR="automated/release-align-${SAFE_TAG}"
+
+          git rev-parse "refs/tags/${UP_TAG}" >/dev/null
+          git checkout -B "$BR" "refs/tags/${UP_TAG}"
+          echo "BRANCH=$BR" >> "$GITHUB_ENV"
+
+          # Push baseline so agent can work even if verify fails
+          git push -u origin "$BR" --force-with-lease
+
+      - name: Enforce guard exemptions (ALWAYS keep fork main versions)
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        run: |
+          set -euo pipefail
+          if [ ! -f "${EXEMPTIONS_FILE}" ]; then
+            echo "No exemptions file at ${EXEMPTIONS_FILE}; continuing."
+            exit 0
+          fi
+
+          grep -vE '^\s*($|#)' "${EXEMPTIONS_FILE}" > /tmp/exemptions.txt || true
+
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if git cat-file -e "origin/${BASE_BRANCH}:$f" 2>/dev/null; then
+              echo "Forcing fork-main version for exempt file: $f"
+              git checkout "origin/${BASE_BRANCH}" -- "$f"
+              git add "$f"
+            fi
+          done < /tmp/exemptions.txt
+
+          if git diff --cached --quiet; then
+            echo "No exemptions staged."
+          else
+            git commit -m "chore: enforce fork-owned files (release align)" || true
+          fi
+
+      - name: Setup Node
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        run: npm ci
+
+      - name: Regenerate prompts for release snapshot + verify
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        id: verify
+        run: |
+          set -euo pipefail
+          rm -rf "${PROMPTS_DIR:?}/"* || true
+          node scripts/generate-prompts.mjs 2>&1 | tee /tmp/generate.log
+
+          set +e
+          node scripts/verify-prompts.mjs 2>&1 | tee /tmp/verify.log
+          VERIFY_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$VERIFY_EXIT" -eq 0 ]; then
+            echo "verify_ok=true" >> "$GITHUB_OUTPUT"
+            echo "Release snapshot prompt verification passed."
+          else
+            echo "verify_ok=false" >> "$GITHUB_OUTPUT"
+            echo "Release snapshot prompt verification failed (exit $VERIFY_EXIT)."
+          fi
+
+      - name: Upload prompt logs on release verify failure
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true' && steps.verify.outputs.verify_ok == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-align-verify-logs
+          path: |
+            /tmp/generate.log
+            /tmp/verify.log
+
+      - name: Dispatch repair agent for release verify failure
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true' && steps.verify.outputs.verify_ok == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run "${REPAIR_WORKFLOW}" \
+            -f branch="${BRANCH}" \
+            -f reason="release_verify_failed" \
+            -f upstream_repo="${UPSTREAM_REPO}" \
+            -f upstream_tag="${{ steps.tag.outputs.upstream_tag }}" \
+            -f base_branch="${BASE_BRANCH}"
+          echo "Repair agent dispatched. Worker exiting."
+          exit 0
+
+      - name: Commit release-aligned prompts
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        run: |
+          set -euo pipefail
+          git add -A "${PROMPTS_DIR}" || true
+          if git diff --cached --quiet; then
+            echo "No prompt changes to commit (unexpected for release-align)."
+          else
+            git commit -m "chore: release-align prompts for ${{ steps.tag.outputs.upstream_tag }}" || true
+          fi
+
+      - name: Push release-align branch (with prompts)
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        run: |
+          set -euo pipefail
+          git push -u origin "${BRANCH}" --force-with-lease
+
+      - name: Dispatch release-mirror-worker (creates fork tag + release w/ upstream notes)
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run "${MIRROR_WORKFLOW}" \
+            -f upstream_repo="${UPSTREAM_REPO}" \
+            -f upstream_tag="${{ steps.tag.outputs.upstream_tag }}" \
+            -f target_ref="${BRANCH}" \
+            -f force="false"
+          echo "Dispatched release-mirror-worker. It will push the fork tag; release.yml will build/upload the zip on tag push."

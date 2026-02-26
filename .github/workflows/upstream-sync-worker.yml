@@ -1,0 +1,286 @@
+name: Upstream Sync Worker
+
+on:
+  schedule:
+    # scattered every 4h
+    - cron: "27 */4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+env:
+  UPSTREAM_REPO: gsd-build/get-shit-done
+  UPSTREAM_BRANCH: main
+  BASE_BRANCH: main
+  EXEMPTIONS_FILE: scripts/guard-exemptions.txt
+  PROMPTS_DIR: .github/prompts
+  REPAIR_WORKFLOW: upstream-sync-repair-agent
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote + fetch
+        run: |
+          set -euo pipefail
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
+          git fetch upstream "${UPSTREAM_BRANCH}" --tags --prune
+          git fetch origin "${BASE_BRANCH}" --prune
+
+      - name: Detect upstream delta
+        id: detect
+        run: |
+          set -euo pipefail
+          BEHIND=$(git rev-list --count "origin/${BASE_BRANCH}..upstream/${UPSTREAM_BRANCH}")
+          UP_SHA=$(git rev-parse --short "upstream/${UPSTREAM_BRANCH}")
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          echo "up_sha=$UP_SHA" >> "$GITHUB_OUTPUT"
+          echo "Upstream ahead by $BEHIND commit(s). Upstream SHA=$UP_SHA"
+
+      - name: Exit early if no changes
+        if: steps.detect.outputs.behind == '0'
+        run: echo "No upstream changes. Exiting."
+
+      - name: Create sync branch from fork main + push baseline
+        if: steps.detect.outputs.behind != '0'
+        run: |
+          set -euo pipefail
+          BR="automated/upstream-sync-${{ steps.detect.outputs.up_sha }}"
+          git checkout -B "$BR" "origin/${BASE_BRANCH}"
+          echo "BRANCH=$BR" >> "$GITHUB_ENV"
+          # Push baseline so the agent can operate even if merge fails locally
+          git push -u origin "$BR" --force-with-lease
+
+      - name: Merge upstream into sync branch
+        if: steps.detect.outputs.behind != '0'
+        id: merge
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if git merge --no-ff --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            echo "merge_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merge_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Enforce guard exemptions (ALWAYS keep fork main versions)
+        if: steps.detect.outputs.behind != '0'
+        run: |
+          set -euo pipefail
+          if [ ! -f "${EXEMPTIONS_FILE}" ]; then
+            echo "No exemptions file at ${EXEMPTIONS_FILE}; continuing."
+            exit 0
+          fi
+
+          grep -vE '^\s*($|#)' "${EXEMPTIONS_FILE}" > /tmp/exemptions.txt || true
+
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if git cat-file -e "origin/${BASE_BRANCH}:$f" 2>/dev/null; then
+              echo "Forcing fork-main version for exempt file: $f"
+              git checkout "origin/${BASE_BRANCH}" -- "$f"
+              git add "$f"
+            else
+              echo "WARN: $f not found on origin/${BASE_BRANCH} (skipping)"
+            fi
+          done < /tmp/exemptions.txt
+
+      - name: If merge failed, check remaining conflicts
+        if: steps.detect.outputs.behind != '0' && steps.merge.outputs.merge_ok == 'false'
+        id: conflicts
+        run: |
+          set -euo pipefail
+          REMAIN=$(git diff --name-only --diff-filter=U || true)
+          if [ -n "$REMAIN" ]; then
+            echo "has_conflicts=true" >> "$GITHUB_OUTPUT"
+            echo "Remaining conflicts:"
+            echo "$REMAIN"
+          else
+            echo "has_conflicts=false" >> "$GITHUB_OUTPUT"
+            echo "No remaining conflicts after applying exemptions."
+            # If merge is still in-progress, complete it
+            if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+              git commit -m "sync: merge upstream (${UPSTREAM_REPO}@${UPSTREAM_BRANCH})" || true
+            fi
+          fi
+
+      - name: Dispatch repair agent for unresolved merge conflicts
+        if: steps.detect.outputs.behind != '0' && steps.merge.outputs.merge_ok == 'false' && steps.conflicts.outputs.has_conflicts == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run "${REPAIR_WORKFLOW}" \
+            -f branch="${BRANCH}" \
+            -f reason="merge_conflicts" \
+            -f upstream_repo="${UPSTREAM_REPO}" \
+            -f upstream_branch="${UPSTREAM_BRANCH}" \
+            -f upstream_sha="${{ steps.detect.outputs.up_sha }}" \
+            -f base_branch="${BASE_BRANCH}"
+          echo "Repair agent dispatched. Worker exiting."
+          exit 0
+
+      - name: Commit exemption enforcement (if any staged)
+        if: steps.detect.outputs.behind != '0'
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then
+            echo "No staged exemption changes."
+          else
+            git commit -m "chore: enforce fork-owned files" || true
+          fi
+
+      - name: Setup Node
+        if: steps.detect.outputs.behind != '0'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        if: steps.detect.outputs.behind != '0'
+        run: npm ci
+
+      - name: Regenerate prompts + verify (non-agent)
+        if: steps.detect.outputs.behind != '0'
+        id: verify
+        run: |
+          set -euo pipefail
+          rm -rf "${PROMPTS_DIR:?}/"* || true
+
+          node scripts/generate-prompts.mjs 2>&1 | tee /tmp/generate.log
+
+          set +e
+          node scripts/verify-prompts.mjs 2>&1 | tee /tmp/verify.log
+          VERIFY_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$VERIFY_EXIT" -eq 0 ]; then
+            echo "verify_ok=true" >> "$GITHUB_OUTPUT"
+            echo "Prompt verification passed."
+          else
+            echo "verify_ok=false" >> "$GITHUB_OUTPUT"
+            echo "Prompt verification failed (exit $VERIFY_EXIT)."
+          fi
+
+      - name: Upload prompt logs on verify failure
+        if: steps.detect.outputs.behind != '0' && steps.verify.outputs.verify_ok == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-sync-verify-logs
+          path: |
+            /tmp/generate.log
+            /tmp/verify.log
+
+      - name: Dispatch repair agent for verify failures
+        if: steps.detect.outputs.behind != '0' && steps.verify.outputs.verify_ok == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run "${REPAIR_WORKFLOW}" \
+            -f branch="${BRANCH}" \
+            -f reason="verify_failed" \
+            -f upstream_repo="${UPSTREAM_REPO}" \
+            -f upstream_branch="${UPSTREAM_BRANCH}" \
+            -f upstream_sha="${{ steps.detect.outputs.up_sha }}" \
+            -f base_branch="${BASE_BRANCH}"
+          echo "Repair agent dispatched. Worker exiting."
+          exit 0
+
+      - name: Commit regenerated prompts (adds/deletes)
+        if: steps.detect.outputs.behind != '0'
+        run: |
+          set -euo pipefail
+          git add -A "${PROMPTS_DIR}" || true
+          if git diff --cached --quiet; then
+            echo "No prompt changes to commit."
+          else
+            git commit -m "chore: regenerate prompts" || true
+          fi
+
+      - name: Push sync branch
+        if: steps.detect.outputs.behind != '0'
+        run: |
+          set -euo pipefail
+          git push -u origin "${BRANCH}" --force-with-lease
+
+      - name: Create or update PR
+        if: steps.detect.outputs.behind != '0'
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="sync: upstream changes from ${{ steps.detect.outputs.up_sha }}"
+          BODY=$(cat <<EOF
+          Upstream: ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}
+          - Upstream head: ${{ steps.detect.outputs.up_sha }}
+          - Exempt files forced to fork ${BASE_BRANCH} (scripts/guard-exemptions.txt)
+          - Prompts regenerated: rm ${PROMPTS_DIR}/*; node scripts/generate-prompts.mjs; node scripts/verify-prompts.mjs
+          EOF
+          )
+
+          PR_NUM=$(gh pr list --state open --head "${BRANCH}" --base "${BASE_BRANCH}" --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUM" ]; then
+            gh pr create \
+              --base "${BASE_BRANCH}" \
+              --head "${BRANCH}" \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --label "upstream-sync" \
+              --label "automated"
+            PR_NUM=$(gh pr list --state open --head "${BRANCH}" --base "${BASE_BRANCH}" --json number --jq '.[0].number')
+          else
+            gh pr edit "$PR_NUM" --title "$TITLE" --body "$BODY"
+          fi
+
+          echo "pr_number=$PR_NUM" >> "$GITHUB_OUTPUT"
+          echo "PR #$PR_NUM"
+
+      - name: Enable auto-merge (fallback if already CLEAN)
+        if: steps.detect.outputs.behind != '0'
+        id: pr_merge
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR="${{ steps.pr.outputs.pr_number }}"
+          gh pr merge "$PR" --auto --merge --delete-branch=false || true
+          STATE=$(gh pr view "$PR" --json mergeStateStatus --jq '.mergeStateStatus')
+          echo "mergeStateStatus=$STATE"
+          if [ "$STATE" = "CLEAN" ]; then
+            gh pr merge "$PR" --merge --delete-branch=false || true
+          fi
+
+      - name: Dispatch repair agent if PR merge did not complete
+        if: steps.detect.outputs.behind != '0' && steps.pr_merge.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run "${REPAIR_WORKFLOW}" \
+            -f branch="${BRANCH}" \
+            -f reason="pr_merge_failed" \
+            -f pr_number="${{ steps.pr.outputs.pr_number }}" \
+            -f upstream_repo="${UPSTREAM_REPO}" \
+            -f upstream_branch="${UPSTREAM_BRANCH}" \
+            -f upstream_sha="${{ steps.detect.outputs.up_sha }}" \
+            -f base_branch="${BASE_BRANCH}"

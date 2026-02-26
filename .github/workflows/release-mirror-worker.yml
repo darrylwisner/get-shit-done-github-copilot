@@ -11,6 +11,11 @@ on:
         description: "Upstream tag to mirror, e.g. v2.1.0"
         required: true
         type: string
+      target_ref:
+        description: "Ref/branch to tag in the fork (default: main)"
+        required: false
+        default: "main"
+        type: string
       force:
         description: "Force mirror (for auditing only)"
         required: false
@@ -31,8 +36,6 @@ jobs:
       - name: Assert fork context (optional safety)
         run: |
           echo "Repo: $GITHUB_REPOSITORY"
-          # If you want to hard-pin:
-          # test "$GITHUB_REPOSITORY" = "darrylwisner/get-shit-done-github-copilot"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,6 +47,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Checkout target ref
+        run: |
+          set -euo pipefail
+          REF="${{ inputs.target_ref }}"
+          git fetch origin "+refs/heads/*:refs/remotes/origin/*" --prune
+          if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
+            git checkout -B "${REF}" "origin/${REF}"
+          else
+            # allow tags/sha
+            git checkout "${REF}" || true
+          fi
+          echo "Tagging ref: $(git rev-parse --short HEAD) (ref=${REF})"
+
       - name: Compute fork mirror tag
         id: compute
         env:
@@ -54,12 +70,11 @@ jobs:
 
           # Determine next v0.0.X patch from fork latest release tag
           FORK_LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name // empty' 2>/dev/null || true)
-
           if [ -z "$FORK_LATEST" ]; then
             NEXT_PATCH=1
           else
-            BASE_VER="${FORK_LATEST%%-*}"     # v0.0.3-upstream-v2.1.0 -> v0.0.3
-            FORK_PATCH="${BASE_VER##*.}"      # v0.0.3 -> 3
+            BASE_VER="${FORK_LATEST%%-*}"
+            FORK_PATCH="${BASE_VER##*.}"
             NEXT_PATCH=$((FORK_PATCH + 1))
           fi
 
@@ -69,17 +84,17 @@ jobs:
 
       - name: Create and push tag (PAT required)
         env:
-          # Must be PAT so downstream workflows can trigger; GH_TOKEN alone may not trigger other workflows.
           COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
         run: |
           set -euo pipefail
           NEW_TAG="${{ steps.compute.outputs.new_tag }}"
           UPSTREAM_TAG="${{ inputs.upstream_tag }}"
+
           git remote set-url origin "https://x-access-token:${COPILOT_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           git tag -a "$NEW_TAG" -m "Mirror upstream release ${UPSTREAM_TAG}"
           git push origin "$NEW_TAG"
 
-      - name: Build release notes
+      - name: Build release notes (copy upstream body)
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
         run: |
@@ -104,20 +119,22 @@ jobs:
           | Forced run | \`${{ inputs.force }}\` |
 
           ---
-
           ## Upstream Release Notes (${UPSTREAM_TAG})
-
           EOF
 
           printf '%s\n' "$UPSTREAM_BODY" >> /tmp/release-body.md
 
-      - name: Create release
+      - name: Create release (or skip if exists)
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
         run: |
           set -euo pipefail
           NEW_TAG="${{ steps.compute.outputs.new_tag }}"
-          gh release create "$NEW_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "GSD Copilot ${NEW_TAG}" \
-            --notes-file /tmp/release-body.md
+          if gh release view "$NEW_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $NEW_TAG already exists; skipping create. (release.yml will upload the zip asset.)"
+          else
+            gh release create "$NEW_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "GSD Copilot ${NEW_TAG}" \
+              --notes-file /tmp/release-body.md
+          fi
