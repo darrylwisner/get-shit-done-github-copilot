@@ -96,7 +96,7 @@ This fork would not exist without the original **Get Shit Done** project by **TÃ
 |----------|------|
 | Upstream repo | [gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done) |
 | npm package (upstream) | [npmjs.com/package/get-shit-done-cc](https://www.npmjs.com/package/get-shit-done-cc) |
-| Discord community | [discord.gg/5JJgD5svVS](https://discord.gg/5JJgD5svVS) |
+| Discord community | [discord.gg/gsd](https://discord.gg/gsd) |
 | Original author | [@glittercowboy](https://github.com/glittercowboy) |
 
 All core GSD functionality  the planning system, workflow engine, templates, agents, and methodology  originates in the upstream project. This fork is a thin compatibility layer that maps those commands to VS Code Copilot Chat and keeps them up to date with upstream via automated sync.
