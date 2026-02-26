@@ -1,0 +1,123 @@
+name: release-mirror-worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_repo:
+        description: "Upstream repo, e.g. gsd-build/get-shit-done"
+        required: true
+        type: string
+      upstream_tag:
+        description: "Upstream tag to mirror, e.g. v2.1.0"
+        required: true
+        type: string
+      force:
+        description: "Force mirror (for auditing only)"
+        required: false
+        default: "false"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-mirror-worker
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert fork context (optional safety)
+        run: |
+          echo "Repo: $GITHUB_REPOSITORY"
+          # If you want to hard-pin:
+          # test "$GITHUB_REPOSITORY" = "darrylwisner/get-shit-done-github-copilot"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute fork mirror tag
+        id: compute
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          set -euo pipefail
+          UPSTREAM_TAG="${{ inputs.upstream_tag }}"
+
+          # Determine next v0.0.X patch from fork latest release tag
+          FORK_LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name // empty' 2>/dev/null || true)
+
+          if [ -z "$FORK_LATEST" ]; then
+            NEXT_PATCH=1
+          else
+            BASE_VER="${FORK_LATEST%%-*}"     # v0.0.3-upstream-v2.1.0 -> v0.0.3
+            FORK_PATCH="${BASE_VER##*.}"      # v0.0.3 -> 3
+            NEXT_PATCH=$((FORK_PATCH + 1))
+          fi
+
+          NEW_TAG="v0.0.${NEXT_PATCH}-upstream-${UPSTREAM_TAG}"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "New fork tag: $NEW_TAG"
+
+      - name: Create and push tag (PAT required)
+        env:
+          # Must be PAT so downstream workflows can trigger; GH_TOKEN alone may not trigger other workflows.
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+        run: |
+          set -euo pipefail
+          NEW_TAG="${{ steps.compute.outputs.new_tag }}"
+          UPSTREAM_TAG="${{ inputs.upstream_tag }}"
+          git remote set-url origin "https://x-access-token:${COPILOT_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          git tag -a "$NEW_TAG" -m "Mirror upstream release ${UPSTREAM_TAG}"
+          git push origin "$NEW_TAG"
+
+      - name: Build release notes
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          set -euo pipefail
+          UPSTREAM_REPO="${{ inputs.upstream_repo }}"
+          UPSTREAM_TAG="${{ inputs.upstream_tag }}"
+          NEW_TAG="${{ steps.compute.outputs.new_tag }}"
+
+          UPSTREAM_BODY=$(gh api "repos/${UPSTREAM_REPO}/releases/tags/${UPSTREAM_TAG}" --jq '.body // empty' 2>/dev/null || true)
+          if [ -z "$UPSTREAM_BODY" ]; then
+            UPSTREAM_BODY="_Upstream release notes unavailable._"
+          fi
+
+          cat > /tmp/release-body.md << EOF
+          ## Fork Mirror: ${NEW_TAG}
+
+          | Field | Value |
+          |---|---|
+          | Fork tag | \`${NEW_TAG}\` |
+          | Upstream release | \`${UPSTREAM_TAG}\` |
+          | Upstream release URL | https://github.com/${UPSTREAM_REPO}/releases/tag/${UPSTREAM_TAG} |
+          | Forced run | \`${{ inputs.force }}\` |
+
+          ---
+
+          ## Upstream Release Notes (${UPSTREAM_TAG})
+
+          EOF
+
+          printf '%s\n' "$UPSTREAM_BODY" >> /tmp/release-body.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          set -euo pipefail
+          NEW_TAG="${{ steps.compute.outputs.new_tag }}"
+          gh release create "$NEW_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "GSD Copilot ${NEW_TAG}" \
+            --notes-file /tmp/release-body.md
