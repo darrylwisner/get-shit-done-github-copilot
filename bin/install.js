@@ -951,16 +951,16 @@ function cleanupOrphanedHooks(settings) {
     console.log(`  ${green}✓${reset} Removed orphaned hook registrations`);
   }
 
-  // Fix #330: Update statusLine if it points to old GSD statusline.js path
-  // Only match the specific old GSD path pattern (hooks/statusline.js),
-  // not third-party statusline scripts that happen to contain 'statusline.js'
+  // Fix #330: Update statusLine if it points to old statusline.js path
   if (settings.statusLine && settings.statusLine.command &&
-      /hooks[\/\\]statusline\.js/.test(settings.statusLine.command)) {
+      settings.statusLine.command.includes('statusline.js') &&
+      !settings.statusLine.command.includes('gsd-statusline.js')) {
+    // Replace old path with new path
     settings.statusLine.command = settings.statusLine.command.replace(
-      /hooks([\/\\])statusline\.js/,
-      'hooks$1gsd-statusline.js'
+      /statusline\.js/,
+      'gsd-statusline.js'
     );
-    console.log(`  ${green}✓${reset} Updated statusline path (hooks/statusline.js → hooks/gsd-statusline.js)`);
+    console.log(`  ${green}✓${reset} Updated statusline path (statusline.js → gsd-statusline.js)`);
   }
 
   return settings;

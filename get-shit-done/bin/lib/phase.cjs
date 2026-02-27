@@ -193,11 +193,6 @@ function cmdFindPhase(cwd, phase, raw) {
   }
 }
 
-function extractObjective(content) {
-  const m = content.match(/<objective>\s*\n?\s*(.+)/);
-  return m ? m[1].trim() : null;
-}
-
 function cmdPhasePlanIndex(cwd, phase, raw) {
   if (!phase) {
     error('phase required for phase-plan-index');
@@ -247,10 +242,9 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
     const content = fs.readFileSync(planPath, 'utf-8');
     const fm = extractFrontmatter(content);
 
-    // Count tasks: XML <task> tags (canonical) or ## Task N markdown (legacy)
-    const xmlTasks = content.match(/<task[\s>]/gi) || [];
-    const mdTasks = content.match(/##\s*Task\s*\d+/gi) || [];
-    const taskCount = xmlTasks.length || mdTasks.length;
+    // Count tasks (## Task N patterns)
+    const taskMatches = content.match(/##\s*Task\s*\d+/gi) || [];
+    const taskCount = taskMatches.length;
 
     // Parse wave as integer
     const wave = parseInt(fm.wave, 10) || 1;
@@ -265,11 +259,10 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
       hasCheckpoints = true;
     }
 
-    // Parse files_modified (underscore is canonical; also accept hyphenated for compat)
+    // Parse files-modified
     let filesModified = [];
-    const fmFiles = fm['files_modified'] || fm['files-modified'];
-    if (fmFiles) {
-      filesModified = Array.isArray(fmFiles) ? fmFiles : [fmFiles];
+    if (fm['files-modified']) {
+      filesModified = Array.isArray(fm['files-modified']) ? fm['files-modified'] : [fm['files-modified']];
     }
 
     const hasSummary = completedPlanIds.has(planId);
@@ -281,7 +274,7 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
       id: planId,
       wave,
       autonomous,
-      objective: extractObjective(content) || fm.objective || null,
+      objective: fm.objective || null,
       files_modified: filesModified,
       task_count: taskCount,
       has_summary: hasSummary,

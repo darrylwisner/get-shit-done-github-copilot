@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-02-27
+
+### Added
+- Comprehensive test suite: 428 tests across 13 test files covering core, commands, config, dispatcher, frontmatter, init, milestone, phase, roadmap, state, and verify modules
+- CI pipeline with GitHub Actions: 9-matrix (3 OS × 3 Node versions), c8 coverage enforcement at 70% line threshold
+- Cross-platform test runner (`scripts/run-tests.cjs`) for Windows compatibility
+
+### Fixed
+- `getMilestoneInfo()` returns wrong version when shipped milestones are collapsed in `<details>` blocks
+- Milestone completion stats and archive now scoped to current milestone phases only (previously counted all phases on disk including prior milestones)
+- MILESTONES.md entries now insert in reverse chronological order (newest first)
+- Cross-platform path separators: all user-facing file paths use forward slashes on Windows
+- JSON quoting and dollar sign handling in CLI arguments on Windows
+- `model_overrides` loaded from config and `resolveModelInternal` used in CLI
+
 ## [1.21.0] - 2026-02-25
 
 ### Added
@@ -1358,7 +1373,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.21.1...HEAD
+[1.21.1]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.21.1
 [1.21.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.21.0
 [1.20.6]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.20.6
 [1.20.5]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.20.5
