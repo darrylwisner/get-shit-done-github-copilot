@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: release-mirror-worker
@@ -124,17 +125,35 @@ jobs:
 
           printf '%s\n' "$UPSTREAM_BODY" >> /tmp/release-body.md
 
+            
       - name: Create release (or skip if exists)
         env:
           GH_TOKEN: ${{ secrets.COPILOT_PAT }}
         run: |
           set -euo pipefail
           NEW_TAG="${{ steps.compute.outputs.new_tag }}"
+
           if gh release view "$NEW_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $NEW_TAG already exists; skipping create. (release.yml will upload the zip asset.)"
+            echo "Release $NEW_TAG already exists."
           else
             gh release create "$NEW_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --title "GSD Copilot ${NEW_TAG}" \
               --notes-file /tmp/release-body.md
+            echo "Created release $NEW_TAG."
           fi
+
+      - name: Trigger zip build/upload (release.yml)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          NEW_TAG="${{ steps.compute.outputs.new_tag }}"
+
+          echo "Dispatching release.yml to package tag $NEW_TAG..."
+          gh workflow run "release.yml" \
+            --repo "$GITHUB_REPOSITORY" \
+            -f tag="$NEW_TAG"
+
+          echo "release.yml dispatched successfully for $NEW_TAG"
+

@@ -13,10 +13,8 @@
 #
 # Files intentionally owned by this fork:
 README.md
-CHANGELOG.md
+.github/CODEOWNERS
 AGENTS.md
-.github/FUNDING.yml
-.github/ISSUE_TEMPLATE/bug_report.yml
 
 # Fork-owned workflows (recursive)
 .github/workflows/**

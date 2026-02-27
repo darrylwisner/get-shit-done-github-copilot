@@ -1,7 +1,6 @@
 name: Release Align Worker
 on:
   schedule:
-    # check for new upstream releases hourly
     - cron: "13 * * * *"
   workflow_dispatch:
     inputs:
@@ -89,16 +88,16 @@ jobs:
         run: |
           set -euo pipefail
           UP_TAG="${{ steps.tag.outputs.upstream_tag }}"
+
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
           git remote set-url --push upstream DISABLED || true
 
-          # fork base
           git fetch origin "${BASE_BRANCH}" --prune --no-tags
 
-          # Fetch only the needed upstream tag into a namespaced tag; prevent tag auto-follow spam.
+          # Only fetch the needed tag into a namespaced local tag to avoid collisions
           git fetch upstream --no-tags "refs/tags/${UP_TAG}:refs/tags/upstream/${UP_TAG}" --prune
 
-      - name: Create release-align branch at upstream tag (NO PUSH YET)
+      - name: Create release-align branch from fork base (workflows already correct)
         if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
         run: |
           set -euo pipefail
@@ -106,30 +105,47 @@ jobs:
           SAFE_TAG=$(echo "$UP_TAG" | sed 's/[^A-Za-z0-9._-]/-/g')
           BR="automated/release-align-${SAFE_TAG}"
 
-          git rev-parse "refs/tags/upstream/${UP_TAG}" >/dev/null
-          git checkout -B "$BR" "refs/tags/upstream/${UP_TAG}"
-
+          git checkout -B "$BR" "origin/${BASE_BRANCH}"
           echo "BRANCH=$BR" >> "$GITHUB_ENV"
 
-      - name: Apply guard exemptions (fork-owned; globs+recursive; lenient)
+      - name: Overlay upstream tag snapshot onto branch (excluding fork-owned paths)
         if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
         run: |
           set -euo pipefail
+          UP_TAG="${{ steps.tag.outputs.upstream_tag }}"
+
+          # Bring upstream tag content in, but DO NOT touch fork-owned areas.
+          # This keeps .github/workflows unchanged (avoids GitHub push rejection).
+          git checkout "refs/tags/upstream/${UP_TAG}" -- \
+            . \
+            ':(exclude).github/workflows' \
+            ':(exclude).github/prompts' \
+            ':(exclude).github/instructions' \
+            ':(exclude).github/agents' \
+            ':(exclude)scripts'
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No upstream snapshot changes staged (unexpected)."
+          else
+            git commit -m "chore: align to upstream tag snapshot ${UP_TAG}" || true
+          fi
+
+      - name: Apply guard exemptions (globs+recursive; lenient)
+        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
+        run: |
+          set -euo pipefail
+          # scripts/guard-exemptions.txt exists because we are based on fork main
           export BASE_BRANCH="${BASE_BRANCH}"
           export EXEMPTIONS_FILE="${EXEMPTIONS_FILE}"
           bash scripts/apply-guard-exemptions.sh
 
           if git diff --cached --quiet; then
-            echo "No exemptions staged."
+            echo "No exemption changes staged."
           else
             git commit -m "chore: enforce fork-owned files (release align)" || true
           fi
-
-      - name: Push safe baseline branch (after exemptions)
-        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
-        run: |
-          set -euo pipefail
-          git push -u origin "${BRANCH}" --force-with-lease
 
       - name: Setup Node
         if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
@@ -196,24 +212,7 @@ jobs:
             git commit -m "chore: release-align prompts for ${{ steps.tag.outputs.upstream_tag }}" || true
           fi
 
-      - name: Notice if workflows changed (fork-owned enforcement)
-        if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
-        run: |
-          set -euo pipefail
-          WF_STATUS="$(git status --porcelain .github/workflows 2>/dev/null || true)"
-          if [ -n "$WF_STATUS" ]; then
-            echo "::notice::Workflow dir has changes in working tree (expected if exemptions removed upstream workflows):"
-            echo "$WF_STATUS"
-          fi
-
-          WF_STAGED="$(git diff --cached --name-status -- .github/workflows 2>/dev/null || true)"
-          if [ -n "$WF_STAGED" ]; then
-            echo "::notice::Workflow changes staged (should be fork-owned state):"
-            echo "$WF_STAGED"
-          fi
-
-
-      - name: Push release-align branch (with prompts)
+      - name: Push release-align branch (with snapshot + prompts)
         if: steps.tag.outputs.upstream_tag != '' && steps.mirrored.outputs.needs_mirror == 'true'
         run: |
           set -euo pipefail
@@ -231,4 +230,4 @@ jobs:
             -f upstream_tag="${{ steps.tag.outputs.upstream_tag }}" \
             -f target_ref="${BRANCH}" \
             -f force="false"
-          echo "Dispatched release-mirror-worker. It will push the fork tag; release.yml will build/upload the zip on tag push."
+          echo "Dispatched release-mirror-worker."

@@ -3,6 +3,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to package (e.g. v0.0.7-upstream-v1.21.1)"
+        required: true
+        type: string
 
 concurrency:
   group: release-${{ github.ref }}
@@ -18,17 +24,30 @@ jobs:
   publish-release:
     runs-on: ubuntu-latest
     steps:
-      # SAFETY: Always run this assertion first. Add --repo "$GITHUB_REPOSITORY" to any new gh command you add here.
       - name: Assert fork context
         run: |
           if [ "$GITHUB_REPOSITORY" != "${{ env.EXPECTED_REPO }}" ]; then
             echo "ERROR: This workflow is running on '$GITHUB_REPOSITORY' but is only intended to run on '${{ env.EXPECTED_REPO }}'."
-            echo "Refusing to proceed — this prevents accidental writes to the wrong repository."
             exit 1
           fi
 
-      - name: Checkout
+      - name: Resolve tag to build
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Packaging tag: $TAG"
+
+      - name: Checkout tag
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
 
       - name: Build zip artifact
         run: |
@@ -42,45 +61,33 @@ jobs:
           mkdir -p staging/gsd-copilot-installer
 
           # --- Copilot layer: .github/ files ---
-          # Prompts
           cp -r .github/prompts/. staging/.github/prompts/
 
-          # GSD-prefixed instruction files only (true: dir may be empty or missing)
           find .github/instructions -maxdepth 1 \( -name "gsd-*.instructions.md" -o -name "gsd.*.md" \) \
             -exec cp {} staging/.github/instructions/ \; 2>/dev/null || true
 
-          # NOTE: .github/agents/ is intentionally omitted — it is empty by design.
-
           # --- Upstream runtime: .claude/ ---
-          # Commands
           cp -r commands/gsd/. staging/.claude/commands/gsd/
-
-          # Get-shit-done runtime tree
           cp -r get-shit-done/. staging/.claude/get-shit-done/
-
-          # Agents
           cp -r agents/. staging/.claude/agents/
 
-          # Hooks (.js files only — true: tolerates empty or missing dir)
           find hooks -maxdepth 1 -name "*.js" -exec cp {} staging/.claude/hooks/ \; 2>/dev/null || true
 
-          # --- CommonJS mode marker ---
           echo '{"type":"commonjs"}' > staging/.claude/package.json
 
-          # --- Installer files ---
           cp gsd-copilot-installer/gsd-copilot-install.ps1 staging/gsd-copilot-installer/gsd-copilot-install.ps1
           cp gsd-copilot-installer/README.md staging/gsd-copilot-installer/README.md
 
-          # --- Path replacement: rewrite ~/.claude/ → ./.claude/ in all .md files ---
           find staging/.claude -name "*.md" -exec sed -i 's#~/.claude/#./.claude/#g' {} \;
 
-          # --- Zip flat-at-root (paths inside zip start at .github/, .claude/, etc.) ---
-          cd staging && zip -r ../gsd-copilot-${{ github.ref_name }}.zip .
+          TAG="${{ steps.tag.outputs.tag }}"
+          cd staging && zip -r "../gsd-copilot-${TAG}.zip" .
 
       - name: Validate zip contents
         run: |
           echo "Validating zip contents..."
-          ZIP="gsd-copilot-${{ github.ref_name }}.zip"
+          TAG="${{ steps.tag.outputs.tag }}"
+          ZIP="gsd-copilot-${TAG}.zip"
           fail=0
           check_path() {
             local label="$1"
@@ -107,31 +114,23 @@ jobs:
           fi
           echo "All zip contents validated."
 
-      - name: Create GitHub Release (if missing) and upload asset
+      - name: Upload asset to release (create release only if missing)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          ZIP="./gsd-copilot-${{ github.ref_name }}.zip"
+          TAG="${{ steps.tag.outputs.tag }}"
+          ZIP="./gsd-copilot-${TAG}.zip"
 
-          # Avoid race with release-mirror-worker: wait briefly for the release to exist.
-          for i in $(seq 1 10); do
-            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "Release $TAG already exists (attempt $i)."
-              break
-            fi
-            echo "Release $TAG not found yet (attempt $i). Waiting..."
-            sleep 3
-          done
-
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Uploading asset to existing release $TAG"
-            gh release upload "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            echo "Creating release $TAG and uploading asset"
+          # Ensure release exists (mirror worker usually creates it)
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::warning::Release $TAG does not exist yet; creating it."
             gh release create "$TAG" "$ZIP" \
               --repo "$GITHUB_REPOSITORY" \
               --title "GSD Copilot $TAG" \
               --generate-notes
+            exit 0
           fi
+
+          echo "Uploading asset to existing release $TAG"
+          gh release upload "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
