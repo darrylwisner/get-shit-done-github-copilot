@@ -5,10 +5,8 @@
 
 .DESCRIPTION
     Downloads the GSD Copilot release zip from GitHub Releases and installs
-    .github/prompts/, .github/instructions/,
-    .claude/commands/gsd/, .claude/get-shit-done/, .claude/agents/,
-    .claude/hooks/, and .claude/package.json
-    into the target workspace without touching non-GSD files.
+    .github/prompts/, .github/agents/, .github/get-shit-done/, and
+    .github/instructions/ into the target workspace without touching non-GSD files.
 
 .PARAMETER WorkspaceDir
     Path to the target workspace. Defaults to the current directory.
@@ -27,7 +25,8 @@ param(
     [string]$WorkspaceDir = (Get-Location).Path,
     [string]$Tag = "latest",
     [switch]$DryRun,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$SkipLegacyCleanup
 )
 
 Set-StrictMode -Version Latest
@@ -50,7 +49,7 @@ if ($WorkspaceDir -eq $PSScriptRoot) {
     Write-Host ""
     Write-Host "  .\gsd-copilot-installer\gsd-copilot-install.ps1 -WorkspaceDir '<your-project-root>'"
     Write-Host ""
-    exit 1
+    throw "WorkspaceDir does not exist: $WorkspaceDir"
 }
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -70,14 +69,14 @@ try {
     $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers
 } catch {
     Write-Error "Failed to fetch release metadata from GitHub: $($_.Exception.Message)"
-    exit 1
+    throw "Release fetch failed"
 }
 
 $releaseVersion = $release.tag_name.TrimStart('v')
 $asset = $release.assets | Where-Object { $_.name -like $ASSET_NAME } | Select-Object -First 1
 if (-not $asset) {
     Write-Error "No zip asset found in release $($release.tag_name). Expected asset matching: $ASSET_NAME"
-    exit 1
+    throw "Asset not found"
 }
 
 # ── 2. Downgrade check ────────────────────────────────────────────────────────
@@ -94,7 +93,7 @@ if ($installedVersion) {
         if ($installedVer -gt $targetVer) {
             if (-not $Force) {
                 Write-Error "Downgrade blocked: installed v$installedVersion → target v$releaseVersion. Use -Force to override."
-                exit 1
+                throw "Downgrade blocked"
             } else {
                 Write-Host "⚠ Warning: downgrading from v$installedVersion to v$releaseVersion (-Force specified)."
             }
@@ -131,20 +130,16 @@ if (-not $DryRun) {
         Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
     } catch {
         Write-Error "Download/extract failed: $($_.Exception.Message)"
-        exit 1
+        throw "Download/extract failed"
     }
 
     $srcRoot = Join-Path $tmpDir ".github"
     if (-not (Test-Path $srcRoot)) {
         Write-Error "Extracted zip does not contain a .github/ directory. Unexpected asset structure."
-        exit 1
+        throw "Unexpected zip structure"
     }
 
-    $claudeSrcRoot = Join-Path $tmpDir ".claude"
-    if (-not (Test-Path $claudeSrcRoot)) {
-        Write-Error "Extracted zip does not contain a .claude/ directory. Unexpected asset structure."
-        exit 1
-    }
+    $claudeSrcRoot = $null  # no longer used; .claude/ not in zip since v0.0.9
 
     # ── 5. Install files ──────────────────────────────────────────────────────
     try {
@@ -175,39 +170,7 @@ if (-not $DryRun) {
         }
     } catch {
         Write-Error "Install failed writing .github/$rel`: $_"
-        exit 1
-    }
-
-    # ── 5b. Install .claude/ files ───────────────────────────────────────────
-    try {
-        $claudeFiles = Get-ChildItem -Recurse -File -Path $claudeSrcRoot
-        foreach ($src in $claudeFiles) {
-            $rel  = $src.FullName.Substring($claudeSrcRoot.Length).TrimStart('\', '/')
-            $dest = Join-Path (Join-Path $WorkspaceDir ".claude") $rel
-            $exists = Test-Path $dest
-
-            if ($exists) {
-                if ($Force) {
-                    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-                    Copy-Item -Path $src.FullName -Destination $dest -Force
-                    Write-Verbose "  Overwritten (--force): .claude/$rel"
-                } else {
-                    Write-Host "  `u{26A0} Overwriting: .claude/$rel"
-                    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-                    Copy-Item -Path $src.FullName -Destination $dest -Force
-                }
-                $writtenCount++
-                $overwroteCount++
-            } else {
-                New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-                Copy-Item -Path $src.FullName -Destination $dest -Force
-                Write-Verbose "  Written: .claude/$rel"
-                $writtenCount++
-            }
-        }
-    } catch {
-        Write-Error "Install failed writing .claude/$rel`: $_"
-        exit 1
+        throw "Install failed"
     }
 
     # ── 6. Write version marker ───────────────────────────────────────────────
@@ -235,29 +198,70 @@ if (-not $DryRun) {
                 Write-Host "[DRY-RUN] would write: .github/$rel"
             }
         }
-        $claudeSrcRootDry = Join-Path $tmpDir ".claude"
-        if (Test-Path $claudeSrcRootDry) {
-            $claudeFilesDry = Get-ChildItem -Recurse -File -Path $claudeSrcRootDry
-            foreach ($src in $claudeFilesDry) {
-                $rel  = $src.FullName.Substring($claudeSrcRootDry.Length).TrimStart('\', '/')
-                $dest = Join-Path (Join-Path $WorkspaceDir ".claude") $rel
-                $exists = Test-Path $dest
-                if ($exists) {
-                    Write-Host "[DRY-RUN] would overwrite: .claude/$rel"
-                } else {
-                    Write-Host "[DRY-RUN] would write: .claude/$rel"
-                }
-            }
-        }
         Remove-Item -Force $tmpZip -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
     } catch {
         Write-Error "Dry-run failed fetching release manifest: $($_.Exception.Message)"
-        exit 1
+        throw "Dry-run failed"
     }
 }
 
-# ── 7. Print summary ──────────────────────────────────────────────────────────
+# ── 7. Legacy .claude/ migration cleanup ─────────────────────────────────────
+# Old installs (pre-0.0.9) placed GSD files in both .github/ AND .claude/.
+# Since 0.0.9, Copilot installs live entirely in .github/ — .claude/ is unused.
+#
+# Only runs when upgrading from a genuinely older fork version so that users who
+# intentionally run Claude + Copilot side-by-side can pass -SkipLegacyCleanup
+# to preserve their .claude/ GSD files.
+$legacyClaudeDir = Join-Path $WorkspaceDir ".claude"
+$shouldMigrate = $false
+if (-not $SkipLegacyCleanup -and $installedVersion) {
+    try {
+        # Strip the -upstream-vX.Y.Z suffix before parsing so [System.Version] works
+        $forkInstalled = [System.Version]($installedVersion -replace '-.*$', '')
+        $forkTarget    = [System.Version]($releaseVersion   -replace '-.*$', '')
+        if ($forkInstalled -lt $forkTarget -and (Test-Path $legacyClaudeDir)) {
+            $shouldMigrate = $true
+        }
+    } catch {
+        # Non-parseable version string — skip migration
+    }
+}
+
+if ($shouldMigrate) {
+    Write-Host ""
+    Write-Host "  Migrating from legacy install: removing old .claude/gsd-* files"
+    Write-Host "  (Your non-GSD .claude/ files are untouched.)"
+    Write-Host "  To keep Claude + Copilot side by side, re-run with -SkipLegacyCleanup"
+    Write-Host ""
+    $legacyTargets = @(
+        (Join-Path $legacyClaudeDir "commands\gsd"),
+        (Join-Path $legacyClaudeDir "get-shit-done")
+    )
+    foreach ($p in $legacyTargets) {
+        if (Test-Path $p) {
+            if ($DryRun) {
+                Write-Host "[DRY-RUN] would remove: $p"
+            } else {
+                Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    # agents: only remove gsd-* prefixed files, leave any user agents alone
+    $legacyAgentsDir = Join-Path $legacyClaudeDir "agents"
+    if (Test-Path $legacyAgentsDir) {
+        $gsdAgents = Get-ChildItem $legacyAgentsDir -Filter "gsd-*.md" -ErrorAction SilentlyContinue
+        foreach ($f in $gsdAgents) {
+            if ($DryRun) {
+                Write-Host "[DRY-RUN] would remove: $($f.FullName)"
+            } else {
+                Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+# ── 8. Print summary ──────────────────────────────────────────────────────────
 Write-Host "------------------------------------------"
 if ($DryRun) {
     Write-Host "No files written (dry run)"
@@ -268,10 +272,8 @@ if ($DryRun) {
 Write-Host "------------------------------------------"
 Write-Host ""
 
-# ── 8. Cleanup temp files ──────────────────────────────────────────────────────
+# ── 9. Cleanup temp files ──────────────────────────────────────────────────────
 if (-not $DryRun) {
     Remove-Item -Force $tmpZip -ErrorAction SilentlyContinue
     Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
 }
-
-exit 0
