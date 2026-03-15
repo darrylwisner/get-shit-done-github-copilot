@@ -3,7 +3,7 @@
  *
  * Validates that all agent .md files have correct frontmatter fields:
  * - Anti-heredoc instruction present in file-writing agents
- * - skills: field in all agents
+ * - skills: field absent from all agents (breaks Gemini CLI)
  * - Commented hooks: pattern in file-writing agents
  * - Spawn type consistency across workflows
  */
@@ -62,29 +62,17 @@ describe('HDOC: anti-heredoc instruction', () => {
 
 // ─── Skills Frontmatter ──────────────────────────────────────────────────────
 
-describe('SKILL: skills frontmatter', () => {
+describe('SKILL: skills frontmatter absent', () => {
   for (const agent of ALL_AGENTS) {
-    test(`${agent} has skills: in frontmatter`, () => {
+    test(`${agent} does not have skills: in frontmatter`, () => {
       const content = fs.readFileSync(path.join(AGENTS_DIR, agent + '.md'), 'utf-8');
       const frontmatter = content.split('---')[1] || '';
       assert.ok(
-        frontmatter.includes('skills:'),
-        `${agent} missing skills: in frontmatter`
+        !frontmatter.includes('skills:'),
+        `${agent} has skills: in frontmatter — skills: breaks Gemini CLI and must be removed`
       );
     });
   }
-
-  test('skill references follow naming convention', () => {
-    for (const agent of ALL_AGENTS) {
-      const content = fs.readFileSync(path.join(AGENTS_DIR, agent + '.md'), 'utf-8');
-      const frontmatter = content.split('---')[1] || '';
-      const skillLines = frontmatter.split('\n').filter(l => l.trim().startsWith('- gsd-'));
-      for (const line of skillLines) {
-        const skillName = line.trim().replace('- ', '');
-        assert.match(skillName, /^gsd-[\w-]+-workflow$/, `Invalid skill name: ${skillName}`);
-      }
-    }
-  });
 });
 
 // ─── Hooks Frontmatter ───────────────────────────────────────────────────────
