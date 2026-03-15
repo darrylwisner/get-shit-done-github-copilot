@@ -14,7 +14,6 @@ const os = require('os');
 const {
   loadConfig,
   resolveModelInternal,
-  MODEL_PROFILES,
   escapeRegex,
   generateSlugInternal,
   normalizePhaseName,
@@ -147,7 +146,7 @@ describe('resolveModelInternal', () => {
   describe('model profile structural validation', () => {
     test('all known agents resolve to a valid string for each profile', () => {
       const knownAgents = ['gsd-planner', 'gsd-executor', 'gsd-phase-researcher', 'gsd-codebase-mapper'];
-      const profiles = ['quality', 'balanced', 'budget'];
+      const profiles = ['quality', 'balanced', 'budget', 'inherit'];
       const validValues = ['inherit', 'sonnet', 'haiku', 'opus'];
 
       for (const profile of profiles) {
@@ -159,6 +158,14 @@ describe('resolveModelInternal', () => {
             `profile=${profile} agent=${agent} returned unexpected value: ${result}`
           );
         }
+      }
+    });
+
+    test('inherit profile forces all known agents to inherit model', () => {
+      const knownAgents = ['gsd-planner', 'gsd-executor', 'gsd-phase-researcher', 'gsd-codebase-mapper'];
+      writeConfig({ model_profile: 'inherit' });
+      for (const agent of knownAgents) {
+        assert.strictEqual(resolveModelInternal(tmpDir, agent), 'inherit');
       }
     });
   });
@@ -192,6 +199,11 @@ describe('resolveModelInternal', () => {
   describe('edge cases', () => {
     test('returns sonnet for unknown agent type', () => {
       writeConfig({ model_profile: 'balanced' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'sonnet');
+    });
+
+    test('returns sonnet for unknown agent type even with inherit profile', () => {
+      writeConfig({ model_profile: 'inherit' });
       assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'sonnet');
     });
 
@@ -624,8 +636,8 @@ describe('getRoadmapPhaseInternal', () => {
     assert.strictEqual(result.goal, 'Create REST endpoints');
   });
 
-  test('returns null goal when Goal uses colon-outside-bold format', () => {
-    // Actual ROADMAP.md uses **Goal**: (colon outside bold) which the regex does not match
+  test('returns goal when Goal uses colon-outside-bold format', () => {
+    // **Goal**: (colon outside bold) is now supported alongside **Goal:**
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'ROADMAP.md'),
       '### Phase 1: Foundation\n**Goal**: Build the base\n'
@@ -633,7 +645,7 @@ describe('getRoadmapPhaseInternal', () => {
     const result = getRoadmapPhaseInternal(tmpDir, '1');
     assert.strictEqual(result.found, true);
     assert.strictEqual(result.phase_name, 'Foundation');
-    assert.strictEqual(result.goal, null);
+    assert.strictEqual(result.goal, 'Build the base');
   });
 
   test('returns null when roadmap missing', () => {

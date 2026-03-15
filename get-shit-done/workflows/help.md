@@ -118,17 +118,23 @@ Usage: `/gsd:execute-phase 5`
 
 ### Quick Mode
 
-**`/gsd:quick`**
+**`/gsd:quick [--full] [--discuss] [--research]`**
 Execute small, ad-hoc tasks with GSD guarantees but skip optional agents.
 
 Quick mode uses the same system with a shorter path:
-- Spawns planner + executor (skips researcher, checker, verifier)
+- Spawns planner + executor (skips researcher, checker, verifier by default)
 - Quick tasks live in `.planning/quick/` separate from planned phases
 - Updates STATE.md tracking (not ROADMAP.md)
 
-Use when you know exactly what to do and the task is small enough to not need research or verification.
+Flags enable additional quality steps:
+- `--discuss` — Lightweight discussion to surface gray areas before planning
+- `--research` — Focused research agent investigates approaches before planning
+- `--full` — Adds plan-checking (max 2 iterations) and post-execution verification
+
+Flags are composable: `--discuss --research --full` gives the complete quality pipeline for a single task.
 
 Usage: `/gsd:quick`
+Usage: `/gsd:quick --research --full`
 Result: Creates `.planning/quick/NNN-slug/PLAN.md`, `.planning/quick/NNN-slug/SUMMARY.md`
 
 ### Roadmap Management
@@ -301,7 +307,7 @@ Usage: `/gsd:plan-milestone-gaps`
 Configure workflow toggles and model profile interactively.
 
 - Toggle researcher, plan checker, verifier agents
-- Select model profile (quality/balanced/budget)
+- Select model profile (quality/balanced/budget/inherit)
 - Updates `.planning/config.json`
 
 Usage: `/gsd:settings`
@@ -312,6 +318,7 @@ Quick switch model profile for GSD agents.
 - `quality` — Opus everywhere except verification
 - `balanced` — Opus for planning, Sonnet for execution (default)
 - `budget` — Sonnet for writing, Haiku for research/verification
+- `inherit` — Use current session model for all agents (OpenCode `/model`)
 
 Usage: `/gsd:set-profile budget`
 

@@ -3,8 +3,6 @@ name: gsd-ui-researcher
 description: Produces UI-SPEC.md design contract for frontend phases. Reads upstream artifacts, detects design system state, asks only unanswered questions. Spawned by /gsd:ui-phase orchestrator.
 tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch, mcp__context7__*
 color: "#E879F9"
-skills:
-  - gsd-ui-researcher-workflow
 # hooks:
 #   PostToolUse:
 #     - matcher: "Write|Edit"
