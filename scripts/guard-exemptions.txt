@@ -17,6 +17,10 @@ README.md
 AGENTS.md
 
 # Fork-owned Copilot conversion module and tool map
+# bin/install.js has a thin integration layer (require + isCopilot branches) that
+# must be preserved across upstream tag overlays in the release-align workflow.
+# Upstream changes reach it via the normal upstream-sync PR workflow instead.
+bin/install.js
 bin/install-copilot.js
 scripts/tools.json
 

@@ -153,7 +153,9 @@ jobs:
             ':(exclude).github/prompts' \
             ':(exclude).github/instructions' \
             ':(exclude).github/agents' \
-            ':(exclude)scripts'
+            ':(exclude)scripts' \
+            ':(exclude)bin/install.js' \
+            ':(exclude)bin/install-copilot.js'
 
           git add -A
 
