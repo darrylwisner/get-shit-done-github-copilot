@@ -1,0 +1,55 @@
+---
+name: gsd.ui-phase
+description: "Generate UI design contract (UI-SPEC.md) for frontend phases"
+argument-hint: "[phase]"
+tools: ['agent', 'edit', 'execute', 'mcp__context7__*', 'read', 'search', 'vscode/askQuestions', 'web']
+agent: agent
+---
+
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Task","WebFetch","AskUserQuestion","mcp__context7__*"] -->
+
+## Path Resolution 
+
+  The GSD workflow files contain bash commands that reference `$HOME/.claude/get-shit-done/bin/gsd-tools.cjs`. 
+  **In this workspace, the module lives at `.claude/get-shit-done/bin/gsd-tools.cjs` relative to the workspace root — `$HOME` does not apply.
+  ** When executing or interpreting any bash snippet from a workflow file, mentally substitute `$HOME/.claude/` → `.claude/` (workspace-relative).
+  ---
+
+## Copilot Runtime Adapter (important)
+
+Upstream GSD command sources may reference an `AskUserQuestion` tool (Claude/OpenCode runtime concept).
+
+In VS Code Copilot, **do not attempt to call a tool named `AskUserQuestion`**.
+Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#tool:vscode/askQuestions** with:
+
+- Combine the **Header** and **Question** into a single clear question string.
+- If the upstream instruction specifies **Options**, present them as numbered choices.
+- If no options are specified, ask as a freeform question.
+
+**Rules:**
+1. If the options include "Other", "Something else", or "Let me explain", and the user selects it, follow up with a freeform question via #tool:vscode/askQuestions.
+2. Follow the upstream branching and loop rules exactly as written (e.g., "if X selected, do Y; otherwise continue").
+3. If the upstream flow says to **exit/stop** and run another command, tell the user to run that slash command next, then stop.
+4. Use #tool:vscode/askQuestions freely — do not guess or assume user intent.
+
+---
+
+<objective>
+Create a UI design contract (UI-SPEC.md) for a frontend phase.
+Orchestrates gsd-ui-researcher and gsd-ui-checker.
+Flow: Validate → Research UI → Verify UI-SPEC → Done
+</objective>
+
+<execution_context>
+- Read file at: ./.claude/get-shit-done/workflows/ui-phase.md
+- Read file at: ./.claude/get-shit-done/references/ui-brand.md
+</execution_context>
+
+<context>
+Phase number: $ARGUMENTS — optional, auto-detects next unplanned phase if omitted.
+</context>
+
+<process>
+Execute @./.claude/get-shit-done/workflows/ui-phase.md end-to-end.
+Preserve all workflow gates.
+</process>
