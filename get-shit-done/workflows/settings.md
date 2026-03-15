@@ -48,7 +48,8 @@ AskUserQuestion([
     options: [
       { label: "Quality", description: "Opus everywhere except verification (highest cost)" },
       { label: "Balanced (Recommended)", description: "Opus for planning, Sonnet for execution/verification" },
-      { label: "Budget", description: "Sonnet for writing, Haiku for research/verification (lowest cost)" }
+      { label: "Budget", description: "Sonnet for writing, Haiku for research/verification (lowest cost)" },
+      { label: "Inherit", description: "Use current session model for all agents (best for OpenCode /model)" }
     ]
   },
   {
@@ -136,7 +137,7 @@ Merge new settings into existing config.json:
 ```json
 {
   ...existing_config,
-  "model_profile": "quality" | "balanced" | "budget",
+  "model_profile": "quality" | "balanced" | "budget" | "inherit",
   "workflow": {
     "research": true/false,
     "plan_check": true/false,
@@ -210,7 +211,7 @@ Display:
 
 | Setting              | Value |
 |----------------------|-------|
-| Model Profile        | {quality/balanced/budget} |
+| Model Profile        | {quality/balanced/budget/inherit} |
 | Plan Researcher      | {On/Off} |
 | Plan Checker         | {On/Off} |
 | Execution Verifier   | {On/Off} |
