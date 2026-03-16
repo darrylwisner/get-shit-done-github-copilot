@@ -179,11 +179,11 @@ describe('resolveModelInternal', () => {
       assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-executor'), 'haiku');
     });
 
-    test('opus override resolves to inherit', () => {
+    test('opus override resolves to opus', () => {
       writeConfig({
         model_overrides: { 'gsd-executor': 'opus' },
       });
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-executor'), 'inherit');
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-executor'), 'opus');
     });
 
     test('agents not in override fall back to profile', () => {
@@ -191,8 +191,8 @@ describe('resolveModelInternal', () => {
         model_profile: 'quality',
         model_overrides: { 'gsd-executor': 'haiku' },
       });
-      // gsd-planner not overridden, should use quality profile -> opus -> inherit
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'inherit');
+      // gsd-planner not overridden, should use quality profile -> opus
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'opus');
     });
   });
 
@@ -209,8 +209,8 @@ describe('resolveModelInternal', () => {
 
     test('defaults to balanced profile when model_profile missing', () => {
       writeConfig({});
-      // balanced profile, gsd-planner -> opus -> inherit
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'inherit');
+      // balanced profile, gsd-planner -> opus
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'opus');
     });
   });
 });
