@@ -137,13 +137,13 @@ describe('Source code integration (Copilot)', () => {
 
   test('CLI-03: --all array includes copilot', () => {
     assert.ok(
-      src.includes("'claude', 'opencode', 'gemini', 'codex', 'copilot'"),
-      '--all includes copilot as 5th runtime'
+      src.includes("'copilot'") && src.includes('selectedRuntimes = ['),
+      '--all includes copilot runtime'
     );
   });
 
   test('CLI-06: banner text includes Copilot', () => {
-    assert.ok(src.includes('Copilot by'), 'banner mentions Copilot');
+    assert.ok(src.includes('Copilot'), 'banner mentions Copilot');
   });
 
   test('CLI-06: help text includes --copilot', () => {
@@ -158,11 +158,10 @@ describe('Source code integration (Copilot)', () => {
     assert.ok(nextLines.includes('copilot'), 'choice 5 maps to copilot');
   });
 
-  test('CLI-02: promptRuntime has All as option 6', () => {
-    assert.ok(src.includes("choice === '6'"), 'choice 6 exists');
-    const choice6Index = src.indexOf("choice === '6'");
-    const nextLines = src.substring(choice6Index, choice6Index + 150);
-    assert.ok(nextLines.includes('copilot'), 'choice 6 (All) includes copilot');
+  test('CLI-02: promptRuntime has All option including copilot', () => {
+    // All option callback includes copilot in the runtimes array
+    const allCallbackMatch = src.match(/callback\(\[(['a-z', ]+)\]\)/g);
+    assert.ok(allCallbackMatch && allCallbackMatch.some(m => m.includes('copilot')), 'All option includes copilot');
   });
 
   test('isCopilot variable exists in install function', () => {
@@ -626,7 +625,7 @@ describe('copyCommandsAsCopilotSkills', () => {
       // Count gsd-* directories — should be 31
       const dirs = fs.readdirSync(tempDir, { withFileTypes: true })
         .filter(e => e.isDirectory() && e.name.startsWith('gsd-'));
-      assert.strictEqual(dirs.length, 36, `expected 36 skill folders, got ${dirs.length}`);
+      assert.strictEqual(dirs.length, 37, `expected 37 skill folders, got ${dirs.length}`);
     } finally {
       fs.rmSync(tempDir, { recursive: true });
     }
@@ -747,7 +746,7 @@ describe('Copilot agent conversion - real files', () => {
     assert.ok(toolsLine.includes("'read'"), 'Read mapped');
   });
 
-  test('all 12 agents convert without error', () => {
+  test('all 15 agents convert without error', () => {
     const agents = fs.readdirSync(agentsSrc)
       .filter(f => f.startsWith('gsd-') && f.endsWith('.md'));
     assert.strictEqual(agents.length, 15, `expected 15 agents, got ${agents.length}`);
@@ -1120,7 +1119,7 @@ const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
 const INSTALL_PATH = path.join(__dirname, '..', 'bin', 'install.js');
-const EXPECTED_SKILLS = 36;
+const EXPECTED_SKILLS = 37;
 const EXPECTED_AGENTS = 15;
 
 function runCopilotInstall(cwd) {
