@@ -404,6 +404,26 @@ Display project statistics.
 /gsd:stats                          # Project metrics dashboard
 ```
 
+### `/gsd:profile-user`
+
+Generate a developer behavioral profile from Claude Code session analysis across 8 dimensions (communication style, decision patterns, debugging approach, UX preferences, vendor choices, frustration triggers, learning style, explanation depth). Produces artifacts that personalize Claude's responses.
+
+| Flag | Description |
+|------|-------------|
+| `--questionnaire` | Use interactive questionnaire instead of session analysis |
+| `--refresh` | Re-analyze sessions and regenerate profile |
+
+**Generated artifacts:**
+- `USER-PROFILE.md` — Full behavioral profile
+- `/gsd:dev-preferences` command — Load preferences in any session
+- `CLAUDE.md` profile section — Auto-discovered by Claude Code
+
+```bash
+/gsd:profile-user                   # Analyze sessions and build profile
+/gsd:profile-user --questionnaire   # Interactive questionnaire fallback
+/gsd:profile-user --refresh         # Re-generate from fresh analysis
+```
+
 ### `/gsd:health`
 
 Validate `.planning/` directory integrity.

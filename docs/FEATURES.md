@@ -45,6 +45,8 @@
   - [CLI Tools](#30-cli-tools)
   - [Multi-Runtime Support](#31-multi-runtime-support)
   - [Hook System](#32-hook-system)
+  - [Developer Profiling](#33-developer-profiling)
+  - [Execution Hardening](#34-execution-hardening)
 
 ---
 
@@ -754,3 +756,59 @@ fix(03-01): correct auth token expiry
 ```
 
 Color coding: <50% green, <65% yellow, <80% orange, ≥80% red with skull emoji
+
+### 33. Developer Profiling
+
+**Command:** `/gsd:profile-user [--questionnaire] [--refresh]`
+
+**Purpose:** Analyze Claude Code session history to build behavioral profiles across 8 dimensions, generating artifacts that personalize Claude's responses to the developer's style.
+
+**Dimensions:**
+1. Communication style (terse vs verbose, formal vs casual)
+2. Decision patterns (rapid vs deliberate, risk tolerance)
+3. Debugging approach (systematic vs intuitive, log preference)
+4. UX preferences (design sensibility, accessibility awareness)
+5. Vendor/technology choices (framework preferences, ecosystem familiarity)
+6. Frustration triggers (what causes friction in workflows)
+7. Learning style (documentation vs examples, depth preference)
+8. Explanation depth (high-level vs implementation detail)
+
+**Generated Artifacts:**
+- `USER-PROFILE.md` — Full behavioral profile with evidence citations
+- `/gsd:dev-preferences` command — Load preferences in any session
+- `CLAUDE.md` profile section — Auto-discovered by Claude Code
+
+**Flags:**
+- `--questionnaire` — Interactive questionnaire fallback when session history is unavailable
+- `--refresh` — Re-analyze sessions and regenerate profile
+
+**Pipeline Modules:**
+- `profile-pipeline.cjs` — Session scanning, message extraction, sampling
+- `profile-output.cjs` — Profile rendering, questionnaire, artifact generation
+- `gsd-user-profiler` agent — Behavioral analysis from session data
+
+**Requirements:**
+- REQ-PROF-01: Session analysis MUST cover at least 8 behavioral dimensions
+- REQ-PROF-02: Profile MUST cite evidence from actual session messages
+- REQ-PROF-03: Questionnaire MUST be available as fallback when no session history exists
+- REQ-PROF-04: Generated artifacts MUST be discoverable by Claude Code (CLAUDE.md integration)
+
+### 34. Execution Hardening
+
+**Purpose:** Three additive quality improvements to the execution pipeline that catch cross-plan failures before they cascade.
+
+**Components:**
+
+**1. Pre-Wave Dependency Check** (execute-phase)
+Before spawning wave N+1, verify key-links from prior wave artifacts exist and are wired correctly. Catches cross-plan dependency gaps before they cascade into downstream failures.
+
+**2. Cross-Plan Data Contracts — Dimension 9** (plan-checker)
+New analysis dimension that checks plans sharing data pipelines have compatible transformations. Flags when one plan strips data that another plan needs in its original form.
+
+**3. Export-Level Spot Check** (verify-phase)
+After Level 3 wiring verification passes, spot-check individual exports for actual usage. Catches dead stores that exist in wired files but are never called.
+
+**Requirements:**
+- REQ-HARD-01: Pre-wave check MUST verify key-links from all prior wave artifacts before spawning next wave
+- REQ-HARD-02: Cross-plan contract check MUST detect incompatible data transformations between plans
+- REQ-HARD-03: Export spot-check MUST identify dead stores in wired files

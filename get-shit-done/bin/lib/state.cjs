@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, loadConfig, getMilestoneInfo, getMilestonePhaseFilter, output, error } = require('./core.cjs');
+const { escapeRegex, loadConfig, getMilestoneInfo, getMilestonePhaseFilter, normalizeMd, output, error } = require('./core.cjs');
 const { extractFrontmatter, reconstructFrontmatter } = require('./frontmatter.cjs');
 
 // Shared helper: extract a field value from STATE.md content.
@@ -680,7 +680,7 @@ function syncStateFrontmatter(content, cwd) {
  */
 function writeStateMd(statePath, content, cwd) {
   const synced = syncStateFrontmatter(content, cwd);
-  fs.writeFileSync(statePath, synced, 'utf-8');
+  fs.writeFileSync(statePath, normalizeMd(synced), 'utf-8');
 }
 
 function cmdStateJson(cwd, raw) {
@@ -703,6 +703,81 @@ function cmdStateJson(cwd, raw) {
   output(fm, raw, JSON.stringify(fm, null, 2));
 }
 
+/**
+ * Update STATE.md when a new phase begins execution.
+ * Updates body text fields (Current focus, Status, Last Activity, Current Position)
+ * and synchronizes frontmatter via writeStateMd.
+ * Fixes: #1102 (plan counts), #1103 (status/last_activity), #1104 (body text).
+ */
+function cmdStateBeginPhase(cwd, phaseNumber, phaseName, planCount, raw) {
+  const statePath = path.join(cwd, '.planning', 'STATE.md');
+  if (!fs.existsSync(statePath)) {
+    output({ error: 'STATE.md not found' }, raw);
+    return;
+  }
+
+  let content = fs.readFileSync(statePath, 'utf-8');
+  const today = new Date().toISOString().split('T')[0];
+  const updated = [];
+
+  // Update Status field
+  const statusValue = `Executing Phase ${phaseNumber}`;
+  let result = stateReplaceField(content, 'Status', statusValue);
+  if (result) { content = result; updated.push('Status'); }
+
+  // Update Last Activity
+  result = stateReplaceField(content, 'Last Activity', today);
+  if (result) { content = result; updated.push('Last Activity'); }
+
+  // Update Last Activity Description if it exists
+  const activityDesc = `Phase ${phaseNumber} execution started`;
+  result = stateReplaceField(content, 'Last Activity Description', activityDesc);
+  if (result) { content = result; updated.push('Last Activity Description'); }
+
+  // Update Current Phase
+  result = stateReplaceField(content, 'Current Phase', String(phaseNumber));
+  if (result) { content = result; updated.push('Current Phase'); }
+
+  // Update Current Phase Name
+  if (phaseName) {
+    result = stateReplaceField(content, 'Current Phase Name', phaseName);
+    if (result) { content = result; updated.push('Current Phase Name'); }
+  }
+
+  // Update Current Plan to 1 (starting from the first plan)
+  result = stateReplaceField(content, 'Current Plan', '1');
+  if (result) { content = result; updated.push('Current Plan'); }
+
+  // Update Total Plans in Phase
+  if (planCount) {
+    result = stateReplaceField(content, 'Total Plans in Phase', String(planCount));
+    if (result) { content = result; updated.push('Total Plans in Phase'); }
+  }
+
+  // Update **Current focus:** body text line (#1104)
+  const focusLabel = phaseName ? `Phase ${phaseNumber} — ${phaseName}` : `Phase ${phaseNumber}`;
+  const focusPattern = /(\*\*Current focus:\*\*\s*).*/i;
+  if (focusPattern.test(content)) {
+    content = content.replace(focusPattern, (_match, prefix) => `${prefix}${focusLabel}`);
+    updated.push('Current focus');
+  }
+
+  // Update ## Current Position section (#1104)
+  const positionPattern = /(##\s*Current Position\s*\n)([\s\S]*?)(?=\n##|$)/i;
+  const positionMatch = content.match(positionPattern);
+  if (positionMatch) {
+    const newPosition = `Phase: ${phaseNumber}${phaseName ? ` (${phaseName})` : ''} — EXECUTING\nPlan: 1 of ${planCount || '?'}\n`;
+    content = content.replace(positionPattern, (_match, header) => `${header}${newPosition}`);
+    updated.push('Current Position');
+  }
+
+  if (updated.length > 0) {
+    writeStateMd(statePath, content, cwd);
+  }
+
+  output({ updated, phase: phaseNumber, phase_name: phaseName || null, plan_count: planCount || null }, raw, updated.length > 0 ? 'true' : 'false');
+}
+
 module.exports = {
   stateExtractField,
   stateReplaceField,
@@ -720,4 +795,5 @@ module.exports = {
   cmdStateRecordSession,
   cmdStateSnapshot,
   cmdStateJson,
+  cmdStateBeginPhase,
 };

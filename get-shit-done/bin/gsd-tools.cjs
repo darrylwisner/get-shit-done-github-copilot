@@ -14,6 +14,7 @@
  *   state update <field> <value>       Update a STATE.md field
  *   state get [section]                Get STATE.md content or section
  *   state patch --field val ...        Batch update STATE.md fields
+ *   state begin-phase --phase N --name S --plans C  Update STATE.md for new phase start
  *   resolve-model <agent-type>         Get model for agent based on profile
  *   find-phase <phase>                 Find phase directory by number
  *   commit <message> [--files f1 f2]   Commit planning docs
@@ -241,6 +242,17 @@ async function main() {
           stopped_at: stoppedIdx !== -1 ? args[stoppedIdx + 1] : null,
           resume_file: resumeIdx !== -1 ? args[resumeIdx + 1] : 'None',
         }, raw);
+      } else if (subcommand === 'begin-phase') {
+        const phaseIdx = args.indexOf('--phase');
+        const nameIdx = args.indexOf('--name');
+        const plansIdx = args.indexOf('--plans');
+        state.cmdStateBeginPhase(
+          cwd,
+          phaseIdx !== -1 ? args[phaseIdx + 1] : null,
+          nameIdx !== -1 ? args[nameIdx + 1] : null,
+          plansIdx !== -1 ? parseInt(args[plansIdx + 1], 10) : null,
+          raw
+        );
       } else {
         state.cmdStateLoad(cwd, raw);
       }

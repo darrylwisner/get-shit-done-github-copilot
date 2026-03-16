@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **`/gsd:profile-user` command** — Developer behavioral profiling from session analysis across 8 dimensions (communication, decisions, debugging, UX, vendor choices, frustrations, learning style, explanation depth). Generates `USER-PROFILE.md`, `/gsd:dev-preferences`, and `CLAUDE.md` profile section for personalized responses. Includes `--questionnaire` fallback and `--refresh` for re-analysis
+- **Execution hardening** — Three quality improvements to the execution pipeline:
+  - Pre-wave dependency check in `execute-phase`: verifies key-links from prior wave artifacts before spawning next wave
+  - Cross-Plan Data Contracts (Dimension 9) in plan-checker: detects incompatible transformations between plans sharing data pipelines
+  - Export-level spot check in `verify-phase`: catches dead stores that exist in wired files but are never called
+
+### Fixed
+- **Requirements `mark-complete` is now idempotent** — Re-marking already-completed requirements returns `already_complete` instead of `not_found` (#948)
+
 ## [1.25.0] - 2026-03-16
 
 ### Added
