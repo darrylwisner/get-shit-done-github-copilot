@@ -352,26 +352,6 @@ Route freeform text to the right GSD command.
 /gsd:do                             # Then describe what you want
 ```
 
-### `/gsd:note`
-
-Zero-friction idea capture — append, list, or promote notes to todos.
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `text` | No | Note text to capture (default: append mode) |
-| `list` | No | List all notes from project and global scopes |
-| `promote N` | No | Convert note N into a structured todo |
-
-| Flag | Description |
-|------|-------------|
-| `--global` | Use global scope for note operations |
-
-```bash
-/gsd:note "Consider caching strategy for API responses"
-/gsd:note list
-/gsd:note promote 3
-```
-
 ### `/gsd:debug`
 
 Systematic debugging with persistent state.

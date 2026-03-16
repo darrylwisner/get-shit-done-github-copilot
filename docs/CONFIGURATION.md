@@ -196,14 +196,6 @@ Control confirmation prompts during workflows.
 
 ---
 
-## Hook Settings
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `hooks.context_warnings` | boolean | `true` | Show context window usage warnings during sessions |
-
----
-
 ## Model Profiles
 
 ### Profile Definitions
