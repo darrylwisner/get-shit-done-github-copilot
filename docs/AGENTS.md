@@ -329,6 +329,29 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 
 ---
 
+### gsd-user-profiler
+
+**Role:** Analyzes session messages across 8 behavioral dimensions to produce a scored developer profile.
+
+| Property | Value |
+|----------|-------|
+| **Spawned by** | `/gsd:profile-user` |
+| **Parallelism** | Single instance |
+| **Tools** | Read |
+| **Model (balanced)** | Sonnet |
+| **Color** | Magenta |
+| **Produces** | `USER-PROFILE.md`, `/gsd:dev-preferences`, `CLAUDE.md` profile section |
+
+**Behavioral Dimensions:**
+Communication style, decision patterns, debugging approach, UX preferences, vendor choices, frustration triggers, learning style, explanation depth.
+
+**Key behaviors:**
+- Read-only agent — analyzes extracted session data, does not modify files
+- Produces scored dimensions with confidence levels and evidence citations
+- Questionnaire fallback when session history is unavailable
+
+---
+
 ## Agent Tool Permissions Summary
 
 | Agent | Read | Write | Edit | Bash | Grep | Glob | WebSearch | WebFetch | MCP |
@@ -348,6 +371,7 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 | ui-auditor | ✓ | ✓ | | ✓ | ✓ | ✓ | | | |
 | codebase-mapper | ✓ | ✓ | | ✓ | ✓ | ✓ | | | |
 | debugger | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| user-profiler | ✓ | | | | | | | | |
 
 **Principle of Least Privilege:**
 - Checkers are read-only (no Write/Edit) — they evaluate, never modify

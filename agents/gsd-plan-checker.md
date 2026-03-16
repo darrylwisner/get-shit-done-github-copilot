@@ -370,6 +370,25 @@ Overall: ✅ PASS / ❌ FAIL
 
 If FAIL: return to planner with specific fixes. Same revision loop as other dimensions (max 3 loops).
 
+## Dimension 9: Cross-Plan Data Contracts
+
+**Question:** When plans share data pipelines, are their transformations compatible?
+
+**Process:**
+1. Identify data entities in multiple plans' `key_links` or `<action>` elements
+2. For each shared data path, check if one plan's transformation conflicts with another's:
+   - Plan A strips/sanitizes data that Plan B needs in original form
+   - Plan A's output format doesn't match Plan B's expected input
+   - Two plans consume the same stream with incompatible assumptions
+3. Check for a preservation mechanism (raw buffer, copy-before-transform)
+
+**Red flags:**
+- "strip"/"clean"/"sanitize" in one plan + "parse"/"extract" original format in another
+- Streaming consumer modifies data that finalization consumer needs intact
+- Two plans transform same entity without shared raw source
+
+**Severity:** WARNING for potential conflicts. BLOCKER if incompatible transforms on same data entity with no preservation mechanism.
+
 </verification_dimensions>
 
 <verification_process>
@@ -700,6 +719,7 @@ Plan verification complete when:
   - [ ] No tasks contradict locked decisions
   - [ ] Deferred ideas not included in plans
 - [ ] Overall status determined (passed | issues_found)
+- [ ] Cross-plan data contracts checked (no conflicting transforms on shared data)
 - [ ] Structured issues returned (if any found)
 - [ ] Result returned to orchestrator
 

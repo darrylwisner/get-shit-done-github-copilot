@@ -54,6 +54,12 @@ All subsequent commits go to this branch. User handles merging.
 From init JSON: `phase_dir`, `plan_count`, `incomplete_count`.
 
 Report: "Found {plan_count} plans in {phase_dir} ({incomplete_count} incomplete)"
+
+**Update STATE.md for phase start:**
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state begin-phase --phase "${PHASE_NUMBER}" --name "${PHASE_NAME}" --plans "${PLAN_COUNT}"
+```
+This updates Status, Last Activity, Current focus, Current Position, and plan counts in STATE.md so frontmatter and body text reflect the active phase immediately.
 </step>
 
 <step name="discover_and_group_plans">
@@ -177,6 +183,27 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    **Known Claude Code bug (classifyHandoffIfNeeded):** If an agent reports "failed" with error containing `classifyHandoffIfNeeded is not defined`, this is a Claude Code runtime bug — not a GSD or agent issue. The error fires in the completion handler AFTER all tool calls finish. In this case: run the same spot-checks as step 4 (SUMMARY.md exists, git commits present, no Self-Check: FAILED). If spot-checks PASS → treat as **successful**. If spot-checks FAIL → treat as real failure below.
 
    For real failures: report which plan failed → ask "Continue?" or "Stop?" → if continue, dependent plans may also fail. If stop, partial completion report.
+
+5b. **Pre-wave dependency check (waves 2+ only):**
+
+    Before spawning wave N+1, for each plan in the upcoming wave:
+    ```bash
+    node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" verify key-links {phase_dir}/{plan}-PLAN.md
+    ```
+
+    If any key-link from a PRIOR wave's artifact fails verification:
+
+    ## Cross-Plan Wiring Gap
+
+    | Plan | Link | From | Expected Pattern | Status |
+    |------|------|------|-----------------|--------|
+    | {plan} | {via} | {from} | {pattern} | NOT FOUND |
+
+    Wave {N} artifacts may not be properly wired. Options:
+    1. Investigate and fix before continuing
+    2. Continue (may cause cascading failures in wave {N+1})
+
+    Key-links referencing files in the CURRENT (upcoming) wave are skipped.
 
 6. **Execute checkpoint plans between waves** — see `<checkpoint_handling>`.
 
@@ -442,7 +469,8 @@ Read and follow `~/.claude/get-shit-done/workflows/transition.md`, passing throu
 ## ✓ Phase {X}: {Name} Complete
 
 /gsd:progress — see updated roadmap
-/gsd:transition — plan next phase transition
+/gsd:discuss-phase {next} — discuss next phase before planning
+/gsd:plan-phase {next} — plan next phase
 /gsd:execute-phase {next} — execute next phase
 ```
 </step>

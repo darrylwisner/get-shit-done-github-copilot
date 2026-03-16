@@ -131,6 +131,110 @@ function isGitIgnored(cwd, targetPath) {
   }
 }
 
+// ─── Markdown normalization ─────────────────────────────────────────────────
+
+/**
+ * Normalize markdown to fix common markdownlint violations.
+ * Applied at write points so GSD-generated .planning/ files are IDE-friendly.
+ *
+ * Rules enforced:
+ *   MD022 — Blank lines around headings
+ *   MD031 — Blank lines around fenced code blocks
+ *   MD032 — Blank lines around lists
+ *   MD012 — No multiple consecutive blank lines (collapsed to 2 max)
+ *   MD047 — Files end with a single newline
+ */
+function normalizeMd(content) {
+  if (!content || typeof content !== 'string') return content;
+
+  // Normalize line endings to LF for consistent processing
+  let text = content.replace(/\r\n/g, '\n');
+
+  const lines = text.split('\n');
+  const result = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prev = i > 0 ? lines[i - 1] : '';
+    const prevTrimmed = prev.trimEnd();
+    const trimmed = line.trimEnd();
+
+    // MD022: Blank line before headings (skip first line and frontmatter delimiters)
+    if (/^#{1,6}\s/.test(trimmed) && i > 0 && prevTrimmed !== '' && prevTrimmed !== '---') {
+      result.push('');
+    }
+
+    // MD031: Blank line before fenced code blocks
+    if (/^```/.test(trimmed) && i > 0 && prevTrimmed !== '' && !isInsideFencedBlock(lines, i)) {
+      result.push('');
+    }
+
+    // MD032: Blank line before lists (- item, * item, N. item, - [ ] item)
+    if (/^(\s*[-*+]\s|\s*\d+\.\s)/.test(line) && i > 0 &&
+        prevTrimmed !== '' && !/^(\s*[-*+]\s|\s*\d+\.\s)/.test(prev) &&
+        prevTrimmed !== '---') {
+      result.push('');
+    }
+
+    result.push(line);
+
+    // MD022: Blank line after headings
+    if (/^#{1,6}\s/.test(trimmed) && i < lines.length - 1) {
+      const next = lines[i + 1];
+      if (next !== undefined && next.trimEnd() !== '') {
+        result.push('');
+      }
+    }
+
+    // MD031: Blank line after closing fenced code blocks
+    if (/^```\s*$/.test(trimmed) && isClosingFence(lines, i) && i < lines.length - 1) {
+      const next = lines[i + 1];
+      if (next !== undefined && next.trimEnd() !== '') {
+        result.push('');
+      }
+    }
+
+    // MD032: Blank line after last list item in a block
+    if (/^(\s*[-*+]\s|\s*\d+\.\s)/.test(line) && i < lines.length - 1) {
+      const next = lines[i + 1];
+      if (next !== undefined && next.trimEnd() !== '' &&
+          !/^(\s*[-*+]\s|\s*\d+\.\s)/.test(next) &&
+          !/^\s/.test(next)) {
+        // Only add blank line if next line is not a continuation/indented line
+        result.push('');
+      }
+    }
+  }
+
+  text = result.join('\n');
+
+  // MD012: Collapse 3+ consecutive blank lines to 2
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  // MD047: Ensure file ends with exactly one newline
+  text = text.replace(/\n*$/, '\n');
+
+  return text;
+}
+
+/** Check if line index i is inside an already-open fenced code block */
+function isInsideFencedBlock(lines, i) {
+  let fenceCount = 0;
+  for (let j = 0; j < i; j++) {
+    if (/^```/.test(lines[j].trimEnd())) fenceCount++;
+  }
+  return fenceCount % 2 === 1;
+}
+
+/** Check if a ``` line is a closing fence (odd number of fences up to and including this one) */
+function isClosingFence(lines, i) {
+  let fenceCount = 0;
+  for (let j = 0; j <= i; j++) {
+    if (/^```/.test(lines[j].trimEnd())) fenceCount++;
+  }
+  return fenceCount % 2 === 0;
+}
+
 function execGit(cwd, args) {
   const result = spawnSync('git', args, {
     cwd,
@@ -479,6 +583,7 @@ module.exports = {
   loadConfig,
   isGitIgnored,
   execGit,
+  normalizeMd,
   escapeRegex,
   normalizePhaseName,
   comparePhaseNum,

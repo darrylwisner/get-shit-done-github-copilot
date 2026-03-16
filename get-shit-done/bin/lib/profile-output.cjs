@@ -427,7 +427,7 @@ function cmdWriteProfile(cwd, options, raw) {
     process.stderr.write(`Sensitive content redacted: ${redactedCount} pattern(s) removed from evidence quotes\n`);
   }
 
-  const templatePath = path.join(__dirname, '..', 'templates', 'user-profile.md');
+  const templatePath = path.join(__dirname, '..', '..', 'templates', 'user-profile.md');
   if (!fs.existsSync(templatePath)) error(`Template not found: ${templatePath}`);
   let template = fs.readFileSync(templatePath, 'utf-8');
 
@@ -467,11 +467,11 @@ function cmdWriteProfile(cwd, options, raw) {
 
   template = template.replace(/\{\{generated_at\}\}/g, new Date().toISOString());
   template = template.replace(/\{\{data_source\}\}/g, analysis.data_source || 'session_analysis');
-  template = template.replace(/\{\{projects_list\}\}/g, (analysis.projects_list || []).join(', '));
-  template = template.replace(/\{\{message_count\}\}/g, String(analysis.message_count || 0));
+  template = template.replace(/\{\{projects_list\}\}/g, (analysis.projects_list || analysis.projects_analyzed || []).join(', '));
+  template = template.replace(/\{\{message_count\}\}/g, String(analysis.message_count || analysis.messages_analyzed || 0));
   template = template.replace(/\{\{summary_instructions\}\}/g, summaryInstructions);
   template = template.replace(/\{\{profile_version\}\}/g, analysis.profile_version);
-  template = template.replace(/\{\{projects_count\}\}/g, String((analysis.projects_list || []).length));
+  template = template.replace(/\{\{projects_count\}\}/g, String((analysis.projects_list || analysis.projects_analyzed || []).length));
   template = template.replace(/\{\{dimensions_scored\}\}/g, String(dimensionsScored));
   template = template.replace(/\{\{high_confidence_count\}\}/g, String(highCount));
   template = template.replace(/\{\{medium_confidence_count\}\}/g, String(mediumCount));
@@ -487,8 +487,9 @@ function cmdWriteProfile(cwd, options, raw) {
     const summary = dim.summary || '';
 
     let evidenceBlock = '';
-    if (dim.evidence && Array.isArray(dim.evidence) && dim.evidence.length > 0) {
-      const evidenceLines = dim.evidence.map(ev => {
+    const evidenceArr = dim.evidence_quotes || dim.evidence;
+    if (evidenceArr && Array.isArray(evidenceArr) && evidenceArr.length > 0) {
+      const evidenceLines = evidenceArr.map(ev => {
         const signal = ev.signal || ev.pattern || '';
         const quote = ev.quote || ev.example || '';
         const project = ev.project || 'unknown';
@@ -619,7 +620,7 @@ function cmdGenerateDevPreferences(cwd, options, raw) {
     learning_style: 'Learning Support',
   };
 
-  const templatePath = path.join(__dirname, '..', 'templates', 'dev-preferences.md');
+  const templatePath = path.join(__dirname, '..', '..', 'templates', 'dev-preferences.md');
   if (!fs.existsSync(templatePath)) error(`Template not found: ${templatePath}`);
   let template = fs.readFileSync(templatePath, 'utf-8');
 
