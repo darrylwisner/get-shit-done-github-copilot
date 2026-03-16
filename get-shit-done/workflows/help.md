@@ -255,6 +255,21 @@ Systematic debugging with persistent state across context resets.
 Usage: `/gsd:debug "login button doesn't work"`
 Usage: `/gsd:debug` (resume active session)
 
+### Quick Notes
+
+**`/gsd:note <text>`**
+Zero-friction idea capture — one command, instant save, no questions.
+
+- Saves timestamped note to `.planning/notes/` (or `~/.claude/notes/` globally)
+- Three subcommands: append (default), list, promote
+- Promote converts a note into a structured todo
+- Works without a project (falls back to global scope)
+
+Usage: `/gsd:note refactor the hook system`
+Usage: `/gsd:note list`
+Usage: `/gsd:note promote 3`
+Usage: `/gsd:note --global cross-project idea`
+
 ### Todo Management
 
 **`/gsd:add-todo [description]`**

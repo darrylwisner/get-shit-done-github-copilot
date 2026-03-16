@@ -6,12 +6,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-03-16
+
 ### Added
-- **Antigravity runtime support** — Full installation support for the Antigravity AI agent runtime (`--antigravity`), alongside Claude Code, OpenCode, Gemini, Codex, and Copilot.
+- **Antigravity runtime support** — Full installation support for the Antigravity AI agent runtime (`--antigravity`), alongside Claude Code, OpenCode, Gemini, Codex, and Copilot
+- **`/gsd:do` command** — Freeform text router that dispatches natural language to the right GSD command
+- **`/gsd:note` command** — Zero-friction idea capture with append, list, and promote-to-todo subcommands
+- **Context window warning toggle** — Config option to disable context monitor warnings (`hooks.context_monitor: false`)
+- **Comprehensive documentation** — New `docs/` directory with feature, architecture, agent, command, CLI, and configuration guides
+
+### Changed
+- `/gsd:discuss-phase` shows remaining discussion areas when asking to continue or move on
+- `/gsd:plan-phase` asks user about research instead of silently deciding
+- Improved GitHub issue and PR templates with industry best practices
+- Settings clarify balanced profile uses Sonnet for research
 
 ### Fixed
-- **Antigravity skills** — `processAttribution` was missing from `copyCommandsAsAntigravitySkills`, causing SKILL.md files to be written without commit attribution metadata.
-- **Copilot install tests** — updated agent count (12→15) and CLI assertions to account for the three UI agents added in v1.23.0.
+- Executor checks for untracked files after task commits
+- Researcher verifies package versions against npm registry before recommending
+- Health check adds CWD guard and strips archived milestones
+- `core.cjs` returns `opus` directly instead of mapping to `inherit`
+- Stats command corrects git and roadmap reporting
+- Init prefers current milestone phase-op targets
+- **Antigravity skills** — `processAttribution` was missing from `copyCommandsAsAntigravitySkills`, causing SKILL.md files to be written without commit attribution metadata
+- Copilot install tests updated for UI agent count changes
 
 ## [1.24.0] - 2026-03-15
 
@@ -1508,7 +1526,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.24.0...HEAD
+[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.25.0...HEAD
+[1.25.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.25.0
 [1.24.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.24.0
 [1.23.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.23.0
 [1.22.4]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.22.4
