@@ -132,6 +132,45 @@ User acceptance testing with auto-diagnosis.
 
 ---
 
+### `/gsd:next`
+
+Automatically advance to the next logical workflow step. Reads project state and runs the appropriate command.
+
+**Prerequisites:** `.planning/` directory exists
+**Behavior:**
+- No project → suggests `/gsd:new-project`
+- Phase needs discussion → runs `/gsd:discuss-phase`
+- Phase needs planning → runs `/gsd:plan-phase`
+- Phase needs execution → runs `/gsd:execute-phase`
+- Phase needs verification → runs `/gsd:verify-work`
+- All phases complete → suggests `/gsd:complete-milestone`
+
+```bash
+/gsd:next                           # Auto-detect and run next step
+```
+
+---
+
+### `/gsd:session-report`
+
+Generate a session report with work summary, outcomes, and estimated resource usage.
+
+**Prerequisites:** Active project with recent work
+**Produces:** `.planning/reports/SESSION_REPORT.md`
+
+```bash
+/gsd:session-report                 # Generate post-session summary
+```
+
+**Report includes:**
+- Work performed (commits, plans executed, phases progressed)
+- Outcomes and deliverables
+- Blockers and decisions made
+- Estimated token/cost usage
+- Next steps recommendation
+
+---
+
 ### `/gsd:ship`
 
 Create PR from completed phase work with auto-generated body.
