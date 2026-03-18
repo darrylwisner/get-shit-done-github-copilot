@@ -246,7 +246,7 @@ Valid override values: `opus`, `sonnet`, `haiku`, `inherit`
 | `quality` | Opus for all decision-making, Sonnet for verification | Quota available, critical architecture work |
 | `balanced` | Opus for planning only, Sonnet for everything else | Normal development (default) |
 | `budget` | Sonnet for code-writing, Haiku for research/verification | High-volume work, less critical phases |
-| `inherit` | All agents use current session model | Dynamic model switching (OpenCode `/model`) |
+| `inherit` | All agents use current session model | Dynamic model switching, **non-Anthropic providers** (OpenRouter, local models) |
 
 ---
 

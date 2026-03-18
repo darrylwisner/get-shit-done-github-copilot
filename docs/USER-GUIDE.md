@@ -50,6 +50,10 @@ A detailed reference for workflows, troubleshooting, and configuration. For quic
              │  │ /gsd:verify-work   │    │  <- Manual UAT
              │  └──────────┬─────────┘    │
              │             │              │
+             │  ┌──────────▼─────────┐    │
+             │  │ /gsd:ship          │    │  <- Create PR (optional)
+             │  └──────────┬─────────┘    │
+             │             │              │
              │     Next Phase?────────────┘
              │             │ No
              └─────────────┼──────────────┘
@@ -285,6 +289,7 @@ Controlled by `workflow.ui_safety_gate` config toggle.
 | `/gsd:execute-phase <N>` | Execute all plans in parallel waves | After planning is complete |
 | `/gsd:verify-work [N]` | Manual UAT with auto-diagnosis | After execution completes |
 | `/gsd:ship [N]` | Create PR from verified work | After verification passes |
+| `/gsd:next` | Auto-detect state and run next step | Anytime — "what should I do next?" |
 | `/gsd:ui-review [N]` | Retroactive 6-pillar visual audit | After execution or verify-work (frontend projects) |
 | `/gsd:audit-milestone` | Verify milestone met its definition of done | Before completing milestone |
 | `/gsd:complete-milestone` | Archive milestone, tag release | All phases verified |
@@ -297,6 +302,7 @@ Controlled by `workflow.ui_safety_gate` config toggle.
 | `/gsd:progress` | Show status and next steps | Anytime -- "where am I?" |
 | `/gsd:resume-work` | Restore full context from last session | Starting a new session |
 | `/gsd:pause-work` | Save structured handoff (HANDOFF.json + continue-here.md) | Stopping mid-phase |
+| `/gsd:session-report` | Generate session summary with work and outcomes | End of session, stakeholder sharing |
 | `/gsd:help` | Show all commands | Quick reference |
 | `/gsd:update` | Update GSD with changelog preview | Check for new versions |
 | `/gsd:join-discord` | Open Discord community invite | Questions or community |
@@ -426,7 +432,7 @@ Disable these to speed up phases in familiar domains or when conserving tokens.
 - **quality** -- Opus for all decision-making agents, Sonnet for read-only verification. Use when quota is available and the work is critical.
 - **balanced** -- Opus only for planning (where architecture decisions happen), Sonnet for everything else. The default for good reason.
 - **budget** -- Sonnet for anything that writes code, Haiku for research and verification. Use for high-volume work or less critical phases.
-- **inherit** -- All agents use the current session model. Best when switching models dynamically (for example OpenCode `/model`).
+- **inherit** -- All agents use the current session model. Best when switching models dynamically (e.g. OpenCode `/model`), or **required** when using non-Anthropic providers (OpenRouter, local models) to avoid unexpected API costs.
 
 ---
 
@@ -443,12 +449,14 @@ claude --dangerously-skip-permissions
 /gsd:plan-phase 1           # Research + plan + verify
 /gsd:execute-phase 1        # Parallel execution
 /gsd:verify-work 1          # Manual UAT
+/gsd:ship 1                 # Create PR from verified work
 /gsd:ui-review 1            # Visual audit (frontend phases)
 /clear
-/gsd:discuss-phase 2        # Repeat for each phase
+/gsd:next                   # Auto-detect and run next step
 ...
 /gsd:audit-milestone        # Check everything shipped
 /gsd:complete-milestone     # Archive, tag, done
+/gsd:session-report         # Generate session summary
 ```
 
 ### New Project from Existing Document
@@ -540,6 +548,10 @@ Do not re-run `/gsd:execute-phase`. Use `/gsd:quick` for targeted fixes, or `/gs
 
 Switch to budget profile: `/gsd:set-profile budget`. Disable research and plan-check agents via `/gsd:settings` if the domain is familiar to you (or to Claude).
 
+### Using Non-Anthropic Models (OpenRouter, Local)
+
+If GSD subagents call Anthropic models and you're paying through OpenRouter or a local provider, switch to the `inherit` profile: `/gsd:set-profile inherit`. This makes all agents use your current session model instead of specific Anthropic models. See also `/gsd:settings` → Model Profile → Inherit.
+
 ### Working on a Sensitive/Private Project
 
 Set `commit_docs: false` during `/gsd:new-project` or via `/gsd:settings`. Add `.planning/` to your `.gitignore`. Planning artifacts stay local and never touch git.
@@ -567,6 +579,8 @@ A known workaround exists for a Claude Code classification bug. GSD's orchestrat
 | Plan doesn't match your vision | `/gsd:discuss-phase [N]` then re-plan |
 | Costs running high | `/gsd:set-profile budget` and `/gsd:settings` to toggle agents off |
 | Update broke local changes | `/gsd:reapply-patches` |
+| Want session summary for stakeholder | `/gsd:session-report` |
+| Don't know what step is next | `/gsd:next` |
 
 ---
 
@@ -582,7 +596,9 @@ For reference, here is what GSD creates in your project:
   STATE.md                # Decisions, blockers, session memory
   config.json             # Workflow configuration
   MILESTONES.md           # Completed milestone archive
+  HANDOFF.json            # Structured session handoff (from /gsd:pause-work)
   research/               # Domain research from /gsd:new-project
+  reports/                # Session reports (from /gsd:session-report)
   todos/
     pending/              # Captured ideas awaiting work
     done/                 # Completed todos

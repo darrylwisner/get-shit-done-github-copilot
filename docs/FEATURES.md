@@ -20,33 +20,38 @@
   - [Quick Mode](#10-quick-mode)
   - [Autonomous Mode](#11-autonomous-mode)
   - [Freeform Routing](#12-freeform-routing)
+  - [Note Capture](#13-note-capture)
+  - [Auto-Advance (Next)](#14-auto-advance-next)
 - [Quality Assurance Features](#quality-assurance-features)
-  - [Nyquist Validation](#13-nyquist-validation)
-  - [Plan Checking](#14-plan-checking)
-  - [Post-Execution Verification](#15-post-execution-verification)
-  - [Node Repair](#16-node-repair)
-  - [Health Validation](#17-health-validation)
+  - [Nyquist Validation](#15-nyquist-validation)
+  - [Plan Checking](#16-plan-checking)
+  - [Post-Execution Verification](#17-post-execution-verification)
+  - [Node Repair](#18-node-repair)
+  - [Health Validation](#19-health-validation)
+  - [Cross-Phase Regression Gate](#20-cross-phase-regression-gate)
+  - [Requirements Coverage Gate](#21-requirements-coverage-gate)
 - [Context Engineering Features](#context-engineering-features)
-  - [Context Window Monitoring](#18-context-window-monitoring)
-  - [Session Management](#19-session-management)
-  - [Multi-Agent Orchestration](#20-multi-agent-orchestration)
-  - [Model Profiles](#21-model-profiles)
+  - [Context Window Monitoring](#22-context-window-monitoring)
+  - [Session Management](#23-session-management)
+  - [Session Reporting](#24-session-reporting)
+  - [Multi-Agent Orchestration](#25-multi-agent-orchestration)
+  - [Model Profiles](#26-model-profiles)
 - [Brownfield Features](#brownfield-features)
-  - [Codebase Mapping](#22-codebase-mapping)
+  - [Codebase Mapping](#27-codebase-mapping)
 - [Utility Features](#utility-features)
-  - [Debug System](#23-debug-system)
-  - [Todo Management](#24-todo-management)
-  - [Statistics Dashboard](#25-statistics-dashboard)
-  - [Update System](#26-update-system)
-  - [Settings Management](#27-settings-management)
-  - [Test Generation](#28-test-generation)
+  - [Debug System](#28-debug-system)
+  - [Todo Management](#29-todo-management)
+  - [Statistics Dashboard](#30-statistics-dashboard)
+  - [Update System](#31-update-system)
+  - [Settings Management](#32-settings-management)
+  - [Test Generation](#33-test-generation)
 - [Infrastructure Features](#infrastructure-features)
-  - [Git Integration](#29-git-integration)
-  - [CLI Tools](#30-cli-tools)
-  - [Multi-Runtime Support](#31-multi-runtime-support)
-  - [Hook System](#32-hook-system)
-  - [Developer Profiling](#33-developer-profiling)
-  - [Execution Hardening](#34-execution-hardening)
+  - [Git Integration](#34-git-integration)
+  - [CLI Tools](#35-cli-tools)
+  - [Multi-Runtime Support](#36-multi-runtime-support)
+  - [Hook System](#37-hook-system)
+  - [Developer Profiling](#38-developer-profiling)
+  - [Execution Hardening](#39-execution-hardening)
 
 ---
 
@@ -408,9 +413,34 @@
 
 ---
 
+### 14. Auto-Advance (Next)
+
+**Command:** `/gsd:next`
+
+**Purpose:** Automatically detect current project state and advance to the next logical workflow step, eliminating the need to remember which phase/step you're on.
+
+**Requirements:**
+- REQ-NEXT-01: System MUST read STATE.md, ROADMAP.md, and phase directories to determine current position
+- REQ-NEXT-02: System MUST detect whether discuss, plan, execute, or verify is needed
+- REQ-NEXT-03: System MUST invoke the correct command automatically
+- REQ-NEXT-04: System MUST suggest `/gsd:new-project` if no project exists
+- REQ-NEXT-05: System MUST suggest `/gsd:complete-milestone` when all phases are complete
+
+**State Detection Logic:**
+| State | Action |
+|-------|--------|
+| No `.planning/` directory | Suggest `/gsd:new-project` |
+| Phase has no CONTEXT.md | Run `/gsd:discuss-phase` |
+| Phase has no PLAN.md files | Run `/gsd:plan-phase` |
+| Phase has plans but no SUMMARY.md | Run `/gsd:execute-phase` |
+| Phase executed but no VERIFICATION.md | Run `/gsd:verify-work` |
+| All phases complete | Suggest `/gsd:complete-milestone` |
+
+---
+
 ## Quality Assurance Features
 
-### 14. Nyquist Validation
+### 15. Nyquist Validation
 
 **Purpose:** Map automated test coverage to phase requirements before any code is written. Named after the Nyquist sampling theorem — ensures a feedback signal exists for every requirement.
 
@@ -433,7 +463,7 @@
 
 ---
 
-### 15. Plan Checking
+### 16. Plan Checking
 
 **Purpose:** Goal-backward verification that plans will achieve phase objectives before execution.
 
@@ -445,7 +475,7 @@
 
 ---
 
-### 16. Post-Execution Verification
+### 17. Post-Execution Verification
 
 **Purpose:** Automated check that the codebase delivers what the phase promised.
 
@@ -457,7 +487,7 @@
 
 ---
 
-### 17. Node Repair
+### 18. Node Repair
 
 **Purpose:** Autonomous recovery when task verification fails during execution.
 
@@ -471,7 +501,7 @@
 
 ---
 
-### 18. Health Validation
+### 19. Health Validation
 
 **Command:** `/gsd:health [--repair]`
 
@@ -486,9 +516,37 @@
 
 ---
 
+### 20. Cross-Phase Regression Gate
+
+**Purpose:** Prevent regressions from compounding across phases by running prior phases' test suites after execution.
+
+**Requirements:**
+- REQ-REGR-01: System MUST run test suites from all completed prior phases after phase execution
+- REQ-REGR-02: System MUST report any test failures as cross-phase regressions
+- REQ-REGR-03: Regressions MUST be surfaced before post-execution verification
+- REQ-REGR-04: System MUST identify which prior phase's tests were broken
+
+**When:** Runs automatically during `/gsd:execute-phase` before the verifier step.
+
+---
+
+### 21. Requirements Coverage Gate
+
+**Purpose:** Ensure all phase requirements are covered by at least one plan before planning completes.
+
+**Requirements:**
+- REQ-COVGATE-01: System MUST extract all requirement IDs assigned to the phase from ROADMAP.md
+- REQ-COVGATE-02: System MUST verify each requirement appears in at least one PLAN.md
+- REQ-COVGATE-03: Uncovered requirements MUST block planning completion
+- REQ-COVGATE-04: System MUST report which specific requirements lack plan coverage
+
+**When:** Runs automatically at the end of `/gsd:plan-phase` after the plan checker loop.
+
+---
+
 ## Context Engineering Features
 
-### 19. Context Window Monitoring
+### 22. Context Window Monitoring
 
 **Purpose:** Prevent context rot by alerting both user and agent when context is running low.
 
@@ -508,7 +566,7 @@
 
 ---
 
-### 20. Session Management
+### 23. Session Management
 
 **Commands:** `/gsd:pause-work`, `/gsd:resume-work`, `/gsd:progress`
 
@@ -525,7 +583,32 @@
 
 ---
 
-### 21. Multi-Agent Orchestration
+### 24. Session Reporting
+
+**Command:** `/gsd:session-report`
+
+**Purpose:** Generate a structured post-session summary document capturing work performed, outcomes achieved, and estimated resource usage.
+
+**Requirements:**
+- REQ-REPORT-01: System MUST gather data from STATE.md, git log, and plan/summary files
+- REQ-REPORT-02: System MUST include commits made, plans executed, and phases progressed
+- REQ-REPORT-03: System MUST estimate token usage and cost based on session activity
+- REQ-REPORT-04: System MUST include active blockers and decisions made
+- REQ-REPORT-05: System MUST recommend next steps
+
+**Produces:** `.planning/reports/SESSION_REPORT.md`
+
+**Report Sections:**
+- Session overview (duration, milestone, phase)
+- Work performed (commits, plans, phases)
+- Outcomes and deliverables
+- Blockers and decisions
+- Resource estimates (tokens, cost)
+- Next steps recommendation
+
+---
+
+### 25. Multi-Agent Orchestration
 
 **Purpose:** Coordinate specialized agents with fresh context windows for each task.
 
@@ -539,7 +622,7 @@
 
 ---
 
-### 22. Model Profiles
+### 26. Model Profiles
 
 **Command:** `/gsd:set-profile <quality|balanced|budget|inherit>`
 
@@ -550,6 +633,7 @@
 - REQ-MODEL-02: Each profile MUST define model tier per agent (see profile table)
 - REQ-MODEL-03: Per-agent overrides MUST take precedence over profile
 - REQ-MODEL-04: `inherit` profile MUST defer to runtime's current model selection
+- REQ-MODEL-04a: `inherit` profile MUST be used when running non-Anthropic providers (OpenRouter, local models) to avoid unexpected API costs
 - REQ-MODEL-05: Profile switch MUST be programmatic (script, not LLM-driven)
 - REQ-MODEL-06: Model resolution MUST happen once per orchestration, not per spawn
 
@@ -574,7 +658,7 @@
 
 ## Brownfield Features
 
-### 23. Codebase Mapping
+### 27. Codebase Mapping
 
 **Command:** `/gsd:map-codebase [area]`
 
@@ -602,7 +686,7 @@
 
 ## Utility Features
 
-### 24. Debug System
+### 28. Debug System
 
 **Command:** `/gsd:debug [description]`
 
@@ -620,7 +704,7 @@
 
 ---
 
-### 25. Todo Management
+### 29. Todo Management
 
 **Commands:** `/gsd:add-todo [desc]`, `/gsd:check-todos`
 
@@ -634,7 +718,7 @@
 
 ---
 
-### 26. Statistics Dashboard
+### 30. Statistics Dashboard
 
 **Command:** `/gsd:stats`
 
@@ -648,7 +732,7 @@
 
 ---
 
-### 27. Update System
+### 31. Update System
 
 **Command:** `/gsd:update`
 
@@ -663,7 +747,7 @@
 
 ---
 
-### 28. Settings Management
+### 32. Settings Management
 
 **Command:** `/gsd:settings`
 
@@ -696,7 +780,7 @@
 
 ---
 
-### 29. Test Generation
+### 33. Test Generation
 
 **Command:** `/gsd:add-tests [N]`
 
@@ -711,7 +795,7 @@
 
 ## Infrastructure Features
 
-### 30. Git Integration
+### 34. Git Integration
 
 **Purpose:** Atomic commits, branching strategies, and clean history management.
 
@@ -737,7 +821,7 @@ fix(03-01): correct auth token expiry
 
 ---
 
-### 31. CLI Tools
+### 35. CLI Tools
 
 **Purpose:** Programmatic utilities for workflows and agents, replacing repetitive inline bash patterns.
 
@@ -752,7 +836,7 @@ fix(03-01): correct auth token expiry
 
 ---
 
-### 32. Multi-Runtime Support
+### 36. Multi-Runtime Support
 
 **Purpose:** Run GSD across 6 different AI coding agent runtimes.
 
@@ -775,7 +859,7 @@ fix(03-01): correct auth token expiry
 
 ---
 
-### 33. Hook System
+### 37. Hook System
 
 **Purpose:** Runtime event hooks for context monitoring, status display, and update checking.
 
@@ -795,7 +879,7 @@ fix(03-01): correct auth token expiry
 
 Color coding: <50% green, <65% yellow, <80% orange, ≥80% red with skull emoji
 
-### 33. Developer Profiling
+### 38. Developer Profiling
 
 **Command:** `/gsd:profile-user [--questionnaire] [--refresh]`
 
@@ -831,7 +915,7 @@ Color coding: <50% green, <65% yellow, <80% orange, ≥80% red with skull emoji
 - REQ-PROF-03: Questionnaire MUST be available as fallback when no session history exists
 - REQ-PROF-04: Generated artifacts MUST be discoverable by Claude Code (CLAUDE.md integration)
 
-### 34. Execution Hardening
+### 39. Execution Hardening
 
 **Purpose:** Three additive quality improvements to the execution pipeline that catch cross-plan failures before they cascade.
 
