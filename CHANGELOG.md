@@ -6,15 +6,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-03-18
+
 ### Added
-- **`/gsd:profile-user` command** — Developer behavioral profiling from session analysis across 8 dimensions (communication, decisions, debugging, UX, vendor choices, frustrations, learning style, explanation depth). Generates `USER-PROFILE.md`, `/gsd:dev-preferences`, and `CLAUDE.md` profile section for personalized responses. Includes `--questionnaire` fallback and `--refresh` for re-analysis
-- **Execution hardening** — Three quality improvements to the execution pipeline:
-  - Pre-wave dependency check in `execute-phase`: verifies key-links from prior wave artifacts before spawning next wave
-  - Cross-Plan Data Contracts (Dimension 9) in plan-checker: detects incompatible transformations between plans sharing data pipelines
-  - Export-level spot check in `verify-phase`: catches dead stores that exist in wired files but are never called
+- **Developer profiling pipeline** — `/gsd:profile-user` analyzes Claude Code session history to build behavioral profiles across 8 dimensions (communication, decisions, debugging, UX, vendor choices, frustrations, learning style, explanation depth). Generates `USER-PROFILE.md`, `/gsd:dev-preferences`, and `CLAUDE.md` profile section. Includes `--questionnaire` fallback and `--refresh` for re-analysis (#1084)
+- **`/gsd:ship` command** — PR creation from verified phase work. Auto-generates rich PR body from planning artifacts, pushes branch, creates PR via `gh`, and updates STATE.md (#829)
+- **`/gsd:next` command** — Automatic workflow advancement to the next logical step (#927)
+- **Cross-phase regression gate** — Execute-phase runs prior phases' test suites after execution, catching regressions before they compound (#945)
+- **Requirements coverage gate** — Plan-phase verifies all phase requirements are covered by at least one plan before proceeding (#984)
+- **Structured session handoff artifact** — `/gsd:pause-work` writes `.planning/HANDOFF.json` for machine-readable cross-session continuity (#940)
+- **WAITING.json signal file** — Machine-readable signal for decision points requiring user input (#1034)
+- **Interactive executor mode** — Pair-programming style execution with step-by-step user involvement (#963)
+- **MCP tool awareness** — GSD subagents can discover and use MCP server tools (#973)
+- **Codex hooks support** — SessionStart hook support for Codex runtime (#1020)
+- **Model alias-to-full-ID resolution** — Task API compatibility for model alias strings (#991)
+- **Execution hardening** — Pre-wave dependency checks, cross-plan data contracts, and export-level spot checks (#1082)
+- **Markdown normalization** — Generated markdown conforms to markdownlint standards (#1112)
+
+### Changed
+- Test suite consolidated: runtime converters deduplicated, helpers standardized (#1169)
+- Added test coverage for model-profiles, templates, profile-pipeline, profile-output (#1170)
+- Documented `inherit` profile for non-Anthropic providers (#1036)
 
 ### Fixed
-- **Requirements `mark-complete` is now idempotent** — Re-marking already-completed requirements returns `already_complete` instead of `not_found` (#948)
+- Agent suggests non-existent `/gsd:transition` — replaced with real commands (#1081, #1100)
+- PROJECT.md drift and phase completion counter accuracy (#956)
+- Copilot executor stuck issue — runtime compatibility fallback added (#1128)
+- Explicit agent type listings prevent fallback after `/clear` (#949)
+- Nested Skill calls breaking AskUserQuestion (#1009)
+- Negative-heuristic `stripShippedMilestones` replaced with positive milestone lookup (#1145)
+- Hook version tracking, stale hook detection, stdin timeout, session-report command (#1153, #1157, #1161, #1162)
+- Hook build script syntax validation (#1165)
+- Verification examples use `fetch()` instead of `curl` for Windows compatibility (#899)
+- Sequential fallback for `map-codebase` on runtimes without Task tool (#1174)
+- Zsh word-splitting fix for RUNTIME_DIRS arrays (#1173)
+- CRLF frontmatter parsing, duplicate cwd crash, STATE.md phase transitions (#1105)
+- Requirements `mark-complete` made idempotent (#948)
+- Profile template paths, field names, and evidence key corrections (#1095)
+- Duplicate variable declaration removed (#1101)
 
 ## [1.25.0] - 2026-03-16
 
@@ -1536,7 +1565,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.25.0...HEAD
+[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.26.0...HEAD
+[1.26.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.26.0
 [1.25.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.25.0
 [1.24.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.24.0
 [1.23.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.23.0

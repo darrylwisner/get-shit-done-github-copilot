@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, normalizePhaseName, output, error, findPhaseInternal, stripShippedMilestones, replaceInCurrentMilestone } = require('./core.cjs');
+const { escapeRegex, normalizePhaseName, output, error, findPhaseInternal, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone } = require('./core.cjs');
 
 function cmdRoadmapGetPhase(cwd, phaseNum, raw) {
   const roadmapPath = path.join(cwd, '.planning', 'ROADMAP.md');
@@ -15,7 +15,7 @@ function cmdRoadmapGetPhase(cwd, phaseNum, raw) {
   }
 
   try {
-    const content = stripShippedMilestones(fs.readFileSync(roadmapPath, 'utf-8'));
+    const content = extractCurrentMilestone(fs.readFileSync(roadmapPath, 'utf-8'), cwd);
 
     // Escape special regex chars in phase number, handle decimal
     const escapedPhase = escapeRegex(phaseNum);
@@ -99,7 +99,7 @@ function cmdRoadmapAnalyze(cwd, raw) {
   }
 
   const rawContent = fs.readFileSync(roadmapPath, 'utf-8');
-  const content = stripShippedMilestones(rawContent);
+  const content = extractCurrentMilestone(rawContent, cwd);
   const phasesDir = path.join(cwd, '.planning', 'phases');
 
   // Extract all phase headings: ## Phase N: Name or ### Phase N: Name

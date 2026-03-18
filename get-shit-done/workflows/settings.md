@@ -49,7 +49,7 @@ AskUserQuestion([
       { label: "Quality", description: "Opus everywhere except verification (highest cost)" },
       { label: "Balanced (Recommended)", description: "Opus for planning, Sonnet for research/execution/verification" },
       { label: "Budget", description: "Sonnet for writing, Haiku for research/verification (lowest cost)" },
-      { label: "Inherit", description: "Use current session model for all agents (best for OpenCode /model)" }
+      { label: "Inherit", description: "Use current session model for all agents (best for OpenRouter, local models, or runtime model switching)" }
     ]
   },
   {

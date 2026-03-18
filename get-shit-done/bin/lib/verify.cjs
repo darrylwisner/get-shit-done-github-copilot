@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { safeReadFile, normalizePhaseName, execGit, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, output, error } = require('./core.cjs');
+const { safeReadFile, normalizePhaseName, execGit, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, extractCurrentMilestone, output, error } = require('./core.cjs');
 const { extractFrontmatter, parseMustHavesBlock } = require('./frontmatter.cjs');
 const { writeStateMd } = require('./state.cjs');
 
@@ -409,7 +409,7 @@ function cmdValidateConsistency(cwd, raw) {
   }
 
   const roadmapContentRaw = fs.readFileSync(roadmapPath, 'utf-8');
-  const roadmapContent = stripShippedMilestones(roadmapContentRaw);
+  const roadmapContent = extractCurrentMilestone(roadmapContentRaw, cwd);
 
   // Extract phases from ROADMAP (archived milestones already stripped)
   const roadmapPhases = new Set();
@@ -695,7 +695,7 @@ function cmdValidateHealth(cwd, options, raw) {
   // Inline subset of cmdValidateConsistency
   if (fs.existsSync(roadmapPath)) {
     const roadmapContentRaw = fs.readFileSync(roadmapPath, 'utf-8');
-    const roadmapContent = stripShippedMilestones(roadmapContentRaw);
+    const roadmapContent = extractCurrentMilestone(roadmapContentRaw, cwd);
     const roadmapPhases = new Set();
     const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:/gi;
     let m;

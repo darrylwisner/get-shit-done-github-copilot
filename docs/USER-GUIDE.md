@@ -284,6 +284,7 @@ Controlled by `workflow.ui_safety_gate` config toggle.
 | `/gsd:plan-phase [N]` | Research + plan + verify | Before executing a phase |
 | `/gsd:execute-phase <N>` | Execute all plans in parallel waves | After planning is complete |
 | `/gsd:verify-work [N]` | Manual UAT with auto-diagnosis | After execution completes |
+| `/gsd:ship [N]` | Create PR from verified work | After verification passes |
 | `/gsd:ui-review [N]` | Retroactive 6-pillar visual audit | After execution or verify-work (frontend projects) |
 | `/gsd:audit-milestone` | Verify milestone met its definition of done | Before completing milestone |
 | `/gsd:complete-milestone` | Archive milestone, tag release | All phases verified |
@@ -295,7 +296,7 @@ Controlled by `workflow.ui_safety_gate` config toggle.
 |---------|---------|-------------|
 | `/gsd:progress` | Show status and next steps | Anytime -- "where am I?" |
 | `/gsd:resume-work` | Restore full context from last session | Starting a new session |
-| `/gsd:pause-work` | Save context handoff | Stopping mid-phase |
+| `/gsd:pause-work` | Save structured handoff (HANDOFF.json + continue-here.md) | Stopping mid-phase |
 | `/gsd:help` | Show all commands | Quick reference |
 | `/gsd:update` | Update GSD with changelog preview | Check for new versions |
 | `/gsd:join-discord` | Open Discord community invite | Questions or community |

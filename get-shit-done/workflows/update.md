@@ -20,8 +20,11 @@ First, derive `PREFERRED_RUNTIME` from the invoking prompt's `execution_context`
 Use `PREFERRED_RUNTIME` as the first runtime checked so `/gsd:update` targets the runtime that invoked it.
 
 ```bash
-# Runtime candidates: "<runtime>:<config-dir>"
-RUNTIME_DIRS="claude:.claude opencode:.config/opencode opencode:.opencode gemini:.gemini codex:.codex"
+# Runtime candidates: "<runtime>:<config-dir>" stored as an array.
+# Using an array instead of a space-separated string ensures correct
+# iteration in both bash and zsh (zsh does not word-split unquoted
+# variables by default). Fixes #1173.
+RUNTIME_DIRS=( "claude:.claude" "opencode:.config/opencode" "opencode:.opencode" "gemini:.gemini" "codex:.codex" )
 
 # PREFERRED_RUNTIME should be set from execution_context before running this block.
 # If not set, infer from runtime env vars; fallback to claude.
@@ -40,23 +43,23 @@ if [ -z "$PREFERRED_RUNTIME" ]; then
 fi
 
 # Reorder entries so preferred runtime is checked first.
-ORDERED_RUNTIME_DIRS=""
-for entry in $RUNTIME_DIRS; do
+ORDERED_RUNTIME_DIRS=()
+for entry in "${RUNTIME_DIRS[@]}"; do
   runtime="${entry%%:*}"
   if [ "$runtime" = "$PREFERRED_RUNTIME" ]; then
-    ORDERED_RUNTIME_DIRS="$ORDERED_RUNTIME_DIRS $entry"
+    ORDERED_RUNTIME_DIRS+=( "$entry" )
   fi
 done
-for entry in $RUNTIME_DIRS; do
+for entry in "${RUNTIME_DIRS[@]}"; do
   runtime="${entry%%:*}"
   if [ "$runtime" != "$PREFERRED_RUNTIME" ]; then
-    ORDERED_RUNTIME_DIRS="$ORDERED_RUNTIME_DIRS $entry"
+    ORDERED_RUNTIME_DIRS+=( "$entry" )
   fi
 done
 
 # Check local first (takes priority only if valid and distinct from global)
 LOCAL_VERSION_FILE="" LOCAL_MARKER_FILE="" LOCAL_DIR="" LOCAL_RUNTIME=""
-for entry in $ORDERED_RUNTIME_DIRS; do
+for entry in "${ORDERED_RUNTIME_DIRS[@]}"; do
   runtime="${entry%%:*}"
   dir="${entry#*:}"
   if [ -f "./$dir/get-shit-done/VERSION" ] || [ -f "./$dir/get-shit-done/workflows/update.md" ]; then
@@ -69,7 +72,7 @@ for entry in $ORDERED_RUNTIME_DIRS; do
 done
 
 GLOBAL_VERSION_FILE="" GLOBAL_MARKER_FILE="" GLOBAL_DIR="" GLOBAL_RUNTIME=""
-for entry in $ORDERED_RUNTIME_DIRS; do
+for entry in "${ORDERED_RUNTIME_DIRS[@]}"; do
   runtime="${entry%%:*}"
   dir="${entry#*:}"
   if [ -f "$HOME/$dir/get-shit-done/VERSION" ] || [ -f "$HOME/$dir/get-shit-done/workflows/update.md" ]; then
