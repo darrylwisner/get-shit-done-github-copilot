@@ -6,9 +6,41 @@ Execute all plans in a phase using wave-based parallel execution. Orchestrator s
 Orchestrator coordinates, not executes. Each subagent loads the full execute-plan context. Orchestrator: discover plans → analyze deps → group waves → spawn agents → handle checkpoints → collect results.
 </core_principle>
 
+<runtime_compatibility>
+**Subagent spawning is runtime-specific:**
+- **Claude Code:** Uses `Task(subagent_type="gsd-executor", ...)` — blocks until complete, returns result
+- **Copilot:** Uses `@gsd-executor` agent reference — if subagent spawning hangs or fails to return,
+  fall back to **sequential inline execution**: read and follow execute-plan.md directly for each plan
+  instead of spawning parallel agents. This is slower but reliable.
+- **Other runtimes (Gemini, Codex, OpenCode):** If Task/subagent API is unavailable, use sequential
+  inline execution as the fallback.
+
+**Fallback rule:** If a spawned agent completes its work (commits visible, SUMMARY.md exists) but
+the orchestrator never receives the completion signal, treat it as successful based on spot-checks
+and continue to the next wave/plan.
+</runtime_compatibility>
+
 <required_reading>
 Read STATE.md before any operation to load project context.
 </required_reading>
+
+<available_agent_types>
+These are the valid GSD subagent types registered in .claude/agents/ (or equivalent for your runtime).
+Always use the exact name from this list — do not fall back to 'general-purpose' or other built-in types:
+
+- gsd-executor — Executes plan tasks, commits, creates SUMMARY.md
+- gsd-verifier — Verifies phase completion, checks quality gates
+- gsd-planner — Creates detailed plans from phase scope
+- gsd-phase-researcher — Researches technical approaches for a phase
+- gsd-plan-checker — Reviews plan quality before execution
+- gsd-debugger — Diagnoses and fixes issues
+- gsd-codebase-mapper — Maps project structure and dependencies
+- gsd-integration-checker — Checks cross-phase integration
+- gsd-nyquist-auditor — Validates verification coverage
+- gsd-ui-researcher — Researches UI/UX approaches
+- gsd-ui-checker — Reviews UI implementation quality
+- gsd-ui-auditor — Audits UI against design requirements
+</available_agent_types>
 
 <process>
 
@@ -35,6 +67,54 @@ if [[ ! "$ARGUMENTS" =~ --auto ]]; then
   node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow._auto_chain_active false 2>/dev/null
 fi
 ```
+</step>
+
+<step name="check_interactive_mode">
+**Parse `--interactive` flag from $ARGUMENTS.**
+
+**If `--interactive` flag present:** Switch to interactive execution mode.
+
+Interactive mode executes plans sequentially **inline** (no subagent spawning) with user
+checkpoints between tasks. The user can review, modify, or redirect work at any point.
+
+**Interactive execution flow:**
+
+1. Load plan inventory as normal (discover_and_group_plans)
+2. For each plan (sequentially, ignoring wave grouping):
+
+   a. **Present the plan to the user:**
+      ```
+      ## Plan {plan_id}: {plan_name}
+
+      Objective: {from plan file}
+      Tasks: {task_count}
+
+      Options:
+      - Execute (proceed with all tasks)
+      - Review first (show task breakdown before starting)
+      - Skip (move to next plan)
+      - Stop (end execution, save progress)
+      ```
+
+   b. **If "Review first":** Read and display the full plan file. Ask again: Execute, Modify, Skip.
+
+   c. **If "Execute":** Read and follow `~/.claude/get-shit-done/workflows/execute-plan.md` **inline**
+      (do NOT spawn a subagent). Execute tasks one at a time.
+
+   d. **After each task:** Pause briefly. If the user intervenes (types anything), stop and address
+      their feedback before continuing. Otherwise proceed to next task.
+
+   e. **After plan complete:** Show results, commit, create SUMMARY.md, then present next plan.
+
+3. After all plans: proceed to verification (same as normal mode).
+
+**Benefits of interactive mode:**
+- No subagent overhead — dramatically lower token usage
+- User catches mistakes early — saves costly verification cycles
+- Maintains GSD's planning/tracking structure
+- Best for: small phases, bug fixes, verification gaps, learning GSD
+
+**Skip to handle_branching step** (interactive plans execute inline after grouping).
 </step>
 
 <step name="handle_branching">
@@ -139,6 +219,13 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        - ./CLAUDE.md (Project instructions, if exists — follow project-specific guidelines and coding conventions)
        - .claude/skills/ or .agents/skills/ (Project skills, if either exists — list skills, read SKILL.md for each, follow relevant rules during implementation)
        </files_to_read>
+
+       <mcp_tools>
+       If CLAUDE.md or project instructions reference MCP tools (e.g. jCodeMunch, context7,
+       or other MCP servers), prefer those tools over Grep/Glob for code navigation when available.
+       MCP tools often save significant tokens by providing structured code indexes.
+       Check tool availability first — if MCP tools are not accessible, fall back to Grep/Glob.
+       </mcp_tools>
 
        <success_criteria>
        - [ ] All tasks executed
@@ -328,6 +415,67 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(phase-${PARENT
 ```
 </step>
 
+<step name="regression_gate">
+Run prior phases' test suites to catch cross-phase regressions BEFORE verification.
+
+**Skip if:** This is the first phase (no prior phases), or no prior VERIFICATION.md files exist.
+
+**Step 1: Discover prior phases' test files**
+```bash
+# Find all VERIFICATION.md files from prior phases in current milestone
+PRIOR_VERIFICATIONS=$(find .planning/phases/ -name "*-VERIFICATION.md" ! -path "*${PHASE_NUMBER}*" 2>/dev/null)
+```
+
+**Step 2: Extract test file lists from prior verifications**
+
+For each VERIFICATION.md found, look for test file references:
+- Lines containing `test`, `spec`, or `__tests__` paths
+- The "Test Suite" or "Automated Checks" section
+- File patterns from `key-files.created` in corresponding SUMMARY.md files that match `*.test.*` or `*.spec.*`
+
+Collect all unique test file paths into `REGRESSION_FILES`.
+
+**Step 3: Run regression tests (if any found)**
+
+```bash
+# Detect test runner and run prior phase tests
+if [ -f "package.json" ]; then
+  # Node.js — use project's test runner
+  npx jest ${REGRESSION_FILES} --passWithNoTests --no-coverage -q 2>&1 || npx vitest run ${REGRESSION_FILES} 2>&1
+elif [ -f "Cargo.toml" ]; then
+  cargo test 2>&1
+elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+  python -m pytest ${REGRESSION_FILES} -q --tb=short 2>&1
+fi
+```
+
+**Step 4: Report results**
+
+If all tests pass:
+```
+✓ Regression gate: {N} prior-phase test files passed — no regressions detected
+```
+→ Proceed to verify_phase_goal
+
+If any tests fail:
+```
+## ⚠ Cross-Phase Regression Detected
+
+Phase {X} execution may have broken functionality from prior phases.
+
+| Test File | Phase | Status | Detail |
+|-----------|-------|--------|--------|
+| {file} | {origin_phase} | FAILED | {first_failure_line} |
+
+Options:
+1. Fix regressions before verification (recommended)
+2. Continue to verification anyway (regressions will compound)
+3. Abort phase — roll back and re-plan
+```
+
+Use AskUserQuestion to present the options.
+</step>
+
 <step name="verify_phase_goal">
 Verify phase achieved its GOAL, not just completed tasks.
 
@@ -412,6 +560,28 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(phase-{X}): co
 ```
 </step>
 
+<step name="update_project_md">
+**Evolve PROJECT.md to reflect phase completion (prevents planning document drift — #956):**
+
+PROJECT.md tracks validated requirements, decisions, and current state. Without this step,
+PROJECT.md falls behind silently over multiple phases.
+
+1. Read `.planning/PROJECT.md`
+2. If the file exists and has a `## Validated Requirements` or `## Requirements` section:
+   - Move any requirements validated by this phase from Active → Validated
+   - Add a brief note: `Validated in Phase {X}: {Name}`
+3. If the file has a `## Current State` or similar section:
+   - Update it to reflect this phase's completion (e.g., "Phase {X} complete — {one-liner}")
+4. Update the `Last updated:` footer to today's date
+5. Commit the change:
+
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(phase-{X}): evolve PROJECT.md after phase completion" --files .planning/PROJECT.md
+```
+
+**Skip this step if** `.planning/PROJECT.md` does not exist.
+</step>
+
 <step name="offer_next">
 
 **Exception:** If `gaps_found`, the `verify_phase_goal` step already presents the gap-closure path (`/gsd:plan-phase {X} --gaps`). No additional routing needed — skip auto-advance.
@@ -465,6 +635,8 @@ Read and follow `~/.claude/get-shit-done/workflows/transition.md`, passing throu
 
 **STOP. Do not auto-advance. Do not execute transition. Do not plan next phase. Present options to the user and wait.**
 
+**IMPORTANT: There is NO `/gsd:transition` command. Never suggest it. The transition workflow is internal only.**
+
 ```
 ## ✓ Phase {X}: {Name} Complete
 
@@ -473,6 +645,8 @@ Read and follow `~/.claude/get-shit-done/workflows/transition.md`, passing throu
 /gsd:plan-phase {next} — plan next phase
 /gsd:execute-phase {next} — execute next phase
 ```
+
+Only suggest the commands listed above. Do not invent or hallucinate command names.
 </step>
 
 </process>

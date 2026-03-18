@@ -778,6 +778,53 @@ function cmdStateBeginPhase(cwd, phaseNumber, phaseName, planCount, raw) {
   output({ updated, phase: phaseNumber, phase_name: phaseName || null, plan_count: planCount || null }, raw, updated.length > 0 ? 'true' : 'false');
 }
 
+/**
+ * Write a WAITING.json signal file when GSD hits a decision point.
+ * External watchers (fswatch, polling, orchestrators) can detect this.
+ * File is written to .planning/WAITING.json (or .gsd/WAITING.json if .gsd exists).
+ * Fixes #1034.
+ */
+function cmdSignalWaiting(cwd, type, question, options, phase, raw) {
+  const gsdDir = fs.existsSync(path.join(cwd, '.gsd')) ? path.join(cwd, '.gsd') : path.join(cwd, '.planning');
+  const waitingPath = path.join(gsdDir, 'WAITING.json');
+
+  const signal = {
+    status: 'waiting',
+    type: type || 'decision_point',
+    question: question || null,
+    options: options ? options.split('|').map(o => o.trim()) : [],
+    since: new Date().toISOString(),
+    phase: phase || null,
+  };
+
+  try {
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(waitingPath, JSON.stringify(signal, null, 2), 'utf-8');
+    output({ signaled: true, path: waitingPath }, raw, 'true');
+  } catch (e) {
+    output({ signaled: false, error: e.message }, raw, 'false');
+  }
+}
+
+/**
+ * Remove the WAITING.json signal file when user answers and agent resumes.
+ */
+function cmdSignalResume(cwd, raw) {
+  const paths = [
+    path.join(cwd, '.gsd', 'WAITING.json'),
+    path.join(cwd, '.planning', 'WAITING.json'),
+  ];
+
+  let removed = false;
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      try { fs.unlinkSync(p); removed = true; } catch {}
+    }
+  }
+
+  output({ resumed: true, removed }, raw, removed ? 'true' : 'false');
+}
+
 module.exports = {
   stateExtractField,
   stateReplaceField,
@@ -796,4 +843,6 @@ module.exports = {
   cmdStateSnapshot,
   cmdStateJson,
   cmdStateBeginPhase,
+  cmdSignalWaiting,
+  cmdSignalResume,
 };

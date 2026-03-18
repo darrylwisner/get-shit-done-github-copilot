@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, replaceInCurrentMilestone, toPosixPath, output, error } = require('./core.cjs');
+const { escapeRegex, normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, toPosixPath, output, error } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const { writeStateMd } = require('./state.cjs');
 
@@ -319,7 +319,7 @@ function cmdPhaseAdd(cwd, description, raw) {
   }
 
   const rawContent = fs.readFileSync(roadmapPath, 'utf-8');
-  const content = stripShippedMilestones(rawContent);
+  const content = extractCurrentMilestone(rawContent, cwd);
   const slug = generateSlugInternal(description);
 
   // Find highest integer phase number (in current milestone only)
@@ -376,7 +376,7 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
   }
 
   const rawContent = fs.readFileSync(roadmapPath, 'utf-8');
-  const content = stripShippedMilestones(rawContent);
+  const content = extractCurrentMilestone(rawContent, cwd);
   const slug = generateSlugInternal(description);
 
   // Normalize input then strip leading zeros for flexible matching
@@ -760,7 +760,7 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     if (fs.existsSync(reqPath)) {
       // Extract the current phase section from roadmap (scoped to avoid cross-phase matching)
       const phaseEsc = escapeRegex(phaseNum);
-      const currentMilestoneRoadmap = stripShippedMilestones(roadmapContent);
+      const currentMilestoneRoadmap = extractCurrentMilestone(roadmapContent, cwd);
       const phaseSectionMatch = currentMilestoneRoadmap.match(
         new RegExp(`(#{2,4}\\s*Phase\\s+${phaseEsc}[:\\s][\\s\\S]*?)(?=#{2,4}\\s*Phase\\s+|$)`, 'i')
       );
@@ -824,7 +824,7 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
   // for phases that are defined but not yet planned (no directory on disk)
   if (isLastPhase && fs.existsSync(roadmapPath)) {
     try {
-      const roadmapForPhases = stripShippedMilestones(fs.readFileSync(roadmapPath, 'utf-8'));
+      const roadmapForPhases = extractCurrentMilestone(fs.readFileSync(roadmapPath, 'utf-8'), cwd);
       const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
       let pm;
       while ((pm = phasePattern.exec(roadmapForPhases)) !== null) {
@@ -879,6 +879,34 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
       /(\*\*Last Activity Description:\*\*\s*).*/,
       `$1Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`
     );
+
+    // Increment Completed Phases counter (#956)
+    const completedMatch = stateContent.match(/\*\*Completed Phases:\*\*\s*(\d+)/);
+    if (completedMatch) {
+      const newCompleted = parseInt(completedMatch[1], 10) + 1;
+      stateContent = stateContent.replace(
+        /(\*\*Completed Phases:\*\*\s*)\d+/,
+        `$1${newCompleted}`
+      );
+
+      // Recalculate percent based on completed / total (#956)
+      const totalMatch = stateContent.match(/\*\*Total Phases:\*\*\s*(\d+)/);
+      if (totalMatch) {
+        const totalPhases = parseInt(totalMatch[1], 10);
+        if (totalPhases > 0) {
+          const newPercent = Math.round((newCompleted / totalPhases) * 100);
+          stateContent = stateContent.replace(
+            /(\*\*Progress:\*\*\s*)\d+%/,
+            `$1${newPercent}%`
+          );
+          // Also update percent field if it exists separately
+          stateContent = stateContent.replace(
+            /(percent:\s*)\d+/,
+            `$1${newPercent}`
+          );
+        }
+      }
+    }
 
     writeStateMd(statePath, stateContent, cwd);
   }

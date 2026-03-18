@@ -10,6 +10,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { createTempProject, cleanup } = require('./helpers.cjs');
 
 const {
   loadConfig,
@@ -35,14 +36,13 @@ describe('loadConfig', () => {
   let originalCwd;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
     originalCwd = process.cwd();
   });
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   function writeConfig(obj) {
@@ -129,12 +129,11 @@ describe('resolveModelInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   function writeConfig(obj) {
@@ -276,62 +275,11 @@ describe('generateSlugInternal', () => {
   });
 });
 
-// ─── normalizePhaseName ────────────────────────────────────────────────────────
-
-describe('normalizePhaseName', () => {
-  test('pads single digit', () => {
-    assert.strictEqual(normalizePhaseName('1'), '01');
-  });
-
-  test('preserves double digit', () => {
-    assert.strictEqual(normalizePhaseName('12'), '12');
-  });
-
-  test('handles letter suffix', () => {
-    assert.strictEqual(normalizePhaseName('1A'), '01A');
-  });
-
-  test('handles decimal phases', () => {
-    assert.strictEqual(normalizePhaseName('2.1'), '02.1');
-  });
-
-  test('handles multi-level decimals', () => {
-    assert.strictEqual(normalizePhaseName('1.2.3'), '01.2.3');
-  });
-
-  test('returns non-matching input unchanged', () => {
-    assert.strictEqual(normalizePhaseName('abc'), 'abc');
-  });
-});
-
-// ─── comparePhaseNum ───────────────────────────────────────────────────────────
-
-describe('comparePhaseNum', () => {
-  test('sorts integer phases numerically', () => {
-    assert.ok(comparePhaseNum('1', '2') < 0);
-    assert.ok(comparePhaseNum('10', '2') > 0);
-  });
-
-  test('sorts letter suffixes', () => {
-    assert.ok(comparePhaseNum('12', '12A') < 0);
-    assert.ok(comparePhaseNum('12A', '12B') < 0);
-  });
-
-  test('sorts decimal phases', () => {
-    assert.ok(comparePhaseNum('2', '2.1') < 0);
-    assert.ok(comparePhaseNum('2.1', '2.2') < 0);
-  });
-
-  test('handles multi-level decimals', () => {
-    assert.ok(comparePhaseNum('1.1', '1.1.2') < 0);
-    assert.ok(comparePhaseNum('1.1.2', '1.2') < 0);
-  });
-
-  test('returns 0 for equal phases', () => {
-    assert.strictEqual(comparePhaseNum('1', '1'), 0);
-    assert.strictEqual(comparePhaseNum('2.1', '2.1'), 0);
-  });
-});
+// ─── normalizePhaseName / comparePhaseNum ──────────────────────────────────────
+// NOTE: Comprehensive tests for normalizePhaseName and comparePhaseNum are in
+// phase.test.cjs (which covers all edge cases: hybrid, letter-suffix,
+// multi-level decimal, case-insensitive, directory-slug, and full sort order).
+// Removed duplicates here to keep a single authoritative test location.
 
 // ─── safeReadFile ──────────────────────────────────────────────────────────────
 
@@ -343,7 +291,7 @@ describe('safeReadFile', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('reads existing file', () => {
@@ -363,12 +311,11 @@ describe('pathExistsInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('returns true for existing path', () => {
@@ -390,12 +337,11 @@ describe('getMilestoneInfo', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('extracts version and name from roadmap', () => {
@@ -502,7 +448,7 @@ describe('searchPhaseInDir', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('finds phase directory by normalized prefix', () => {
@@ -564,12 +510,11 @@ describe('findPhaseInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('finds phase in current phases directory', () => {
@@ -605,12 +550,11 @@ describe('getRoadmapPhaseInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   // Bug: getRoadmapPhaseInternal was missing from module.exports
@@ -687,12 +631,11 @@ describe('getMilestonePhaseFilter', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('filters directories to only current milestone phases', () => {

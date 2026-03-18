@@ -171,6 +171,7 @@
 - REQ-PLAN-06: System MUST support `--skip-research` flag to bypass research phase
 - REQ-PLAN-07: System MUST prompt user to run `/gsd:ui-phase` if frontend phase detected and no UI-SPEC.md exists (UI safety gate)
 - REQ-PLAN-08: System MUST include Nyquist validation mapping when `workflow.nyquist_validation` is enabled
+- REQ-PLAN-09: System MUST verify all phase requirements are covered by at least one plan before planning completes (requirements coverage gate)
 
 **Produces:**
 | Artifact | Description |
@@ -220,6 +221,7 @@
 - REQ-EXEC-06: System MUST run post-execution verifier to check phase goals were met
 - REQ-EXEC-07: System MUST support git branching strategies (`none`, `phase`, `milestone`)
 - REQ-EXEC-08: System MUST invoke node repair operator on task verification failure (when enabled)
+- REQ-EXEC-09: System MUST run prior phases' test suites before verification to catch cross-phase regressions
 
 **Produces:**
 | Artifact | Description |
@@ -258,6 +260,25 @@
 - REQ-VERIFY-06: System MUST produce UAT.md with pass/fail results
 
 **Produces:** `{phase}-UAT.md` — User acceptance test results, plus fix plans if issues found
+
+---
+
+### 6.5. Ship
+
+**Command:** `/gsd:ship [N] [--draft]`
+
+**Purpose:** Bridge local completion → merged PR. After verification passes, push branch, create PR with auto-generated body from planning artifacts, optionally trigger review, and track in STATE.md.
+
+**Requirements:**
+- REQ-SHIP-01: System MUST verify phase has passed verification before shipping
+- REQ-SHIP-02: System MUST push branch and create PR via `gh` CLI
+- REQ-SHIP-03: System MUST auto-generate PR body from SUMMARY.md, VERIFICATION.md, and REQUIREMENTS.md
+- REQ-SHIP-04: System MUST update STATE.md with shipping status and PR number
+- REQ-SHIP-05: System MUST support `--draft` flag for draft PRs
+
+**Prerequisites:** Phase verified, `gh` CLI installed and authenticated, work on feature branch
+
+**Produces:** GitHub PR with rich body, STATE.md updated
 
 ---
 
@@ -479,11 +500,13 @@
 **Purpose:** Maintain project continuity across context resets and sessions.
 
 **Requirements:**
-- REQ-SESSION-01: Pause MUST save current position and next steps to `continue-here.md`
-- REQ-SESSION-02: Resume MUST restore full project context from state files
+- REQ-SESSION-01: Pause MUST save current position and next steps to `continue-here.md` and structured `HANDOFF.json`
+- REQ-SESSION-02: Resume MUST restore full project context from HANDOFF.json (preferred) or state files (fallback)
 - REQ-SESSION-03: Progress MUST show current position, next action, and overall completion
 - REQ-SESSION-04: Progress MUST read all state files (STATE.md, ROADMAP.md, phase directories)
 - REQ-SESSION-05: All session operations MUST work after `/clear` (context reset)
+- REQ-SESSION-06: HANDOFF.json MUST include blockers, human actions pending, and in-progress task state
+- REQ-SESSION-07: Resume MUST surface human actions and blockers immediately on session start
 
 ---
 

@@ -1,3 +1,19 @@
+<internal_workflow>
+
+**This is an INTERNAL workflow — NOT a user-facing command.**
+
+There is no `/gsd:transition` command. This workflow is invoked automatically by
+`execute-phase` during auto-advance, or inline by the orchestrator after phase
+verification. Users should never be told to run `/gsd:transition`.
+
+**Valid user commands for phase progression:**
+- `/gsd:discuss-phase {N}` — discuss a phase before planning
+- `/gsd:plan-phase {N}` — plan a phase
+- `/gsd:execute-phase {N}` — execute a phase
+- `/gsd:progress` — see roadmap progress
+
+</internal_workflow>
+
 <required_reading>
 
 **Read these files NOW:**

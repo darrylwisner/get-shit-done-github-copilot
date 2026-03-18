@@ -15,6 +15,8 @@
  *   state get [section]                Get STATE.md content or section
  *   state patch --field val ...        Batch update STATE.md fields
  *   state begin-phase --phase N --name S --plans C  Update STATE.md for new phase start
+ *   state signal-waiting --type T --question Q --options "A|B" --phase P  Write WAITING.json signal
+ *   state signal-resume                Remove WAITING.json signal
  *   resolve-model <agent-type>         Get model for agent based on profile
  *   find-phase <phase>                 Find phase directory by number
  *   commit <message> [--files f1 f2]   Commit planning docs
@@ -253,6 +255,21 @@ async function main() {
           plansIdx !== -1 ? parseInt(args[plansIdx + 1], 10) : null,
           raw
         );
+      } else if (subcommand === 'signal-waiting') {
+        const typeIdx = args.indexOf('--type');
+        const qIdx = args.indexOf('--question');
+        const optIdx = args.indexOf('--options');
+        const phaseIdx = args.indexOf('--phase');
+        state.cmdSignalWaiting(
+          cwd,
+          typeIdx !== -1 ? args[typeIdx + 1] : null,
+          qIdx !== -1 ? args[qIdx + 1] : null,
+          optIdx !== -1 ? args[optIdx + 1] : null,
+          phaseIdx !== -1 ? args[phaseIdx + 1] : null,
+          raw
+        );
+      } else if (subcommand === 'signal-resume') {
+        state.cmdSignalResume(cwd, raw);
       } else {
         state.cmdStateLoad(cwd, raw);
       }

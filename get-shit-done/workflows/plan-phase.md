@@ -8,6 +8,13 @@ Read all files referenced by the invoking prompt's execution_context before star
 @~/.claude/get-shit-done/references/ui-brand.md
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-phase-researcher — Researches technical approaches for a phase
+- gsd-planner — Creates detailed plans from phase scope
+- gsd-plan-checker — Reviews plan quality before execution
+</available_agent_types>
+
 <process>
 
 ## 1. Initialize
@@ -170,7 +177,16 @@ Use AskUserQuestion:
   - "Run discuss-phase first" — Capture design decisions before planning
 
 If "Continue without context": Proceed to step 5.
-If "Run discuss-phase first": Display `/gsd:discuss-phase {X}` and exit workflow.
+If "Run discuss-phase first":
+  **IMPORTANT:** Do NOT invoke discuss-phase as a nested Skill/Task call — AskUserQuestion
+  does not work correctly in nested subcontexts (#1009). Instead, display the command
+  and exit so the user runs it as a top-level command:
+  ```
+  Run this command first, then re-run /gsd:plan-phase {X}:
+
+  /gsd:discuss-phase {X}
+  ```
+  **Exit the plan-phase workflow. Do not continue.**
 
 ## 5. Handle Research
 
@@ -571,11 +587,62 @@ Display: `Max iterations reached. {N} issues remain:` + issue list
 
 Offer: 1) Force proceed, 2) Provide guidance and retry, 3) Abandon
 
-## 13. Present Final Status
+## 13. Requirements Coverage Gate
+
+After plans pass the checker (or checker is skipped), verify that all phase requirements are covered by at least one plan.
+
+**Skip if:** `phase_req_ids` is null or TBD (no requirements mapped to this phase).
+
+**Step 1: Extract requirement IDs claimed by plans**
+```bash
+# Collect all requirement IDs from plan frontmatter
+PLAN_REQS=$(grep -h "requirements_addressed\|requirements:" ${PHASE_DIR}/*-PLAN.md 2>/dev/null | tr -d '[]' | tr ',' '\n' | sed 's/^[[:space:]]*//' | sort -u)
+```
+
+**Step 2: Compare against phase requirements from ROADMAP**
+
+For each REQ-ID in `phase_req_ids`:
+- If REQ-ID appears in `PLAN_REQS` → covered ✓
+- If REQ-ID does NOT appear in any plan → uncovered ✗
+
+**Step 3: Check CONTEXT.md features against plan objectives**
+
+Read CONTEXT.md `<decisions>` section. Extract feature/capability names. Check each against plan `<objective>` blocks. Features not mentioned in any plan objective → potentially dropped.
+
+**Step 4: Report**
+
+If all requirements covered and no dropped features:
+```
+✓ Requirements coverage: {N}/{N} REQ-IDs covered by plans
+```
+→ Proceed to step 14.
+
+If gaps found:
+```
+## ⚠ Requirements Coverage Gap
+
+{M} of {N} phase requirements are not assigned to any plan:
+
+| REQ-ID | Description | Plans |
+|--------|-------------|-------|
+| {id} | {from REQUIREMENTS.md} | None |
+
+{K} CONTEXT.md features not found in plan objectives:
+- {feature_name} — described in CONTEXT.md but no plan covers it
+
+Options:
+1. Re-plan to include missing requirements (recommended)
+2. Move uncovered requirements to next phase
+3. Proceed anyway — accept coverage gaps
+```
+
+Use AskUserQuestion to present the options.
+
+## 14. Present Final Status
 
 Route to `<offer_next>` OR `auto_advance` depending on flags/config.
 
-## 14. Auto-Advance Check
+## 15. Auto-Advance Check
 
 Check for auto-advance trigger:
 

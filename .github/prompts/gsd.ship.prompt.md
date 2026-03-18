@@ -1,12 +1,12 @@
 ---
-name: gsd.execute-phase
-description: "Execute all plans in a phase with wave-based parallelization"
-argument-hint: "<phase-number> [--gaps-only] [--interactive]"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'todo', 'vscode/askQuestions']
+name: gsd.ship
+description: "Create PR, run review, and prepare for merge after verification passes"
+argument-hint: "[phase number or milestone, e.g., '4' or 'v1.0']"
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Task","TodoWrite","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Bash","Grep","Glob","Write","AskUserQuestion"] -->
 
 ## Path Resolution 
 
@@ -35,29 +35,13 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Execute all plans in a phase using wave-based parallel execution.
+Bridge local completion → merged PR. After /gsd:verify-work passes, ship the work: push branch, create PR with auto-generated body, optionally trigger review, and track the merge.
 
-Orchestrator stays lean: discover plans, analyze dependencies, group into waves, spawn subagents, collect results. Each subagent loads the full execute-plan context and handles its own plan.
-
-Context budget: ~15% orchestrator, 100% fresh per subagent.
+Closes the plan → execute → verify → ship loop.
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/execute-phase.md
-- Read file at: ./.claude/get-shit-done/references/ui-brand.md
+- Read file at: ./.claude/get-shit-done/workflows/ship.md
 </execution_context>
 
-<context>
-Phase: $ARGUMENTS
-
-**Flags:**
-- `--gaps-only` — Execute only gap closure plans (plans with `gap_closure: true` in frontmatter). Use after verify-work creates fix plans.
-- `--interactive` — Execute plans sequentially inline (no subagents) with user checkpoints between tasks. Lower token usage, pair-programming style. Best for small phases, bug fixes, and verification gaps.
-
-Context files are resolved inside the workflow via `gsd-tools init execute-phase` and per-subagent `<files_to_read>` blocks.
-</context>
-
-<process>
-Execute the execute-phase workflow from @./.claude/get-shit-done/workflows/execute-phase.md end-to-end.
-Preserve all workflow gates (wave execution, checkpoint handling, verification, state updates, routing).
-</process>
+Execute the ship workflow from @./.claude/get-shit-done/workflows/ship.md end-to-end.

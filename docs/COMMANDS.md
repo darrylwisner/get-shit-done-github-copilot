@@ -132,6 +132,32 @@ User acceptance testing with auto-diagnosis.
 
 ---
 
+### `/gsd:ship`
+
+Create PR from completed phase work with auto-generated body.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `N` | No | Phase number or milestone version (e.g., `4` or `v1.0`) |
+| `--draft` | No | Create as draft PR |
+
+**Prerequisites:** Phase verified (`/gsd:verify-work` passed), `gh` CLI installed and authenticated
+**Produces:** GitHub PR with rich body from planning artifacts, STATE.md updated
+
+```bash
+/gsd:ship 4                         # Ship phase 4
+/gsd:ship 4 --draft                 # Ship as draft PR
+```
+
+**PR body includes:**
+- Phase goal from ROADMAP.md
+- Changes summary from SUMMARY.md files
+- Requirements addressed (REQ-IDs)
+- Verification status
+- Key decisions
+
+---
+
 ### `/gsd:ui-review`
 
 Retroactive 6-pillar visual audit of implemented frontend.
