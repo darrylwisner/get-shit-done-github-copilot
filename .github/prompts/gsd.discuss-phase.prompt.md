@@ -1,7 +1,7 @@
 ---
 name: gsd.discuss-phase
 description: "Gather phase context through adaptive questioning before planning. Use --auto to skip interactive questions (Claude picks recommended defaults)."
-argument-hint: "<phase> [--auto]"
+argument-hint: "<phase> [--auto] [--batch] [--analyze]"
 tools: ['agent', 'edit', 'execute', 'mcp__context7__query-docs', 'mcp__context7__resolve-library-id', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
