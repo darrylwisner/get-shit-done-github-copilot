@@ -166,12 +166,16 @@ Merge new settings into existing config.json:
     "ui_safety_gate": true/false
   },
   "git": {
-    "branching_strategy": "none" | "phase" | "milestone"
+    "branching_strategy": "none" | "phase" | "milestone",
+    "quick_branch_template": <string|null>
   },
   "hooks": {
     "context_warnings": true/false,
     "workflow_guard": true/false,
     "research_questions": true/false
+  },
+  "workflow": {
+    "text_mode": true/false  // Use plain-text questions instead of TUI menus (for /rc remote sessions)
   }
 }
 ```
@@ -211,6 +215,7 @@ Write `~/.gsd/defaults.json` with:
   "commit_docs": <current>,
   "parallelization": <current>,
   "branching_strategy": <current>,
+  "quick_branch_template": <current>,
   "workflow": {
     "research": <current>,
     "plan_check": <current>,

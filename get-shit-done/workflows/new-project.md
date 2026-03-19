@@ -1039,10 +1039,18 @@ Use AskUserQuestion:
 
 **If "Review full file":** Display raw `cat .planning/ROADMAP.md`, then re-ask.
 
+**Generate or refresh project CLAUDE.md before final commit:**
+
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" generate-claude-md
+```
+
+This ensures new projects get the default GSD workflow-enforcement guidance and current project context in `CLAUDE.md`.
+
 **Commit roadmap (after approval or auto mode):**
 
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: create roadmap ([N] phases)" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: create roadmap ([N] phases)" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md CLAUDE.md
 ```
 
 ## 9. Done
@@ -1063,6 +1071,7 @@ Present completion summary:
 | Research       | `.planning/research/`       |
 | Requirements   | `.planning/REQUIREMENTS.md` |
 | Roadmap        | `.planning/ROADMAP.md`      |
+| Project guide  | `CLAUDE.md`                 |
 
 **[N] phases** | **[X] requirements** | Ready to build ✓
 ```
@@ -1113,6 +1122,7 @@ Exit skill and invoke SlashCommand("/gsd:discuss-phase 1 --auto")
 - `.planning/REQUIREMENTS.md`
 - `.planning/ROADMAP.md`
 - `.planning/STATE.md`
+- `CLAUDE.md`
 
 </output>
 
@@ -1134,6 +1144,7 @@ Exit skill and invoke SlashCommand("/gsd:discuss-phase 1 --auto")
 - [ ] ROADMAP.md created with phases, requirement mappings, success criteria
 - [ ] STATE.md initialized
 - [ ] REQUIREMENTS.md traceability updated
+- [ ] CLAUDE.md generated with GSD workflow guidance
 - [ ] User knows next step is `/gsd:discuss-phase 1`
 
 **Atomic commits:** Each phase commits its artifacts immediately. If context is lost, artifacts persist.

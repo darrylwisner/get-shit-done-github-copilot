@@ -151,6 +151,20 @@ describe('SPAWN: spawn type consistency', () => {
       'diagnose-issues should spawn gsd-debugger, not general-purpose'
     );
   });
+
+  test('execute-phase has Copilot sequential fallback in runtime_compatibility', () => {
+    const content = fs.readFileSync(
+      path.join(WORKFLOWS_DIR, 'execute-phase.md'), 'utf-8'
+    );
+    assert.ok(
+      content.includes('sequential inline execution'),
+      'execute-phase must document sequential inline execution as Copilot fallback'
+    );
+    assert.ok(
+      content.includes('spot-check'),
+      'execute-phase must have spot-check fallback for completion detection'
+    );
+  });
 });
 
 // ─── Required Frontmatter Fields ─────────────────────────────────────────────

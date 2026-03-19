@@ -9,7 +9,7 @@
 `gsd-tools.cjs` is a Node.js CLI utility that replaces repetitive inline bash patterns across GSD's ~50 command, workflow, and agent files. It centralizes: config parsing, model resolution, phase lookup, git commits, summary verification, state management, and template operations.
 
 **Location:** `get-shit-done/bin/gsd-tools.cjs`
-**Modules:** 11 domain modules in `get-shit-done/bin/lib/`
+**Modules:** 15 domain modules in `get-shit-done/bin/lib/`
 
 **Usage:**
 ```bash
@@ -330,6 +330,9 @@ node gsd-tools.cjs progress [json|table|bar]
 # Complete a todo
 node gsd-tools.cjs todo complete <filename>
 
+# UAT audit — scan all phases for unresolved items
+node gsd-tools.cjs audit-uat
+
 # Git commit with config checks
 node gsd-tools.cjs commit <message> [--files f1 f2] [--amend] [--no-verify]
 ```
@@ -358,3 +361,6 @@ node gsd-tools.cjs websearch <query> [--limit N] [--freshness day|week|month]
 | Milestone | `lib/milestone.cjs` | Milestone archival, requirements marking |
 | Commands | `lib/commands.cjs` | Misc: slug, timestamp, todos, scaffold, stats, websearch |
 | Model Profiles | `lib/model-profiles.cjs` | Profile resolution table |
+| UAT | `lib/uat.cjs` | Cross-phase UAT/verification audit |
+| Profile Output | `lib/profile-output.cjs` | Developer profile formatting |
+| Profile Pipeline | `lib/profile-pipeline.cjs` | Session analysis pipeline |

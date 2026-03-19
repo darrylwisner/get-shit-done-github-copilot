@@ -179,6 +179,17 @@ const CLAUDE_MD_FALLBACKS = {
   architecture: 'Architecture not yet mapped. Follow existing patterns found in the codebase.',
 };
 
+const CLAUDE_MD_WORKFLOW_ENFORCEMENT = [
+  'Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.',
+  '',
+  'Use these entry points:',
+  '- `/gsd:quick` for small fixes, doc updates, and ad-hoc tasks',
+  '- `/gsd:debug` for investigation and bug fixing',
+  '- `/gsd:execute-phase` for planned phase work',
+  '',
+  'Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.',
+].join('\n');
+
 const CLAUDE_MD_PROFILE_PLACEHOLDER = [
   '<!-- GSD:profile-start -->',
   '## Developer Profile',
@@ -354,6 +365,14 @@ function generateArchitectureSection(cwd) {
   }
   const summary = summaryLines.length > 0 ? summaryLines.join('\n') : content.trim();
   return { content: summary, source: 'ARCHITECTURE.md', hasFallback: false };
+}
+
+function generateWorkflowSection() {
+  return {
+    content: CLAUDE_MD_WORKFLOW_ENFORCEMENT,
+    source: 'GSD defaults',
+    hasFallback: false,
+  };
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
@@ -796,18 +815,20 @@ function cmdGenerateClaudeProfile(cwd, options, raw) {
 }
 
 function cmdGenerateClaudeMd(cwd, options, raw) {
-  const MANAGED_SECTIONS = ['project', 'stack', 'conventions', 'architecture'];
+  const MANAGED_SECTIONS = ['project', 'stack', 'conventions', 'architecture', 'workflow'];
   const generators = {
     project: generateProjectSection,
     stack: generateStackSection,
     conventions: generateConventionsSection,
     architecture: generateArchitectureSection,
+    workflow: generateWorkflowSection,
   };
   const sectionHeadings = {
     project: '## Project',
     stack: '## Technology Stack',
     conventions: '## Conventions',
     architecture: '## Architecture',
+    workflow: '## GSD Workflow Enforcement',
   };
 
   const generated = {};

@@ -743,14 +743,22 @@ purpose: ${toSingleLine(description)}
 
 /**
  * Generate a per-agent .toml config file for Codex.
- * Sets sandbox_mode and developer_instructions from the agent markdown body.
+ * Sets required agent metadata, sandbox_mode, and developer_instructions
+ * from the agent markdown content.
  */
 function generateCodexAgentToml(agentName, agentContent) {
   const sandboxMode = CODEX_AGENT_SANDBOX[agentName] || 'read-only';
-  const { body } = extractFrontmatterAndBody(agentContent);
+  const { frontmatter, body } = extractFrontmatterAndBody(agentContent);
+  const frontmatterText = frontmatter || '';
+  const resolvedName = extractFrontmatterField(frontmatterText, 'name') || agentName;
+  const resolvedDescription = toSingleLine(
+    extractFrontmatterField(frontmatterText, 'description') || `GSD agent ${resolvedName}`
+  );
   const instructions = body.trim();
 
   const lines = [
+    `name = ${JSON.stringify(resolvedName)}`,
+    `description = ${JSON.stringify(resolvedDescription)}`,
     `sandbox_mode = "${sandboxMode}"`,
     // Agent prompts contain raw backslashes in regexes and shell snippets.
     // TOML literal multiline strings preserve them without escape parsing.
@@ -781,6 +789,10 @@ function generateCodexConfigBlock(agents) {
   return lines.join('\n');
 }
 
+function stripCodexGsdAgentSections(content) {
+  return content.replace(/^\[agents\.gsd-[^\]]+\]\n(?:(?!\[)[^\n]*\n?)*/gm, '');
+}
+
 /**
  * Strip GSD sections from Codex config.toml content.
  * Returns cleaned content, or null if file would be empty.
@@ -806,7 +818,7 @@ function stripGsdFromCodexConfig(content) {
   cleaned = cleaned.replace(/^default_mode_request_user_input\s*=\s*true\s*\n?/m, '');
 
   // Remove [agents.gsd-*] sections (from header to next section or EOF)
-  cleaned = cleaned.replace(/^\[agents\.gsd-[^\]]+\]\n(?:(?!\[)[^\n]*\n?)*/gm, '');
+  cleaned = stripCodexGsdAgentSections(cleaned);
 
   // Remove [features] section if now empty (only header, no keys before next section)
   cleaned = cleaned.replace(/^\[features\]\s*\n(?=\[|$)/m, '');
@@ -840,7 +852,7 @@ function mergeCodexConfig(configPath, gsdBlock) {
     let before = existing.substring(0, markerIndex).trimEnd();
     if (before) {
       // Strip any GSD-managed sections that leaked above the marker from previous installs
-      before = before.replace(/^\[agents\.gsd-[^\]]+\]\n(?:(?!\[)[^\n]*\n?)*/gm, '');
+      before = stripCodexGsdAgentSections(before);
       before = before.replace(/^\[agents\]\n(?:(?!\[)[^\n]*\n?)*/m, '');
       before = before.replace(/\n{3,}/g, '\n\n').trimEnd();
 
@@ -853,7 +865,14 @@ function mergeCodexConfig(configPath, gsdBlock) {
 
   // Case 3: No marker — append GSD block
   let content = existing;
-  content = content.trimEnd() + '\n\n' + gsdBlock + '\n';
+  content = stripCodexGsdAgentSections(content);
+  content = content.replace(/\n{3,}/g, '\n\n').trimEnd();
+
+  if (content) {
+    content = content + '\n\n' + gsdBlock + '\n';
+  } else {
+    content = gsdBlock + '\n';
+  }
 
   fs.writeFileSync(configPath, content);
 }
@@ -2154,6 +2173,18 @@ function writeManifest(configDir, runtime = 'claude') {
       }
     }
   }
+  // Track hook files so saveLocalPatches() can detect user modifications
+  // Hooks are only installed for runtimes that use settings.json (not Codex/Copilot)
+  if (!isCodex && !isCopilot) {
+    const hooksDir = path.join(configDir, 'hooks');
+    if (fs.existsSync(hooksDir)) {
+      for (const file of fs.readdirSync(hooksDir)) {
+        if (file.startsWith('gsd-') && file.endsWith('.js')) {
+          manifest.files['hooks/' + file] = fileHash(path.join(hooksDir, file));
+        }
+      }
+    }
+  }
 
   fs.writeFileSync(path.join(configDir, MANIFEST_NAME), JSON.stringify(manifest, null, 2));
   return manifest;
@@ -2250,9 +2281,12 @@ function install(isGlobal, runtime = 'claude') {
 
   // Path prefix for file references in markdown content (e.g. gsd-tools.cjs).
   // Replaces $HOME/.claude/ or ~/.claude/ so the result is <pathPrefix>get-shit-done/bin/...
-  // Always use absolute path so: (1) local installs work when GSD is outside $HOME,
-  // (2) spawned subagents with empty $HOME still resolve the path (fixes #820).
-  const pathPrefix = `${path.resolve(targetDir).replace(/\\/g, '/')}/`;
+  // For global installs: use ~/ so paths work across environments (e.g. Docker
+  // containers mounting ~/.claude from a Windows host where os.homedir() differs).
+  // For local installs: use resolved absolute path (may be outside $HOME).
+  const pathPrefix = isGlobal
+    ? path.resolve(targetDir).replace(os.homedir(), '~').replace(/\\/g, '/') + '/'
+    : `${path.resolve(targetDir).replace(/\\/g, '/')}/`;
 
   let runtimeLabel = 'Claude Code';
   if (isOpencode) runtimeLabel = 'OpenCode';

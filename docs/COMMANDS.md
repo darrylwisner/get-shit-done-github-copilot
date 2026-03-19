@@ -23,7 +23,7 @@ Initialize a new project with deep context gathering.
 | `--auto @file.md` | Auto-extract from document, skip interactive questions |
 
 **Prerequisites:** No existing `.planning/PROJECT.md`
-**Produces:** `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, `config.json`, `research/`
+**Produces:** `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, `config.json`, `research/`, `CLAUDE.md`
 
 ```bash
 /gsd:new-project                    # Interactive mode
@@ -215,6 +215,19 @@ Retroactive 6-pillar visual audit of implemented frontend.
 
 ---
 
+### `/gsd:audit-uat`
+
+Cross-phase audit of all outstanding UAT and verification items.
+
+**Prerequisites:** At least one phase has been executed with UAT or verification
+**Produces:** Categorized audit report with human test plan
+
+```bash
+/gsd:audit-uat
+```
+
+---
+
 ### `/gsd:audit-milestone`
 
 Verify milestone met its definition of done.
@@ -248,6 +261,7 @@ Start next version cycle.
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `name` | No | Milestone name |
+| `--reset-phase-numbers` | No | Restart the new milestone at Phase 1 and archive old phase dirs before roadmapping |
 
 **Prerequisites:** Previous milestone completed
 **Produces:** Updated `PROJECT.md`, new `REQUIREMENTS.md`, new `ROADMAP.md`
@@ -255,6 +269,7 @@ Start next version cycle.
 ```bash
 /gsd:new-milestone                  # Interactive
 /gsd:new-milestone "v2.0 Mobile"    # Named milestone
+/gsd:new-milestone --reset-phase-numbers "v2.0 Mobile"  # Restart milestone numbering at 1
 ```
 
 ---

@@ -359,7 +359,8 @@ GSD stores project settings in `.planning/config.json`. Configure during `/gsd:n
   "git": {
     "branching_strategy": "none",
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
-    "milestone_branch_template": "gsd/{milestone}-{slug}"
+    "milestone_branch_template": "gsd/{milestone}-{slug}",
+    "quick_branch_template": null
   }
 }
 ```
@@ -401,6 +402,7 @@ Disable these to speed up phases in familiar domains or when conserving tokens.
 | `git.branching_strategy` | `none`, `phase`, `milestone` | `none` | When and how branches are created |
 | `git.phase_branch_template` | Template string | `gsd/phase-{phase}-{slug}` | Branch name for phase strategy |
 | `git.milestone_branch_template` | Template string | `gsd/{milestone}-{slug}` | Branch name for milestone strategy |
+| `git.quick_branch_template` | Template string or `null` | `null` | Optional branch name for `/gsd:quick` tasks |
 
 **Branching strategies explained:**
 
@@ -410,7 +412,15 @@ Disable these to speed up phases in familiar domains or when conserving tokens.
 | `phase` | At each `execute-phase` | One phase per branch | Code review per phase, granular rollback |
 | `milestone` | At first `execute-phase` | All phases share one branch | Release branches, PR per version |
 
-**Template variables:** `{phase}` = zero-padded number (e.g., "03"), `{slug}` = lowercase hyphenated name, `{milestone}` = version (e.g., "v1.0").
+**Template variables:** `{phase}` = zero-padded number (e.g., "03"), `{slug}` = lowercase hyphenated name, `{milestone}` = version (e.g., "v1.0"), `{num}` / `{quick}` = quick task ID (e.g., "260317-abc").
+
+Example quick-task branching:
+
+```json
+"git": {
+  "quick_branch_template": "gsd/quick-{num}-{slug}"
+}
+```
 
 ### Model Profiles (Per-Agent Breakdown)
 

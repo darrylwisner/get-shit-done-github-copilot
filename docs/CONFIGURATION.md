@@ -42,7 +42,8 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd:new
   "git": {
     "branching_strategy": "none",
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
-    "milestone_branch_template": "gsd/{milestone}-{slug}"
+    "milestone_branch_template": "gsd/{milestone}-{slug}",
+    "quick_branch_template": null
   },
   "gates": {
     "confirm_project": true,
@@ -144,6 +145,7 @@ To keep planning artifacts out of git:
 | `git.branching_strategy` | enum | `none` | `none`, `phase`, or `milestone` |
 | `git.phase_branch_template` | string | `gsd/phase-{phase}-{slug}` | Branch name template for phase strategy |
 | `git.milestone_branch_template` | string | `gsd/{milestone}-{slug}` | Branch name template for milestone strategy |
+| `git.quick_branch_template` | string or null | `null` | Optional branch name template for `/gsd:quick` tasks |
 
 ### Strategy Comparison
 
@@ -160,6 +162,15 @@ To keep planning artifacts out of git:
 | `{phase}` | `phase_branch_template` | `03` (zero-padded) |
 | `{slug}` | Both templates | `user-authentication` (lowercase, hyphenated) |
 | `{milestone}` | `milestone_branch_template` | `v1.0` |
+| `{num}` / `{quick}` | `quick_branch_template` | `260317-abc` (quick task ID) |
+
+Example quick-task branching:
+
+```json
+"git": {
+  "quick_branch_template": "gsd/quick-{num}-{slug}"
+}
+```
 
 ### Merge Options at Milestone Completion
 

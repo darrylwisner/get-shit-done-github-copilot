@@ -207,10 +207,12 @@ Start a new milestone through unified flow.
 - Optional domain research (spawns 4 parallel researcher agents)
 - Requirements definition with scoping
 - Roadmap creation with phase breakdown
+- Optional `--reset-phase-numbers` flag restarts numbering at Phase 1 and archives old phase dirs first for safety
 
 Mirrors `/gsd:new-project` flow for brownfield projects (existing PROJECT.md).
 
 Usage: `/gsd:new-milestone "v2.0 Features"`
+Usage: `/gsd:new-milestone --reset-phase-numbers "v2.0 Features"`
 
 **`/gsd:complete-milestone <version>`**
 Archive completed milestone and prepare for next version.
@@ -370,6 +372,17 @@ Capture a forward-looking idea with trigger conditions for automatic surfacing.
 - Better than deferred items — triggers are checked, not forgotten
 
 Usage: `/gsd:plant-seed "add real-time notifications when we build the events system"`
+
+---
+
+**`/gsd:audit-uat`**
+Cross-phase audit of all outstanding UAT and verification items.
+- Scans every phase for pending, skipped, blocked, and human_needed items
+- Cross-references against codebase to detect stale documentation
+- Produces prioritized human test plan grouped by testability
+- Use before starting a new milestone to clear verification debt
+
+Usage: `/gsd:audit-uat`
 
 ### Milestone Auditing
 

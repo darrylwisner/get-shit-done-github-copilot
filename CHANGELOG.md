@@ -22,6 +22,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Model alias-to-full-ID resolution** — Task API compatibility for model alias strings (#991)
 - **Execution hardening** — Pre-wave dependency checks, cross-plan data contracts, and export-level spot checks (#1082)
 - **Markdown normalization** — Generated markdown conforms to markdownlint standards (#1112)
+- **`/gsd:audit-uat` command** — Cross-phase audit of all outstanding UAT and verification items. Scans every phase for pending, skipped, blocked, and human_needed items. Cross-references against codebase to detect stale documentation. Produces prioritized human test plan grouped by testability
+- **Verification debt tracking** — Five structural improvements to prevent silent loss of UAT/verification items when projects advance:
+  - Cross-phase health check in `/gsd:progress` (Step 1.6) surfaces outstanding items from ALL prior phases
+  - `status: partial` in UAT files distinguishes incomplete testing from completed sessions
+  - `result: blocked` with `blocked_by` tag for tests blocked by external dependencies (server, device, build, third-party)
+  - `human_needed` verification items now persist as HUMAN-UAT.md files (trackable across sessions)
+  - Phase completion and transition warnings surface verification debt non-blockingly
 
 ### Changed
 - Test suite consolidated: runtime converters deduplicated, helpers standardized (#1169)

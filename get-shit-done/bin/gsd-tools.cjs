@@ -35,7 +35,7 @@
  *
  * Phase Operations:
  *   phase next-decimal <phase>         Calculate next decimal phase number
- *   phase add <description>            Append new phase to roadmap + create dir
+ *   phase add <description> [--id ID]   Append new phase to roadmap + create dir
  *   phase insert <after> <description> Insert decimal phase after existing
  *   phase remove <phase> [--force]     Remove phase, renumber all subsequent
  *   phase complete <phase>             Mark phase done, update state + roadmap
@@ -63,6 +63,9 @@
  *
  * Todos:
  *   todo complete <filename>           Move todo from pending to completed
+ *
+ * UAT Audit:
+ *   audit-uat                           Scan all phases for unresolved UAT/verification items
  *
  * Scaffolding:
  *   scaffold context --phase <N>       Create CONTEXT.md template
@@ -470,7 +473,18 @@ async function main() {
       if (subcommand === 'next-decimal') {
         phase.cmdPhaseNextDecimal(cwd, args[2], raw);
       } else if (subcommand === 'add') {
-        phase.cmdPhaseAdd(cwd, args.slice(2).join(' '), raw);
+        const idIdx = args.indexOf('--id');
+        let customId = null;
+        const descArgs = [];
+        for (let i = 2; i < args.length; i++) {
+          if (args[i] === '--id' && i + 1 < args.length) {
+            customId = args[i + 1];
+            i++; // skip value
+          } else {
+            descArgs.push(args[i]);
+          }
+        }
+        phase.cmdPhaseAdd(cwd, descArgs.join(' '), raw, customId);
       } else if (subcommand === 'insert') {
         phase.cmdPhaseInsert(cwd, args[2], args.slice(3).join(' '), raw);
       } else if (subcommand === 'remove') {
@@ -522,6 +536,12 @@ async function main() {
     case 'progress': {
       const subcommand = args[1] || 'json';
       commands.cmdProgressRender(cwd, subcommand, raw);
+      break;
+    }
+
+    case 'audit-uat': {
+      const uat = require('./lib/uat.cjs');
+      uat.cmdAuditUat(cwd, raw);
       break;
     }
 

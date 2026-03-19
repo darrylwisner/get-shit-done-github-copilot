@@ -658,7 +658,17 @@ function buildStateFrontmatter(bodyContent, cwd) {
 }
 
 function stripFrontmatter(content) {
-  return content.replace(/^---\n[\s\S]*?\n---\n*/, '');
+  // Strip ALL frontmatter blocks at the start of the file.
+  // Handles CRLF line endings and multiple stacked blocks (corruption recovery).
+  // Greedy: keeps stripping ---...--- blocks separated by optional whitespace.
+  let result = content;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const stripped = result.replace(/^\s*---\r?\n[\s\S]*?\r?\n---\s*/, '');
+    if (stripped === result) break;
+    result = stripped;
+  }
+  return result;
 }
 
 function syncStateFrontmatter(content, cwd) {

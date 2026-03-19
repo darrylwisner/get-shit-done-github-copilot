@@ -10,7 +10,11 @@ const { safeReadFile, normalizeMd, output, error } = require('./core.cjs');
 
 function extractFrontmatter(content) {
   const frontmatter = {};
-  const match = content.match(/^---\r?\n([\s\S]+?)\r?\n---/);
+  // Find ALL frontmatter blocks at the start of the file.
+  // If multiple blocks exist (corruption from CRLF mismatch), use the LAST one
+  // since it represents the most recent state sync.
+  const allBlocks = [...content.matchAll(/(?:^|\n)\s*---\r?\n([\s\S]+?)\r?\n---/g)];
+  const match = allBlocks.length > 0 ? allBlocks[allBlocks.length - 1] : null;
   if (!match) return frontmatter;
 
   const yaml = match[1];

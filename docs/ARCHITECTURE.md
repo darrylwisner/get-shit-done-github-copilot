@@ -171,7 +171,7 @@ Runtime hooks that integrate with the host AI agent:
 
 ### CLI Tools (`get-shit-done/bin/`)
 
-Node.js CLI utility (`gsd-tools.cjs`) with 11 domain modules:
+Node.js CLI utility (`gsd-tools.cjs`) with 15 domain modules:
 
 | Module | Responsibility |
 |--------|---------------|
@@ -342,8 +342,8 @@ UI-SPEC.md (per phase) ───────────────────
 ├── commands/gsd/*.md               # 37 slash commands
 ├── get-shit-done/
 │   ├── bin/gsd-tools.cjs           # CLI utility
-│   ├── bin/lib/*.cjs               # 11 domain modules
-│   ├── workflows/*.md              # 41 workflow definitions
+│   ├── bin/lib/*.cjs               # 15 domain modules
+│   ├── workflows/*.md              # 42 workflow definitions
 │   ├── references/*.md             # 13 shared reference docs
 │   └── templates/                  # Planning artifact templates
 ├── agents/*.md                     # 15 agent definitions
