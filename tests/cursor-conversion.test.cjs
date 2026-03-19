@@ -32,7 +32,7 @@ Test body
     const nameMatch = result.match(/^name:\s*(.+)$/m);
 
     assert.ok(nameMatch, 'frontmatter contains name field');
-    assert.equal(nameMatch[1], 'gsd-quick', 'skill name is plain scalar');
+    assert.strictEqual(nameMatch[1], 'gsd-quick', 'skill name is plain scalar');
     assert.ok(!result.includes('name: "gsd-quick"'), 'quoted skill name is not emitted');
   });
 
@@ -75,7 +75,7 @@ Planner body
     const nameMatch = result.match(/^name:\s*(.+)$/m);
 
     assert.ok(nameMatch, 'frontmatter contains name field');
-    assert.equal(nameMatch[1], 'gsd-planner', 'agent name is plain scalar');
+    assert.strictEqual(nameMatch[1], 'gsd-planner', 'agent name is plain scalar');
     assert.ok(!result.includes('name: "gsd-planner"'), 'quoted agent name is not emitted');
   });
 });

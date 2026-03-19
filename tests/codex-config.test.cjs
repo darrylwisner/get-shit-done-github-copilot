@@ -492,3 +492,37 @@ describe('installCodexConfig (integration)', () => {
     assert.ok(checkerToml.includes('sandbox_mode = "read-only"'), 'plan-checker is read-only');
   });
 });
+
+// ─── Codex config.toml [features] safety (#1202) ─────────────────────────────
+
+describe('codex features section safety', () => {
+  test('non-boolean keys under [features] are moved to top level', () => {
+    // Simulate the bug from #1202: model = "gpt-5.4" under [features]
+    // causes "invalid type: string, expected a boolean in features"
+    const configContent = `[features]\ncodex_hooks = true\n\nmodel = "gpt-5.4"\nmodel_reasoning_effort = "medium"\n\n[agents.gsd-executor]\ndescription = "test"\n`;
+
+    const featuresMatch = configContent.match(/\[features\]\n([\s\S]*?)(?=\n\[|$)/);
+    assert.ok(featuresMatch, 'features section found');
+
+    const featuresBody = featuresMatch[1];
+    const nonBooleanKeys = featuresBody.split('\n')
+      .filter(line => line.match(/^\s*\w+\s*=/) && !line.match(/=\s*(true|false)\s*(#.*)?$/))
+      .map(line => line.trim());
+
+    assert.strictEqual(nonBooleanKeys.length, 2, 'should detect 2 non-boolean keys');
+    assert.ok(nonBooleanKeys.includes('model = "gpt-5.4"'), 'detects model key');
+    assert.ok(nonBooleanKeys.includes('model_reasoning_effort = "medium"'), 'detects model_reasoning_effort key');
+  });
+
+  test('boolean keys under [features] are NOT flagged', () => {
+    const configContent = `[features]\ncodex_hooks = true\nmulti_agent = false\n`;
+
+    const featuresMatch = configContent.match(/\[features\]\n([\s\S]*?)(?=\n\[|$)/);
+    const featuresBody = featuresMatch[1];
+    const nonBooleanKeys = featuresBody.split('\n')
+      .filter(line => line.match(/^\s*\w+\s*=/) && !line.match(/=\s*(true|false)\s*(#.*)?$/))
+      .map(line => line.trim());
+
+    assert.strictEqual(nonBooleanKeys.length, 0, 'no non-boolean keys in a clean config');
+  });
+});

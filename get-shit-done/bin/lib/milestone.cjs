@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, getMilestonePhaseFilter, normalizeMd, output, error } = require('./core.cjs');
+const { escapeRegex, getMilestonePhaseFilter, normalizeMd, planningPaths, output, error } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const { writeStateMd } = require('./state.cjs');
 
@@ -25,7 +25,7 @@ function cmdRequirementsMarkComplete(cwd, reqIdsRaw, raw) {
     error('no valid requirement IDs found');
   }
 
-  const reqPath = path.join(cwd, '.planning', 'REQUIREMENTS.md');
+  const reqPath = planningPaths(cwd).requirements;
   if (!fs.existsSync(reqPath)) {
     output({ updated: false, reason: 'REQUIREMENTS.md not found', ids: reqIds }, raw, 'no requirements file');
     return;
@@ -90,12 +90,12 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
     error('version required for milestone complete (e.g., v1.0)');
   }
 
-  const roadmapPath = path.join(cwd, '.planning', 'ROADMAP.md');
-  const reqPath = path.join(cwd, '.planning', 'REQUIREMENTS.md');
-  const statePath = path.join(cwd, '.planning', 'STATE.md');
+  const roadmapPath = planningPaths(cwd).roadmap;
+  const reqPath = planningPaths(cwd).requirements;
+  const statePath = planningPaths(cwd).state;
   const milestonesPath = path.join(cwd, '.planning', 'MILESTONES.md');
   const archiveDir = path.join(cwd, '.planning', 'milestones');
-  const phasesDir = path.join(cwd, '.planning', 'phases');
+  const phasesDir = planningPaths(cwd).phases;
   const today = new Date().toISOString().split('T')[0];
   const milestoneName = options.name || version;
 

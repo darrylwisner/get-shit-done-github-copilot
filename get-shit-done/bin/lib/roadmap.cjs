@@ -4,10 +4,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, normalizePhaseName, output, error, findPhaseInternal, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone } = require('./core.cjs');
+const { escapeRegex, normalizePhaseName, planningPaths, output, error, findPhaseInternal, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone } = require('./core.cjs');
 
 function cmdRoadmapGetPhase(cwd, phaseNum, raw) {
-  const roadmapPath = path.join(cwd, '.planning', 'ROADMAP.md');
+  const roadmapPath = planningPaths(cwd).roadmap;
 
   if (!fs.existsSync(roadmapPath)) {
     output({ found: false, error: 'ROADMAP.md not found' }, raw, '');
@@ -91,7 +91,7 @@ function cmdRoadmapGetPhase(cwd, phaseNum, raw) {
 }
 
 function cmdRoadmapAnalyze(cwd, raw) {
-  const roadmapPath = path.join(cwd, '.planning', 'ROADMAP.md');
+  const roadmapPath = planningPaths(cwd).roadmap;
 
   if (!fs.existsSync(roadmapPath)) {
     output({ error: 'ROADMAP.md not found', milestones: [], phases: [], current_phase: null }, raw);
@@ -100,7 +100,7 @@ function cmdRoadmapAnalyze(cwd, raw) {
 
   const rawContent = fs.readFileSync(roadmapPath, 'utf-8');
   const content = extractCurrentMilestone(rawContent, cwd);
-  const phasesDir = path.join(cwd, '.planning', 'phases');
+  const phasesDir = planningPaths(cwd).phases;
 
   // Extract all phase headings: ## Phase N: Name or ### Phase N: Name
   const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
@@ -230,7 +230,7 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
     error('phase number required for roadmap update-plan-progress');
   }
 
-  const roadmapPath = path.join(cwd, '.planning', 'ROADMAP.md');
+  const roadmapPath = planningPaths(cwd).roadmap;
 
   const phaseInfo = findPhaseInternal(cwd, phaseNum);
   if (!phaseInfo) {

@@ -337,6 +337,40 @@ Prerequisites: Phase verified, `gh` CLI installed and authenticated.
 
 Usage: `/gsd:ship 4` or `/gsd:ship 4 --draft`
 
+---
+
+**`/gsd:review --phase N [--gemini] [--claude] [--codex] [--all]`**
+Cross-AI peer review — invoke external AI CLIs to independently review phase plans.
+
+- Detects available CLIs (gemini, claude, codex)
+- Each CLI reviews plans independently with the same structured prompt
+- Produces REVIEWS.md with per-reviewer feedback and consensus summary
+- Feed reviews back into planning: `/gsd:plan-phase N --reviews`
+
+Usage: `/gsd:review --phase 3 --all`
+
+---
+
+**`/gsd:pr-branch [target]`**
+Create a clean branch for pull requests by filtering out .planning/ commits.
+
+- Classifies commits: code-only (include), planning-only (exclude), mixed (include sans .planning/)
+- Cherry-picks code commits onto a clean branch
+- Reviewers see only code changes, no GSD artifacts
+
+Usage: `/gsd:pr-branch` or `/gsd:pr-branch main`
+
+---
+
+**`/gsd:plant-seed [idea]`**
+Capture a forward-looking idea with trigger conditions for automatic surfacing.
+
+- Seeds preserve WHY, WHEN to surface, and breadcrumbs to related code
+- Auto-surfaces during `/gsd:new-milestone` when trigger conditions match
+- Better than deferred items — triggers are checked, not forgotten
+
+Usage: `/gsd:plant-seed "add real-time notifications when we build the events system"`
+
 ### Milestone Auditing
 
 **`/gsd:audit-milestone [version]`**
