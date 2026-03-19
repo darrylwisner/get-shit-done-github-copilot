@@ -173,6 +173,14 @@ async function main() {
     error(`Invalid --cwd: ${cwd}`);
   }
 
+  // Resolve worktree root: in a linked worktree, .planning/ lives in the main worktree
+  const { resolveWorktreeRoot } = require('./lib/core.cjs');
+  const worktreeRoot = resolveWorktreeRoot(cwd);
+  if (worktreeRoot !== cwd) {
+    // Only override cwd for planning-related commands — keep original cwd for git operations
+    cwd = worktreeRoot;
+  }
+
   const rawIndex = args.indexOf('--raw');
   const raw = rawIndex !== -1;
   if (rawIndex !== -1) args.splice(rawIndex, 1);

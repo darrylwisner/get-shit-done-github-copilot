@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { escapeRegex, loadConfig, normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, toPosixPath, output, error } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
-const { writeStateMd } = require('./state.cjs');
+const { writeStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback } = require('./state.cjs');
 
 function cmdPhasesList(cwd, options, raw) {
   const phasesDir = path.join(cwd, '.planning', 'phases');
@@ -685,12 +685,11 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
   const statePath = path.join(cwd, '.planning', 'STATE.md');
   if (fs.existsSync(statePath)) {
     let stateContent = fs.readFileSync(statePath, 'utf-8');
-    // Update "Total Phases" field
-    const totalPattern = /(\*\*Total Phases:\*\*\s*)(\d+)/;
-    const totalMatch = stateContent.match(totalPattern);
-    if (totalMatch) {
-      const oldTotal = parseInt(totalMatch[2], 10);
-      stateContent = stateContent.replace(totalPattern, `$1${oldTotal - 1}`);
+    // Update "Total Phases" field — supports both bold and plain formats
+    const totalRaw = stateExtractField(stateContent, 'Total Phases');
+    if (totalRaw) {
+      const oldTotal = parseInt(totalRaw, 10);
+      stateContent = stateReplaceField(stateContent, 'Total Phases', String(oldTotal - 1)) || stateContent;
     }
     // Update "Phase: X of Y" pattern
     const ofPattern = /(\bof\s+)(\d+)(\s*(?:\(|phases?))/i;
@@ -767,16 +766,25 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     );
     roadmapContent = replaceInCurrentMilestone(roadmapContent, checkboxPattern, `$1x$2 (completed ${today})`);
 
-    // Progress table: update Status to Complete, add date
+    // Progress table: update Status to Complete, add date (handles 4 or 5 column tables)
     const phaseEscaped = escapeRegex(phaseNum);
-    const tablePattern = new RegExp(
-      `(\\|\\s*${phaseEscaped}\\.?\\s[^|]*\\|[^|]*\\|)\\s*[^|]*(\\|)\\s*[^|]*(\\|)`,
-      'i'
+    const tableRowPattern = new RegExp(
+      `^(\\|\\s*${phaseEscaped}\\.?\\s[^|]*(?:\\|[^\\n]*))$`,
+      'im'
     );
-    roadmapContent = replaceInCurrentMilestone(
-      roadmapContent, tablePattern,
-      `$1 Complete    $2 ${today} $3`
-    );
+    roadmapContent = roadmapContent.replace(tableRowPattern, (fullRow) => {
+      const cells = fullRow.split('|').slice(1, -1);
+      if (cells.length === 5) {
+        // 5-col: Phase | Milestone | Plans | Status | Completed
+        cells[3] = ' Complete    ';
+        cells[4] = ` ${today} `;
+      } else if (cells.length === 4) {
+        // 4-col: Phase | Plans | Status | Completed
+        cells[2] = ' Complete    ';
+        cells[3] = ` ${today} `;
+      }
+      return '|' + cells.join('|') + '|';
+    });
 
     // Update plan count in phase section
     const planCountPattern = new RegExp(
@@ -873,67 +881,58 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     } catch { /* intentionally empty */ }
   }
 
-  // Update STATE.md
+  // Update STATE.md — use shared helpers that handle both **bold:** and plain Field: formats
   if (fs.existsSync(statePath)) {
     let stateContent = fs.readFileSync(statePath, 'utf-8');
 
-    // Update Current Phase
-    stateContent = stateContent.replace(
-      /(\*\*Current Phase:\*\*\s*).*/,
-      `$1${nextPhaseNum || phaseNum}`
-    );
+    // Update Current Phase — preserve "X of Y (Name)" compound format
+    const phaseValue = nextPhaseNum || phaseNum;
+    const existingPhaseField = stateExtractField(stateContent, 'Current Phase')
+      || stateExtractField(stateContent, 'Phase');
+    let newPhaseValue = String(phaseValue);
+    if (existingPhaseField) {
+      const totalMatch = existingPhaseField.match(/of\s+(\d+)/);
+      const nameMatch = existingPhaseField.match(/\(([^)]+)\)/);
+      if (totalMatch) {
+        const total = totalMatch[1];
+        const nameStr = nextPhaseName ? ` (${nextPhaseName.replace(/-/g, ' ')})` : (nameMatch ? ` (${nameMatch[1]})` : '');
+        newPhaseValue = `${phaseValue} of ${total}${nameStr}`;
+      }
+    }
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase', 'Phase', newPhaseValue);
 
     // Update Current Phase Name
     if (nextPhaseName) {
-      stateContent = stateContent.replace(
-        /(\*\*Current Phase Name:\*\*\s*).*/,
-        `$1${nextPhaseName.replace(/-/g, ' ')}`
-      );
+      stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase Name', null, nextPhaseName.replace(/-/g, ' '));
     }
 
     // Update Status
-    stateContent = stateContent.replace(
-      /(\*\*Status:\*\*\s*).*/,
-      `$1${isLastPhase ? 'Milestone complete' : 'Ready to plan'}`
-    );
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Status', null,
+      isLastPhase ? 'Milestone complete' : 'Ready to plan');
 
     // Update Current Plan
-    stateContent = stateContent.replace(
-      /(\*\*Current Plan:\*\*\s*).*/,
-      `$1Not started`
-    );
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Plan', 'Plan', 'Not started');
 
     // Update Last Activity
-    stateContent = stateContent.replace(
-      /(\*\*Last Activity:\*\*\s*).*/,
-      `$1${today}`
-    );
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity', 'Last activity', today);
 
     // Update Last Activity Description
-    stateContent = stateContent.replace(
-      /(\*\*Last Activity Description:\*\*\s*).*/,
-      `$1Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`
-    );
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity Description', null,
+      `Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`);
 
     // Increment Completed Phases counter (#956)
-    const completedMatch = stateContent.match(/\*\*Completed Phases:\*\*\s*(\d+)/);
-    if (completedMatch) {
-      const newCompleted = parseInt(completedMatch[1], 10) + 1;
-      stateContent = stateContent.replace(
-        /(\*\*Completed Phases:\*\*\s*)\d+/,
-        `$1${newCompleted}`
-      );
+    const completedRaw = stateExtractField(stateContent, 'Completed Phases');
+    if (completedRaw) {
+      const newCompleted = parseInt(completedRaw, 10) + 1;
+      stateContent = stateReplaceField(stateContent, 'Completed Phases', String(newCompleted)) || stateContent;
 
       // Recalculate percent based on completed / total (#956)
-      const totalMatch = stateContent.match(/\*\*Total Phases:\*\*\s*(\d+)/);
-      if (totalMatch) {
-        const totalPhases = parseInt(totalMatch[1], 10);
+      const totalRaw = stateExtractField(stateContent, 'Total Phases');
+      if (totalRaw) {
+        const totalPhases = parseInt(totalRaw, 10);
         if (totalPhases > 0) {
           const newPercent = Math.round((newCompleted / totalPhases) * 100);
-          stateContent = stateContent.replace(
-            /(\*\*Progress:\*\*\s*)\d+%/,
-            `$1${newPercent}%`
-          );
+          stateContent = stateReplaceField(stateContent, 'Progress', `${newPercent}%`) || stateContent;
           // Also update percent field if it exists separately
           stateContent = stateContent.replace(
             /(percent:\s*)\d+/,

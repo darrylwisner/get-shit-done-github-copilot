@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawnSync } = require('child_process');
+const { execSync, execFileSync, spawnSync } = require('child_process');
 const { MODEL_PROFILES } = require('./model-profiles.cjs');
 
 // ─── Path helpers ────────────────────────────────────────────────────────────
@@ -131,7 +131,9 @@ function isGitIgnored(cwd, targetPath) {
     // Without it, git check-ignore returns "not ignored" for tracked files even when
     // .gitignore explicitly lists them — a common source of confusion when .planning/
     // was committed before being added to .gitignore.
-    execSync('git check-ignore -q --no-index -- ' + targetPath.replace(/[^a-zA-Z0-9._\-/]/g, ''), {
+    // Use execFileSync (array args) to prevent shell interpretation of special characters
+    // in file paths — avoids command injection via crafted path names.
+    execFileSync('git', ['check-ignore', '-q', '--no-index', '--', targetPath], {
       cwd,
       stdio: 'pipe',
     });
@@ -259,6 +261,84 @@ function execGit(cwd, args) {
 }
 
 // ─── Common path helpers ──────────────────────────────────────────────────────
+
+/**
+ * Resolve the main worktree root when running inside a git worktree.
+ * In a linked worktree, .planning/ lives in the main worktree, not in the linked one.
+ * Returns the main worktree path, or cwd if not in a worktree.
+ */
+function resolveWorktreeRoot(cwd) {
+  // Check if we're in a linked worktree
+  const gitDir = execGit(cwd, ['rev-parse', '--git-dir']);
+  const commonDir = execGit(cwd, ['rev-parse', '--git-common-dir']);
+
+  if (gitDir.exitCode !== 0 || commonDir.exitCode !== 0) return cwd;
+
+  // In a linked worktree, .git is a file pointing to .git/worktrees/<name>
+  // and git-common-dir points to the main repo's .git directory
+  const gitDirResolved = path.resolve(cwd, gitDir.stdout);
+  const commonDirResolved = path.resolve(cwd, commonDir.stdout);
+
+  if (gitDirResolved !== commonDirResolved) {
+    // We're in a linked worktree — resolve main worktree root
+    // The common dir is the main repo's .git, so its parent is the main worktree root
+    return path.dirname(commonDirResolved);
+  }
+
+  return cwd;
+}
+
+/**
+ * Acquire a file-based lock for .planning/ writes.
+ * Prevents concurrent worktrees from corrupting shared planning files.
+ * Lock is auto-released after the callback completes.
+ */
+function withPlanningLock(cwd, fn) {
+  const lockPath = path.join(planningDir(cwd), '.lock');
+  const lockTimeout = 10000; // 10 seconds
+  const retryDelay = 100;
+  const start = Date.now();
+
+  // Ensure .planning/ exists
+  try { fs.mkdirSync(planningDir(cwd), { recursive: true }); } catch { /* ok */ }
+
+  while (Date.now() - start < lockTimeout) {
+    try {
+      // Atomic create — fails if file exists
+      fs.writeFileSync(lockPath, JSON.stringify({
+        pid: process.pid,
+        cwd,
+        acquired: new Date().toISOString(),
+      }), { flag: 'wx' });
+
+      // Lock acquired — run the function
+      try {
+        return fn();
+      } finally {
+        try { fs.unlinkSync(lockPath); } catch { /* already released */ }
+      }
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        // Lock exists — check if stale (>30s old)
+        try {
+          const stat = fs.statSync(lockPath);
+          if (Date.now() - stat.mtimeMs > 30000) {
+            fs.unlinkSync(lockPath);
+            continue; // retry
+          }
+        } catch { continue; }
+
+        // Wait and retry
+        spawnSync('sleep', ['0.1'], { stdio: 'ignore' });
+        continue;
+      }
+      throw err;
+    }
+  }
+  // Timeout — force acquire (stale lock recovery)
+  try { fs.unlinkSync(lockPath); } catch { /* ok */ }
+  return fn();
+}
 
 /** Get the .planning directory path */
 function planningDir(cwd) {
@@ -642,6 +722,23 @@ function resolveModelInternal(cwd, agentType) {
   return alias;
 }
 
+// ─── Summary body helpers ─────────────────────────────────────────────────
+
+/**
+ * Extract a one-liner from the summary body when it's not in frontmatter.
+ * The summary template defines one-liner as a bold markdown line after the heading:
+ *   # Phase X: Name Summary
+ *   **[substantive one-liner text]**
+ */
+function extractOneLinerFromBody(content) {
+  if (!content) return null;
+  // Strip frontmatter first
+  const body = content.replace(/^---\n[\s\S]*?\n---\n*/, '');
+  // Find the first **...** line after a # heading
+  const match = body.match(/^#[^\n]*\n+\*\*([^*]+)\*\*/m);
+  return match ? match[1].trim() : null;
+}
+
 // ─── Misc utilities ───────────────────────────────────────────────────────────
 
 function pathExistsInternal(cwd, targetPath) {
@@ -760,6 +857,9 @@ module.exports = {
   extractCurrentMilestone,
   replaceInCurrentMilestone,
   toPosixPath,
+  extractOneLinerFromBody,
+  resolveWorktreeRoot,
+  withPlanningLock,
   MODEL_ALIAS_MAP,
   planningDir,
   planningPaths,

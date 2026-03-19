@@ -4,9 +4,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, getMilestonePhaseFilter, normalizeMd, planningPaths, output, error } = require('./core.cjs');
+const { escapeRegex, getMilestonePhaseFilter, extractOneLinerFromBody, normalizeMd, planningPaths, output, error } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
-const { writeStateMd } = require('./state.cjs');
+const { writeStateMd, stateReplaceFieldWithFallback } = require('./state.cjs');
 
 function cmdRequirementsMarkComplete(cwd, reqIdsRaw, raw) {
   if (!reqIdsRaw || reqIdsRaw.length === 0) {
@@ -131,8 +131,9 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
         try {
           const content = fs.readFileSync(path.join(phasesDir, dir, s), 'utf-8');
           const fm = extractFrontmatter(content);
-          if (fm['one-liner']) {
-            accomplishments.push(fm['one-liner']);
+          const oneLiner = fm['one-liner'] || extractOneLinerFromBody(content);
+          if (oneLiner) {
+            accomplishments.push(oneLiner);
           }
           // Count tasks: prefer **Tasks:** N from Performance section,
           // then <task XML tags, then ## Task N markdown headers
@@ -193,21 +194,15 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
     fs.writeFileSync(milestonesPath, normalizeMd(`# Milestones\n\n${milestoneEntry}`), 'utf-8');
   }
 
-  // Update STATE.md
+  // Update STATE.md — use shared helpers that handle both **bold:** and plain Field: formats
   if (fs.existsSync(statePath)) {
     let stateContent = fs.readFileSync(statePath, 'utf-8');
-    stateContent = stateContent.replace(
-      /(\*\*Status:\*\*\s*).*/,
-      `$1${version} milestone complete`
-    );
-    stateContent = stateContent.replace(
-      /(\*\*Last Activity:\*\*\s*).*/,
-      `$1${today}`
-    );
-    stateContent = stateContent.replace(
-      /(\*\*Last Activity Description:\*\*\s*).*/,
-      `$1${version} milestone completed and archived`
-    );
+
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Status', null, `${version} milestone complete`);
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity', 'Last activity', today);
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity Description', null,
+      `${version} milestone completed and archived`);
+
     writeStateMd(statePath, stateContent, cwd);
   }
 

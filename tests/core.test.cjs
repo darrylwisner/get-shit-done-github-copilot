@@ -898,3 +898,80 @@ describe('stale hook filter', () => {
     assert.ok(!filtered.includes('my-custom-hook.js'), 'must not include non-gsd hooks');
   });
 });
+
+// ─── resolveWorktreeRoot ─────────────────────────────────────────────────────
+
+describe('resolveWorktreeRoot', () => {
+  const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
+
+  test('returns cwd when not in a git repo', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-test-'));
+    try {
+      assert.strictEqual(resolveWorktreeRoot(tmpDir), tmpDir);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('returns cwd in a normal git repo (not a worktree)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-test-'));
+    try {
+      const { execSync } = require('child_process');
+      execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+      assert.strictEqual(resolveWorktreeRoot(tmpDir), tmpDir);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── withPlanningLock ────────────────────────────────────────────────────────
+
+describe('withPlanningLock', () => {
+  const { withPlanningLock, planningDir } = require('../get-shit-done/bin/lib/core.cjs');
+
+  test('executes function and returns result', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-lock-test-'));
+    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    try {
+      const result = withPlanningLock(tmpDir, () => 42);
+      assert.strictEqual(result, 42);
+      // Lock file should be cleaned up
+      assert.ok(!fs.existsSync(path.join(planningDir(tmpDir), '.lock')));
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('cleans up lock file even on error', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-lock-test-'));
+    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    try {
+      assert.throws(() => {
+        withPlanningLock(tmpDir, () => { throw new Error('test'); });
+      }, /test/);
+      assert.ok(!fs.existsSync(path.join(planningDir(tmpDir), '.lock')));
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('recovers from stale lock (>30s old)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-lock-test-'));
+    const planDir = path.join(tmpDir, '.planning');
+    fs.mkdirSync(planDir, { recursive: true });
+    const lockPath = path.join(planDir, '.lock');
+    try {
+      // Create a stale lock
+      fs.writeFileSync(lockPath, '{"pid":99999}');
+      // Backdate the lock file by 31 seconds
+      const staleTime = new Date(Date.now() - 31000);
+      fs.utimesSync(lockPath, staleTime, staleTime);
+
+      const result = withPlanningLock(tmpDir, () => 'recovered');
+      assert.strictEqual(result, 'recovered');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
