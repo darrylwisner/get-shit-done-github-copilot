@@ -448,6 +448,51 @@ describe('milestone complete command', () => {
     assert.strictEqual(output.tasks, 7, 'should count tasks from **Tasks:** N field');
   });
 
+  test('extracts one-liner from body when not in frontmatter', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap v1.0\n\n### Phase 1: Foundation\n**Goal:** Setup\n`
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# State\n\n**Status:** In progress\n**Last Activity:** 2025-01-01\n**Last Activity Description:** Working\n`
+    );
+
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-foundation');
+    fs.mkdirSync(p1, { recursive: true });
+    // No one-liner in frontmatter, but present in body as bold line
+    fs.writeFileSync(
+      path.join(p1, '01-01-SUMMARY.md'),
+      `---\nphase: "01"\n---\n\n# Phase 1: Foundation Summary\n\n**JWT auth with refresh rotation using jose library**\n\n## Performance\n`
+    );
+
+    const result = runGsdTools('milestone complete v1.0 --name MVP', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.ok(
+      output.accomplishments.includes('JWT auth with refresh rotation using jose library'),
+      'should extract one-liner from body bold line'
+    );
+  });
+
+  test('updates STATE.md with plain format fields', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap v1.0\n`
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# State\n\nStatus: In progress\nLast Activity: 2025-01-01\nLast Activity Description: Working\n`
+    );
+
+    const result = runGsdTools('milestone complete v1.0 --name Test', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const state = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(state.includes('v1.0 milestone complete'), 'plain Status field should be updated');
+  });
+
   test('handles empty phases directory', () => {
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'ROADMAP.md'),

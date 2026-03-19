@@ -201,14 +201,47 @@ function stateReplaceField(content, fieldName, newValue) {
   return null;
 }
 
+/**
+ * Replace a STATE.md field with fallback field name support.
+ * Tries `primary` first, then `fallback` (if provided), returns content unchanged
+ * if neither matches. This consolidates the replaceWithFallback pattern that was
+ * previously duplicated inline across phase.cjs, milestone.cjs, and state.cjs.
+ */
+function stateReplaceFieldWithFallback(content, primary, fallback, value) {
+  let result = stateReplaceField(content, primary, value);
+  if (result) return result;
+  if (fallback) {
+    result = stateReplaceField(content, fallback, value);
+    if (result) return result;
+  }
+  return content;
+}
+
 function cmdStateAdvancePlan(cwd, raw) {
   const statePath = planningPaths(cwd).state;
   if (!fs.existsSync(statePath)) { output({ error: 'STATE.md not found' }, raw); return; }
 
   let content = fs.readFileSync(statePath, 'utf-8');
-  const currentPlan = parseInt(stateExtractField(content, 'Current Plan'), 10);
-  const totalPlans = parseInt(stateExtractField(content, 'Total Plans in Phase'), 10);
   const today = new Date().toISOString().split('T')[0];
+
+  // Try legacy separate fields first, then compound "Plan: X of Y" format
+  const legacyPlan = stateExtractField(content, 'Current Plan');
+  const legacyTotal = stateExtractField(content, 'Total Plans in Phase');
+  const planField = stateExtractField(content, 'Plan');
+
+  let currentPlan, totalPlans;
+  let useCompoundFormat = false;
+
+  if (legacyPlan && legacyTotal) {
+    currentPlan = parseInt(legacyPlan, 10);
+    totalPlans = parseInt(legacyTotal, 10);
+  } else if (planField) {
+    // Compound format: "2 of 6 in current phase" or "2 of 6"
+    currentPlan = parseInt(planField, 10);
+    const ofMatch = planField.match(/of\s+(\d+)/);
+    totalPlans = ofMatch ? parseInt(ofMatch[1], 10) : NaN;
+    useCompoundFormat = true;
+  }
 
   if (isNaN(currentPlan) || isNaN(totalPlans)) {
     output({ error: 'Cannot parse Current Plan or Total Plans in Phase from STATE.md' }, raw);
@@ -216,15 +249,21 @@ function cmdStateAdvancePlan(cwd, raw) {
   }
 
   if (currentPlan >= totalPlans) {
-    content = stateReplaceField(content, 'Status', 'Phase complete — ready for verification') || content;
-    content = stateReplaceField(content, 'Last Activity', today) || content;
+    content = stateReplaceFieldWithFallback(content, 'Status', null, 'Phase complete — ready for verification');
+    content = stateReplaceFieldWithFallback(content, 'Last Activity', 'Last activity', today);
     writeStateMd(statePath, content, cwd);
     output({ advanced: false, reason: 'last_plan', current_plan: currentPlan, total_plans: totalPlans, status: 'ready_for_verification' }, raw, 'false');
   } else {
     const newPlan = currentPlan + 1;
-    content = stateReplaceField(content, 'Current Plan', String(newPlan)) || content;
-    content = stateReplaceField(content, 'Status', 'Ready to execute') || content;
-    content = stateReplaceField(content, 'Last Activity', today) || content;
+    if (useCompoundFormat) {
+      // Preserve compound format: "X of Y in current phase" → replace X only
+      const newPlanValue = planField.replace(/^\d+/, String(newPlan));
+      content = stateReplaceField(content, 'Plan', newPlanValue) || content;
+    } else {
+      content = stateReplaceField(content, 'Current Plan', String(newPlan)) || content;
+    }
+    content = stateReplaceFieldWithFallback(content, 'Status', null, 'Ready to execute');
+    content = stateReplaceFieldWithFallback(content, 'Last Activity', 'Last activity', today);
     writeStateMd(statePath, content, cwd);
     output({ advanced: true, previous_plan: currentPlan, current_plan: newPlan, total_plans: totalPlans }, raw, 'true');
   }
@@ -876,6 +915,7 @@ function cmdSignalResume(cwd, raw) {
 module.exports = {
   stateExtractField,
   stateReplaceField,
+  stateReplaceFieldWithFallback,
   writeStateMd,
   cmdStateLoad,
   cmdStateGet,

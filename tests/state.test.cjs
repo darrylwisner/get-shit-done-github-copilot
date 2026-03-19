@@ -506,7 +506,7 @@ describe('STATE.md frontmatter sync', () => {
 // stateExtractField and stateReplaceField helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const { stateExtractField, stateReplaceField } = require('../get-shit-done/bin/lib/state.cjs');
+const { stateExtractField, stateReplaceField, stateReplaceFieldWithFallback } = require('../get-shit-done/bin/lib/state.cjs');
 
 describe('stateExtractField and stateReplaceField helpers', () => {
   // stateExtractField tests
@@ -582,6 +582,45 @@ describe('stateExtractField and stateReplaceField helpers', () => {
 
     const reExtracted = stateExtractField(updated, 'Phase');
     assert.strictEqual(reExtracted, '4', 'extract after replace should return "4"');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// stateReplaceFieldWithFallback — consolidated fallback helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('stateReplaceFieldWithFallback', () => {
+  test('replaces primary field when present', () => {
+    const content = '# State\n\n**Status:** Old\n';
+    const result = stateReplaceFieldWithFallback(content, 'Status', null, 'New');
+    assert.ok(result.includes('**Status:** New'));
+  });
+
+  test('falls back to secondary field when primary not found', () => {
+    const content = '# State\n\nLast activity: 2024-01-01\n';
+    const result = stateReplaceFieldWithFallback(content, 'Last Activity', 'Last activity', '2025-03-19');
+    assert.ok(result.includes('Last activity: 2025-03-19'), 'should update fallback field');
+  });
+
+  test('returns content unchanged when neither field matches', () => {
+    const content = '# State\n\n**Phase:** 3\n';
+    const result = stateReplaceFieldWithFallback(content, 'Status', 'state', 'New');
+    assert.strictEqual(result, content, 'content should be unchanged');
+  });
+
+  test('prefers primary over fallback when both exist', () => {
+    const content = '# State\n\n**Status:** Old\nStatus: Also old\n';
+    const result = stateReplaceFieldWithFallback(content, 'Status', 'Status', 'New');
+    // Bold format is tried first by stateReplaceField
+    assert.ok(result.includes('**Status:** New'), 'should replace bold (primary) format');
+  });
+
+  test('works with plain format fields', () => {
+    const content = '# State\n\nPhase: 1 of 3 (Foundation)\nStatus: In progress\nPlan: 01-01\n';
+    let updated = stateReplaceFieldWithFallback(content, 'Status', null, 'Complete');
+    assert.ok(updated.includes('Status: Complete'), 'should update plain Status');
+    updated = stateReplaceFieldWithFallback(updated, 'Current Plan', 'Plan', 'Not started');
+    assert.ok(updated.includes('Plan: Not started'), 'should fall back to Plan field');
   });
 });
 
@@ -891,6 +930,45 @@ describe('cmdStateAdvancePlan (state advance-plan)', () => {
     const output = JSON.parse(result.output);
     assert.ok(output.error !== undefined, 'output should have error field');
     assert.ok(output.error.toLowerCase().includes('cannot parse'), 'error should mention Cannot parse');
+  });
+
+  test('advances plan in compound "Plan: X of Y" format', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\nPlan: 2 of 5 in current phase\nStatus: In progress\nLast activity: 2025-01-01\n`
+    );
+
+    const result = runGsdTools('state advance-plan', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.advanced, true, 'advanced should be true');
+    assert.strictEqual(output.previous_plan, 2);
+    assert.strictEqual(output.current_plan, 3);
+    assert.strictEqual(output.total_plans, 5);
+
+    const updated = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(updated.includes('Plan: 3 of 5 in current phase'),
+      'should preserve compound format with updated plan number');
+    assert.ok(updated.includes('Status: Ready to execute'),
+      'Status should be updated');
+  });
+
+  test('marks phase complete on last plan in compound format', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\nPlan: 3 of 3 in current phase\nStatus: In progress\nLast activity: 2025-01-01\n`
+    );
+
+    const result = runGsdTools('state advance-plan', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.advanced, false);
+    assert.strictEqual(output.reason, 'last_plan');
+
+    const updated = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(updated.includes('Phase complete'), 'Status should contain Phase complete');
   });
 });
 

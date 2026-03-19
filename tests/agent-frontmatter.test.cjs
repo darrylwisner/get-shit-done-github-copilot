@@ -181,3 +181,34 @@ describe('AGENT: required frontmatter fields', () => {
     });
   }
 });
+
+// ─── Discussion Log ──────────────────────────────────────────────────────────
+
+describe('DISCUSS: discussion log generation', () => {
+  test('discuss-phase workflow references DISCUSSION-LOG.md generation', () => {
+    const content = fs.readFileSync(
+      path.join(WORKFLOWS_DIR, 'discuss-phase.md'), 'utf-8'
+    );
+    assert.ok(
+      content.includes('DISCUSSION-LOG.md'),
+      'discuss-phase must reference DISCUSSION-LOG.md generation'
+    );
+    assert.ok(
+      content.includes('Audit trail only'),
+      'discuss-phase must mark discussion log as audit-only'
+    );
+  });
+
+  test('discussion-log template exists', () => {
+    const templatePath = path.join(__dirname, '..', 'get-shit-done', 'templates', 'discussion-log.md');
+    assert.ok(
+      fs.existsSync(templatePath),
+      'discussion-log.md template must exist'
+    );
+    const content = fs.readFileSync(templatePath, 'utf-8');
+    assert.ok(
+      content.includes('Do not use as input to planning'),
+      'template must contain audit-only notice'
+    );
+  });
+});

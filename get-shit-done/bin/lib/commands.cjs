@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, resolveModelInternal, stripShippedMilestones, extractCurrentMilestone, planningPaths, toPosixPath, output, error, findPhaseInternal, getRoadmapPhaseInternal } = require('./core.cjs');
+const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, resolveModelInternal, stripShippedMilestones, extractCurrentMilestone, planningPaths, toPosixPath, output, error, findPhaseInternal, extractOneLinerFromBody, getRoadmapPhaseInternal } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const { MODEL_PROFILES } = require('./model-profiles.cjs');
 
@@ -238,7 +238,13 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
   // Stage files
   const filesToStage = files && files.length > 0 ? files : ['.planning/'];
   for (const file of filesToStage) {
-    execGit(cwd, ['add', file]);
+    const fullPath = path.join(cwd, file);
+    if (!fs.existsSync(fullPath)) {
+      // File was deleted/moved — stage the deletion
+      execGit(cwd, ['rm', '--cached', '--ignore-unmatch', file]);
+    } else {
+      execGit(cwd, ['add', file]);
+    }
   }
 
   // Commit (--no-verify skips pre-commit hooks, used by parallel executor agents)
@@ -296,7 +302,7 @@ function cmdSummaryExtract(cwd, summaryPath, fields, raw) {
   // Build full result
   const fullResult = {
     path: summaryPath,
-    one_liner: fm['one-liner'] || null,
+    one_liner: fm['one-liner'] || extractOneLinerFromBody(content) || null,
     key_files: fm['key-files'] || [],
     tech_added: (fm['tech-stack'] && fm['tech-stack'].added) || [],
     patterns: fm['patterns-established'] || [],
