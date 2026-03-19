@@ -72,8 +72,8 @@ Errors: N | Warnings: N | Info: N
 ```
 ## Warnings
 
-- [W001] STATE.md references phase 5, but only phases 1-3 exist
-  Fix: Run /gsd:health --repair to regenerate
+- [W002] STATE.md references phase 5, but only phases 1-3 exist
+  Fix: Review STATE.md manually before changing it; repair will not overwrite an existing STATE.md
 
 - [W005] Phase directory "1-setup" doesn't follow NN-name format
   Fix: Rename to match pattern (e.g., 01-setup)
@@ -130,7 +130,7 @@ Report final status.
 | E004 | error | STATE.md not found | Yes |
 | E005 | error | config.json parse error | Yes |
 | W001 | warning | PROJECT.md missing required section | No |
-| W002 | warning | STATE.md references invalid phase | Yes |
+| W002 | warning | STATE.md references invalid phase | No |
 | W003 | warning | config.json not found | Yes |
 | W004 | warning | config.json invalid field value | No |
 | W005 | warning | Phase directory naming mismatch | No |
@@ -148,7 +148,7 @@ Report final status.
 |--------|--------|------|
 | createConfig | Create config.json with defaults | None |
 | resetConfig | Delete + recreate config.json | Loses custom settings |
-| regenerateState | Create STATE.md from ROADMAP structure | Loses session history |
+| regenerateState | Create STATE.md from ROADMAP structure when it is missing | Loses session history |
 | addNyquistKey | Add workflow.nyquist_validation: true to config.json | None — matches existing default |
 
 **Not repairable (too risky):**

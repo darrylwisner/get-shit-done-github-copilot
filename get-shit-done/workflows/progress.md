@@ -150,17 +150,47 @@ State: "This phase has {X} plans, {Y} summaries."
 Check for UAT.md files with status "diagnosed" (has gaps needing fixes).
 
 ```bash
-# Check for diagnosed UAT with gaps
-grep -l "status: diagnosed" .planning/phases/[current-phase-dir]/*-UAT.md 2>/dev/null
+# Check for diagnosed UAT with gaps or partial (incomplete) testing
+grep -l "status: diagnosed\|status: partial" .planning/phases/[current-phase-dir]/*-UAT.md 2>/dev/null
 ```
 
 Track:
 - `uat_with_gaps`: UAT.md files with status "diagnosed" (gaps need fixing)
+- `uat_partial`: UAT.md files with status "partial" (incomplete testing)
+
+**Step 1.6: Cross-phase health check**
+
+Scan ALL phases in the current milestone for outstanding verification debt using the CLI (which respects milestone boundaries via `getMilestonePhaseFilter`):
+
+```bash
+DEBT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" audit-uat --raw 2>/dev/null)
+```
+
+Parse JSON for `summary.total_items` and `summary.total_files`.
+
+Track: `outstanding_debt` — `summary.total_items` from the audit.
+
+**If outstanding_debt > 0:** Add a warning section to the progress report output (in the `report` step), placed between "## What's Next" and the route suggestion:
+
+```markdown
+## Verification Debt ({N} files across prior phases)
+
+| Phase | File | Issue |
+|-------|------|-------|
+| {phase} | {filename} | {pending_count} pending, {skipped_count} skipped, {blocked_count} blocked |
+| {phase} | {filename} | human_needed — {count} items |
+
+Review: `/gsd:audit-uat` — full cross-phase audit
+Resume testing: `/gsd:verify-work {phase}` — retest specific phase
+```
+
+This is a WARNING, not a blocker — routing proceeds normally. The debt is visible so the user can make an informed choice.
 
 **Step 2: Route based on counts**
 
 | Condition | Meaning | Action |
 |-----------|---------|--------|
+| uat_partial > 0 | UAT testing incomplete | Go to **Route E.2** |
 | uat_with_gaps > 0 | UAT gaps need fix plans | Go to **Route E** |
 | summaries < plans | Unexecuted plans exist | Go to **Route A** |
 | summaries = plans AND plans > 0 | Phase complete | Go to Step 3 |
@@ -254,6 +284,32 @@ UAT.md exists with gaps (diagnosed issues). User needs to plan fixes.
 **Also available:**
 - `/gsd:execute-phase {phase}` — execute phase plans
 - `/gsd:verify-work {phase}` — run more UAT testing
+
+---
+```
+
+---
+
+**Route E.2: UAT testing incomplete (partial)**
+
+UAT.md exists with `status: partial` — testing session ended before all items resolved.
+
+```
+---
+
+## Incomplete UAT Testing
+
+**{phase_num}-UAT.md** has {N} unresolved tests (pending, blocked, or skipped).
+
+`/gsd:verify-work {phase}` — resume testing from where you left off
+
+<sub>`/clear` first → fresh context window</sub>
+
+---
+
+**Also available:**
+- `/gsd:audit-uat` — full cross-phase UAT audit
+- `/gsd:execute-phase {phase}` — execute phase plans
 
 ---
 ```

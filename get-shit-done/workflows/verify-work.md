@@ -231,6 +231,29 @@ result: skipped
 reason: [user's reason if provided]
 ```
 
+**If response indicates blocked:**
+- "blocked", "can't test - server not running", "need physical device", "need release build"
+- Or any response containing: "server", "blocked", "not running", "physical device", "release build"
+
+Infer blocked_by tag from response:
+- Contains: server, not running, gateway, API → `server`
+- Contains: physical, device, hardware, real phone → `physical-device`
+- Contains: release, preview, build, EAS → `release-build`
+- Contains: stripe, twilio, third-party, configure → `third-party`
+- Contains: depends on, prior phase, prerequisite → `prior-phase`
+- Default: `other`
+
+Update Tests section:
+```
+### {N}. {name}
+expected: {expected}
+result: blocked
+blocked_by: {inferred tag}
+reason: "{verbatim user response}"
+```
+
+Note: Blocked tests do NOT go into the Gaps section (they aren't code issues — they're prerequisite gates).
+
 **If response is anything else:**
 - Treat as issue description
 
@@ -293,8 +316,24 @@ Proceed to `present_test`.
 <step name="complete_session">
 **Complete testing and commit:**
 
+**Determine final status:**
+
+Count results:
+- `pending_count`: tests with `result: [pending]`
+- `blocked_count`: tests with `result: blocked`
+- `skipped_no_reason`: tests with `result: skipped` and no `reason` field
+
+```
+if pending_count > 0 OR blocked_count > 0 OR skipped_no_reason > 0:
+  status: partial
+  # Session ended but not all tests resolved
+else:
+  status: complete
+  # All tests have a definitive result (pass, issue, or skipped-with-reason)
+```
+
 Update frontmatter:
-- status: complete
+- status: {computed status}
 - updated: [now]
 
 Clear Current Test section:

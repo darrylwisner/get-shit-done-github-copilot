@@ -110,6 +110,18 @@ Phase: "API documentation"
 1. Retry the question once with the same parameters
 2. If still empty, present the options as a plain-text numbered list and ask the user to type their choice number
 Never proceed with an empty answer.
+
+**Text mode (`workflow.text_mode: true` in config or `--text` flag):**
+When text mode is active, **do not use AskUserQuestion at all**. Instead, present every
+question as a plain-text numbered list and ask the user to type their choice number.
+This is required for Claude Code remote sessions (`/rc` mode) where the Claude App
+cannot forward TUI menu selections back to the host.
+
+Enable text mode:
+- Per-session: pass `--text` flag to any command (e.g., `/gsd:discuss-phase --text`)
+- Per-project: `gsd-tools config-set workflow.text_mode true`
+
+Text mode applies to ALL workflows in the session, not just discuss-phase.
 </answer_validation>
 
 <process>
@@ -463,6 +475,13 @@ With that context: How should users authenticate?
 ```
 
 When disabled (default), skip the research and present questions directly as before.
+
+**Text mode support:** Parse optional `--text` from `$ARGUMENTS`.
+- Accept `--text` flag OR read `workflow.text_mode` from config (from init context)
+- When active, replace ALL `AskUserQuestion` calls with plain-text numbered lists
+- User types a number to select, or types free text for "Other"
+- This is required for Claude Code remote sessions (`/rc` mode) where TUI menus
+  don't work through the Claude App
 
 **Batch mode support:** Parse optional `--batch` from `$ARGUMENTS`.
 - Accept `--batch`, `--batch=N`, or `--batch N`

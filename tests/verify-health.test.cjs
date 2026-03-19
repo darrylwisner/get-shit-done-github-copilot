@@ -191,10 +191,9 @@ describe('validate health command', () => {
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const output = JSON.parse(result.output);
-    assert.ok(
-      output.warnings.some(w => w.code === 'W002'),
-      `Expected W002 in warnings: ${JSON.stringify(output.warnings)}`
-    );
+    const w002 = output.warnings.find(w => w.code === 'W002');
+    assert.ok(w002, `Expected W002 in warnings: ${JSON.stringify(output.warnings)}`);
+    assert.strictEqual(w002.repairable, false, 'W002 should not be auto-repairable');
   });
 
   // ─── Check 5: config.json valid JSON + valid schema ───────────────────────
@@ -613,16 +612,13 @@ describe('validate health --repair command', () => {
     assert.ok(stateContent.includes('# Session State'), 'regenerated STATE.md should contain "# Session State"');
   });
 
-  test('backs up existing STATE.md before regenerating', () => {
+  test('does not rewrite existing STATE.md for invalid phase references', () => {
     writeValidConfigJson(tmpDir);
     const statePath = path.join(tmpDir, '.planning', 'STATE.md');
-    const originalContent = '# Session State\n\nOriginal content here.\n';
-    fs.writeFileSync(statePath, originalContent);
-
-    // Make STATE.md reference a nonexistent phase so repair is triggered
+    const originalContent = '# Session State\n\nPhase 99 is current.\n';
     fs.writeFileSync(
       statePath,
-      '# Session State\n\nPhase 99 is current.\n'
+      originalContent
     );
 
     const result = runGsdTools('validate health --repair', tmpDir);
@@ -630,19 +626,17 @@ describe('validate health --repair command', () => {
 
     const output = JSON.parse(result.output);
     assert.ok(
-      Array.isArray(output.repairs_performed),
-      `Expected repairs_performed: ${JSON.stringify(output)}`
+      !Array.isArray(output.repairs_performed) || !output.repairs_performed.some(r => r.action === 'regenerateState'),
+      `Did not expect regenerateState for W002: ${JSON.stringify(output)}`
     );
 
-    // Verify a .bak- file exists alongside STATE.md
+    const stateContent = fs.readFileSync(statePath, 'utf-8');
+    assert.strictEqual(stateContent, originalContent, 'existing STATE.md should be preserved');
+
     const planningDir = path.join(tmpDir, '.planning');
     const planningFiles = fs.readdirSync(planningDir);
     const backupFile = planningFiles.find(f => f.startsWith('STATE.md.bak-'));
-    assert.ok(backupFile, `Expected a STATE.md.bak- file. Found files: ${planningFiles.join(', ')}`);
-
-    // Verify backup contains the original content
-    const backupContent = fs.readFileSync(path.join(planningDir, backupFile), 'utf-8');
-    assert.ok(backupContent.includes('Phase 99'), 'backup should contain the original STATE.md content');
+    assert.strictEqual(backupFile, undefined, `Did not expect backup file for non-destructive repair. Found: ${planningFiles.join(', ')}`);
   });
 
   test('adds nyquist_validation key to config.json via addNyquistKey repair', () => {
@@ -687,5 +681,19 @@ describe('validate health --repair command', () => {
       output.repairable_count >= 2,
       `Expected repairable_count >= 2, got ${output.repairable_count}. Full output: ${JSON.stringify(output)}`
     );
+  });
+
+  test('phase mismatch warnings do not count as repairable issues', () => {
+    writeValidConfigJson(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      '# Session State\n\nPhase 99 is the current phase.\n'
+    );
+
+    const result = runGsdTools('validate health', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.repairable_count, 0, `Expected no repairable issues for W002: ${JSON.stringify(output)}`);
   });
 });

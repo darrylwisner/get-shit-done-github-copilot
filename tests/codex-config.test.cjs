@@ -160,6 +160,19 @@ tools: Read, Grep, Glob
     assert.ok(result.includes("'''"), 'has closing literal triple quotes');
   });
 
+  test('includes required name and description fields', () => {
+    const result = generateCodexAgentToml('gsd-executor', sampleAgent);
+    assert.ok(result.includes('name = "gsd-executor"'), 'has name');
+    assert.ok(result.includes('description = "Executes plans"'), 'has description');
+  });
+
+  test('falls back to generated description when frontmatter is missing fields', () => {
+    const minimalAgent = `<role>You are an unknown agent.</role>`;
+    const result = generateCodexAgentToml('gsd-unknown', minimalAgent);
+    assert.ok(result.includes('name = "gsd-unknown"'), 'falls back to agent name');
+    assert.ok(result.includes('description = "GSD agent gsd-unknown"'), 'falls back to synthetic description');
+  });
+
   test('defaults unknown agents to read-only', () => {
     const result = generateCodexAgentToml('gsd-unknown', sampleAgent);
     assert.ok(result.includes('sandbox_mode = "read-only"'), 'defaults to read-only');
@@ -354,6 +367,36 @@ describe('mergeCodexConfig', () => {
     assert.ok(content.includes('[agents.gsd-executor]'), 'has agent');
   });
 
+  test('case 3 strips existing [agents.gsd-*] sections before appending fresh block', () => {
+    const configPath = path.join(tmpDir, 'config.toml');
+    const existing = [
+      '[model]',
+      'name = "o3"',
+      '',
+      '[agents.custom-agent]',
+      'description = "user agent"',
+      '',
+      '',
+      '[agents.gsd-executor]',
+      'description = "old"',
+      'config_file = "agents/gsd-executor.toml"',
+      '',
+    ].join('\n');
+    fs.writeFileSync(configPath, existing);
+
+    mergeCodexConfig(configPath, sampleBlock);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const gsdAgentCount = (content.match(/^\[agents\.gsd-executor\]\s*$/gm) || []).length;
+    const markerCount = (content.match(new RegExp(GSD_CODEX_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+
+    assert.ok(content.includes('[model]'), 'preserves user content');
+    assert.ok(content.includes('[agents.custom-agent]'), 'preserves non-GSD agent section');
+    assert.strictEqual(gsdAgentCount, 1, 'keeps exactly one GSD agent section');
+    assert.strictEqual(markerCount, 1, 'adds exactly one marker block');
+    assert.ok(!/\n{3,}# GSD Agent Configuration/.test(content), 'does not leave extra blank lines before marker block');
+  });
+
   test('idempotent: re-merge produces same result', () => {
     const configPath = path.join(tmpDir, 'config.toml');
     mergeCodexConfig(configPath, sampleBlock);
@@ -485,10 +528,13 @@ describe('installCodexConfig (integration)', () => {
     assert.ok(fs.existsSync(path.join(agentsDir, 'gsd-plan-checker.toml')), 'plan-checker .toml exists');
 
     const executorToml = fs.readFileSync(path.join(agentsDir, 'gsd-executor.toml'), 'utf8');
+    assert.ok(executorToml.includes('name = "gsd-executor"'), 'executor has name');
+    assert.ok(executorToml.includes('description = "Executes GSD plans with atomic commits, deviation handling, checkpoint protocols, and state management. Spawned by execute-phase orchestrator or execute-plan command."'), 'executor has description');
     assert.ok(executorToml.includes('sandbox_mode = "workspace-write"'), 'executor is workspace-write');
     assert.ok(executorToml.includes('developer_instructions'), 'has developer_instructions');
 
     const checkerToml = fs.readFileSync(path.join(agentsDir, 'gsd-plan-checker.toml'), 'utf8');
+    assert.ok(checkerToml.includes('name = "gsd-plan-checker"'), 'plan-checker has name');
     assert.ok(checkerToml.includes('sandbox_mode = "read-only"'), 'plan-checker is read-only');
   });
 });

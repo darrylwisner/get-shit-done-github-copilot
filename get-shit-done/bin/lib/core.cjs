@@ -58,14 +58,17 @@ function loadConfig(cwd) {
     branching_strategy: 'none',
     phase_branch_template: 'gsd/phase-{phase}-{slug}',
     milestone_branch_template: 'gsd/{milestone}-{slug}',
+    quick_branch_template: null,
     research: true,
     plan_checker: true,
     verifier: true,
     nyquist_validation: true,
     parallelization: true,
     brave_search: false,
+    text_mode: false, // when true, use plain-text numbered lists instead of AskUserQuestion menus
     resolve_model_ids: false, // when true, resolve aliases (opus/sonnet/haiku) to full model IDs
     context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
+    phase_naming: 'sequential', // 'sequential' (default, auto-increment) or 'custom' (arbitrary string IDs)
   };
 
   try {
@@ -102,14 +105,17 @@ function loadConfig(cwd) {
       branching_strategy: get('branching_strategy', { section: 'git', field: 'branching_strategy' }) ?? defaults.branching_strategy,
       phase_branch_template: get('phase_branch_template', { section: 'git', field: 'phase_branch_template' }) ?? defaults.phase_branch_template,
       milestone_branch_template: get('milestone_branch_template', { section: 'git', field: 'milestone_branch_template' }) ?? defaults.milestone_branch_template,
+      quick_branch_template: get('quick_branch_template', { section: 'git', field: 'quick_branch_template' }) ?? defaults.quick_branch_template,
       research: get('research', { section: 'workflow', field: 'research' }) ?? defaults.research,
       plan_checker: get('plan_checker', { section: 'workflow', field: 'plan_check' }) ?? defaults.plan_checker,
       verifier: get('verifier', { section: 'workflow', field: 'verifier' }) ?? defaults.verifier,
       nyquist_validation: get('nyquist_validation', { section: 'workflow', field: 'nyquist_validation' }) ?? defaults.nyquist_validation,
       parallelization,
       brave_search: get('brave_search') ?? defaults.brave_search,
+      text_mode: get('text_mode', { section: 'workflow', field: 'text_mode' }) ?? defaults.text_mode,
       resolve_model_ids: get('resolve_model_ids') ?? defaults.resolve_model_ids,
       context_window: get('context_window') ?? defaults.context_window,
+      phase_naming: get('phase_naming') ?? defaults.phase_naming,
       model_overrides: parsed.model_overrides || null,
     };
   } catch {
@@ -280,17 +286,23 @@ function escapeRegex(value) {
 }
 
 function normalizePhaseName(phase) {
-  const match = String(phase).match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
-  if (!match) return phase;
-  const padded = match[1].padStart(2, '0');
-  const letter = match[2] ? match[2].toUpperCase() : '';
-  const decimal = match[3] || '';
-  return padded + letter + decimal;
+  const str = String(phase);
+  // Standard numeric phases: 1, 01, 12A, 12.1
+  const match = str.match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
+  if (match) {
+    const padded = match[1].padStart(2, '0');
+    const letter = match[2] ? match[2].toUpperCase() : '';
+    const decimal = match[3] || '';
+    return padded + letter + decimal;
+  }
+  // Custom phase IDs (e.g. PROJ-42, AUTH-101): return as-is
+  return str;
 }
 
 function comparePhaseNum(a, b) {
   const pa = String(a).match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
   const pb = String(b).match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
+  // If either is non-numeric (custom ID), fall back to string comparison
   if (!pa || !pb) return String(a).localeCompare(String(b));
   const intDiff = parseInt(pa[1], 10) - parseInt(pb[1], 10);
   if (intDiff !== 0) return intDiff;
@@ -320,10 +332,19 @@ function searchPhaseInDir(baseDir, relBase, normalized) {
   try {
     const entries = fs.readdirSync(baseDir, { withFileTypes: true });
     const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
-    const match = dirs.find(d => d.startsWith(normalized));
+    // Match: starts with normalized (numeric) OR contains normalized as prefix segment (custom ID)
+    const match = dirs.find(d => {
+      if (d.startsWith(normalized)) return true;
+      // For custom IDs like PROJ-42, match case-insensitively
+      if (d.toUpperCase().startsWith(normalized.toUpperCase())) return true;
+      return false;
+    });
     if (!match) return null;
 
-    const dirMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i);
+    // Extract phase number and name — supports both numeric (01-name) and custom (PROJ-42-name)
+    const dirMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
+      || match.match(/^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*)-(.+)/i)
+      || [null, match, null];
     const phaseNumber = dirMatch ? dirMatch[1] : normalized;
     const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
     const phaseDir = path.join(baseDir, match);
@@ -556,6 +577,7 @@ function getRoadmapPhaseInternal(cwd, phaseNum) {
   try {
     const content = extractCurrentMilestone(fs.readFileSync(roadmapPath, 'utf-8'), cwd);
     const escapedPhase = escapeRegex(phaseNum.toString());
+    // Match both numeric (Phase 1:) and custom (Phase PROJ-42:) headers
     const phasePattern = new RegExp(`#{2,4}\\s*Phase\\s+${escapedPhase}:\\s*([^\\n]+)`, 'i');
     const headerMatch = content.match(phasePattern);
     if (!headerMatch) return null;
@@ -563,7 +585,7 @@ function getRoadmapPhaseInternal(cwd, phaseNum) {
     const phaseName = headerMatch[1].trim();
     const headerIndex = headerMatch.index;
     const restOfContent = content.slice(headerIndex);
-    const nextHeaderMatch = restOfContent.match(/\n#{2,4}\s+Phase\s+\d/i);
+    const nextHeaderMatch = restOfContent.match(/\n#{2,4}\s+Phase\s+[\w]/i);
     const sectionEnd = nextHeaderMatch ? headerIndex + nextHeaderMatch.index : content.length;
     const section = content.slice(headerIndex, sectionEnd).trim();
 
@@ -643,7 +665,8 @@ function getMilestoneInfo(cwd) {
 
     // First: check for list-format roadmaps using 🚧 (in-progress) marker
     // e.g. "- 🚧 **v2.1 Belgium** — Phases 24-28 (in progress)"
-    const inProgressMatch = roadmap.match(/🚧\s*\*\*v(\d+\.\d+)\s+([^*]+)\*\*/);
+    // e.g. "- 🚧 **v1.2.1 Tech Debt** — Phases 1-8 (in progress)"
+    const inProgressMatch = roadmap.match(/🚧\s*\*\*v(\d+(?:\.\d+)+)\s+([^*]+)\*\*/);
     if (inProgressMatch) {
       return {
         version: 'v' + inProgressMatch[1],
@@ -654,15 +677,16 @@ function getMilestoneInfo(cwd) {
     // Second: heading-format roadmaps — strip shipped milestones in <details> blocks
     const cleaned = stripShippedMilestones(roadmap);
     // Extract version and name from the same ## heading for consistency
-    const headingMatch = cleaned.match(/## .*v(\d+\.\d+)[:\s]+([^\n(]+)/);
+    // Supports 2+ segment versions: v1.2, v1.2.1, v2.0.1, etc.
+    const headingMatch = cleaned.match(/## .*v(\d+(?:\.\d+)+)[:\s]+([^\n(]+)/);
     if (headingMatch) {
       return {
         version: 'v' + headingMatch[1],
         name: headingMatch[2].trim(),
       };
     }
-    // Fallback: try bare version match
-    const versionMatch = cleaned.match(/v(\d+\.\d+)/);
+    // Fallback: try bare version match (greedy — capture longest version string)
+    const versionMatch = cleaned.match(/v(\d+(?:\.\d+)+)/);
     return {
       version: versionMatch ? versionMatch[0] : 'v1.0',
       name: 'milestone',
@@ -681,7 +705,8 @@ function getMilestonePhaseFilter(cwd) {
   const milestonePhaseNums = new Set();
   try {
     const roadmap = extractCurrentMilestone(fs.readFileSync(path.join(cwd, '.planning', 'ROADMAP.md'), 'utf-8'), cwd);
-    const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:/gi;
+    // Match both numeric phases (Phase 1:) and custom IDs (Phase PROJ-42:)
+    const phasePattern = /#{2,4}\s*Phase\s+([\w][\w.-]*)\s*:/gi;
     let m;
     while ((m = phasePattern.exec(roadmap)) !== null) {
       milestonePhaseNums.add(m[1]);
@@ -699,9 +724,13 @@ function getMilestonePhaseFilter(cwd) {
   );
 
   function isDirInMilestone(dirName) {
+    // Try numeric match first
     const m = dirName.match(/^0*(\d+[A-Za-z]?(?:\.\d+)*)/);
-    if (!m) return false;
-    return normalized.has(m[1].toLowerCase());
+    if (m && normalized.has(m[1].toLowerCase())) return true;
+    // Try custom ID match (e.g. PROJ-42-description → PROJ-42)
+    const customMatch = dirName.match(/^([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)/);
+    if (customMatch && normalized.has(customMatch[1].toLowerCase())) return true;
+    return false;
   }
   isDirInMilestone.phaseCount = milestonePhaseNums.size;
   return isDirInMilestone;

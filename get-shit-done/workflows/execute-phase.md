@@ -9,15 +9,18 @@ Orchestrator coordinates, not executes. Each subagent loads the full execute-pla
 <runtime_compatibility>
 **Subagent spawning is runtime-specific:**
 - **Claude Code:** Uses `Task(subagent_type="gsd-executor", ...)` — blocks until complete, returns result
-- **Copilot:** Uses `@gsd-executor` agent reference — if subagent spawning hangs or fails to return,
-  fall back to **sequential inline execution**: read and follow execute-plan.md directly for each plan
-  instead of spawning parallel agents. This is slower but reliable.
+- **Copilot:** Subagent spawning does not reliably return completion signals. **Default to
+  sequential inline execution**: read and follow execute-plan.md directly for each plan
+  instead of spawning parallel agents. Only attempt parallel spawning if the user
+  explicitly requests it — and in that case, rely on the spot-check fallback in step 3
+  to detect completion.
 - **Other runtimes (Gemini, Codex, OpenCode):** If Task/subagent API is unavailable, use sequential
   inline execution as the fallback.
 
 **Fallback rule:** If a spawned agent completes its work (commits visible, SUMMARY.md exists) but
 the orchestrator never receives the completion signal, treat it as successful based on spot-checks
-and continue to the next wave/plan.
+and continue to the next wave/plan. Never block indefinitely waiting for a signal — always verify
+via filesystem and git state.
 </runtime_compatibility>
 
 <required_reading>
@@ -59,6 +62,14 @@ Parse JSON for: `executor_model`, `verifier_model`, `commit_docs`, `parallelizat
 **If `state_exists` is false but `.planning/` exists:** Offer reconstruct or continue.
 
 When `parallelization` is false, plans within a wave execute sequentially.
+
+**Runtime detection for Copilot:**
+Check if the current runtime is Copilot by testing for the `@gsd-executor` agent pattern
+or absence of the `Task()` subagent API. If running under Copilot, force sequential inline
+execution regardless of the `parallelization` setting — Copilot's subagent completion
+signals are unreliable (see `<runtime_compatibility>`). Set `COPILOT_SEQUENTIAL=true`
+internally and skip the `execute_waves` step in favor of `check_interactive_mode`'s
+inline path for each plan.
 
 **REQUIRED — Sync chain flag with intent.** If user invoked manually (no `--auto`), clear the ephemeral chain flag from any previous interrupted `--auto` chain. This prevents stale `_auto_chain_active: true` from causing unwanted auto-advance. This does NOT touch `workflow.auto_advance` (the user's persistent settings preference). You MUST execute this bash block before any config reads:
 ```bash
@@ -249,6 +260,28 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    ```
 
 3. **Wait for all agents in wave to complete.**
+
+   **Completion signal fallback (Copilot and runtimes where Task() may not return):**
+
+   If a spawned agent does not return a completion signal but appears to have finished
+   its work, do NOT block indefinitely. Instead, verify completion via spot-checks:
+
+   ```bash
+   # For each plan in this wave, check if the executor finished:
+   SUMMARY_EXISTS=$(test -f "{phase_dir}/{plan_number}-{plan_padded}-SUMMARY.md" && echo "true" || echo "false")
+   COMMITS_FOUND=$(git log --oneline --all --grep="{phase_number}-{plan_padded}" --since="1 hour ago" | head -1)
+   ```
+
+   **If SUMMARY.md exists AND commits are found:** The agent completed successfully —
+   treat as done and proceed to step 4. Log: `"✓ {Plan ID} completed (verified via spot-check — completion signal not received)"`
+
+   **If SUMMARY.md does NOT exist after a reasonable wait:** The agent may still be
+   running or may have failed silently. Check `git log --oneline -5` for recent
+   activity. If commits are still appearing, wait longer. If no activity, report
+   the plan as failed and route to the failure handler in step 5.
+
+   **This fallback applies automatically to all runtimes.** Claude Code's Task() normally
+   returns synchronously, but the fallback ensures resilience if it doesn't.
 
 4. **Post-wave hook validation (parallel mode only):**
 
@@ -525,6 +558,51 @@ grep "^status:" "$PHASE_DIR"/*-VERIFICATION.md | cut -d: -f2 | tr -d ' '
 | `gaps_found` | Present gap summary, offer `/gsd:plan-phase {phase} --gaps` |
 
 **If human_needed:**
+
+**Step A: Persist human verification items as UAT file.**
+
+Create `{phase_dir}/{phase_num}-HUMAN-UAT.md` using UAT template format:
+
+```markdown
+---
+status: partial
+phase: {phase_num}-{phase_name}
+source: [{phase_num}-VERIFICATION.md]
+started: [now ISO]
+updated: [now ISO]
+---
+
+## Current Test
+
+[awaiting human testing]
+
+## Tests
+
+{For each human_verification item from VERIFICATION.md:}
+
+### {N}. {item description}
+expected: {expected behavior from VERIFICATION.md}
+result: [pending]
+
+## Summary
+
+total: {count}
+passed: 0
+issues: 0
+pending: {count}
+skipped: 0
+blocked: 0
+
+## Gaps
+```
+
+Commit the file:
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "test({phase_num}): persist human verification items as UAT" --files "{phase_dir}/{phase_num}-HUMAN-UAT.md"
+```
+
+**Step B: Present to user:**
+
 ```
 ## ✓ Phase {X}: {Name} — Human Verification Required
 
@@ -532,8 +610,14 @@ All automated checks passed. {N} items need human testing:
 
 {From VERIFICATION.md human_verification section}
 
+Items saved to `{phase_num}-HUMAN-UAT.md` — they will appear in `/gsd:progress` and `/gsd:audit-uat`.
+
 "approved" → continue | Report issues → gap closure
 ```
+
+**If user says "approved":** Proceed to `update_roadmap`. The HUMAN-UAT.md file persists with `status: partial` and will surface in future progress checks until the user runs `/gsd:verify-work` on it.
+
+**If user reports issues:** Proceed to gap closure as currently implemented.
 
 **If gaps_found:**
 ```
@@ -572,8 +656,18 @@ The CLI handles:
 - Updating plan count to final
 - Advancing STATE.md to next phase
 - Updating REQUIREMENTS.md traceability
+- Scanning for verification debt (returns `warnings` array)
 
-Extract from result: `next_phase`, `next_phase_name`, `is_last_phase`.
+Extract from result: `next_phase`, `next_phase_name`, `is_last_phase`, `warnings`, `has_warnings`.
+
+**If has_warnings is true:**
+```
+## Phase {X} marked complete with {N} warnings:
+
+{list each warning}
+
+These items are tracked and will appear in `/gsd:progress` and `/gsd:audit-uat`.
+```
 
 ```bash
 node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(phase-{X}): complete phase execution" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md {phase_dir}/*-VERIFICATION.md

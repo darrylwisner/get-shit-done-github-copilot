@@ -181,7 +181,7 @@ function cmdRoadmapAnalyze(cwd, raw) {
 
   // Extract milestone info
   const milestones = [];
-  const milestonePattern = /##\s*(.*v(\d+\.\d+)[^(\n]*)/gi;
+  const milestonePattern = /##\s*(.*v(\d+(?:\.\d+)+)[^(\n]*)/gi;
   let mMatch;
   while ((mMatch = milestonePattern.exec(content)) !== null) {
     milestones.push({
@@ -285,6 +285,18 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
       'i'
     );
     roadmapContent = replaceInCurrentMilestone(roadmapContent, checkboxPattern, `$1x$2 (completed ${today})`);
+  }
+
+  // Mark completed plan checkboxes (e.g. "- [ ] 50-01-PLAN.md" or "- [ ] 50-01:")
+  for (const summaryFile of phaseInfo.summaries) {
+    const planId = summaryFile.replace('-SUMMARY.md', '').replace('SUMMARY.md', '');
+    if (!planId) continue;
+    const planEscaped = escapeRegex(planId);
+    const planCheckboxPattern = new RegExp(
+      `(-\\s*\\[) (\\]\\s*${planEscaped})`,
+      'i'
+    );
+    roadmapContent = roadmapContent.replace(planCheckboxPattern, '$1x$2');
   }
 
   fs.writeFileSync(roadmapPath, roadmapContent, 'utf-8');

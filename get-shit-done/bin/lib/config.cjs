@@ -16,8 +16,9 @@ const VALID_CONFIG_KEYS = new Set([
   'search_gitignored', 'brave_search',
   'workflow.research', 'workflow.plan_check', 'workflow.verifier',
   'workflow.nyquist_validation', 'workflow.ui_phase', 'workflow.ui_safety_gate',
+  'workflow.text_mode',
   'workflow._auto_chain_active',
-  'git.branching_strategy', 'git.phase_branch_template', 'git.milestone_branch_template',
+  'git.branching_strategy', 'git.phase_branch_template', 'git.milestone_branch_template', 'git.quick_branch_template',
   'planning.commit_docs', 'planning.search_gitignored',
 ]);
 
@@ -91,6 +92,7 @@ function ensureConfigFile(cwd) {
     branching_strategy: 'none',
     phase_branch_template: 'gsd/phase-{phase}-{slug}',
     milestone_branch_template: 'gsd/{milestone}-{slug}',
+    quick_branch_template: null,
     workflow: {
       research: true,
       plan_check: true,

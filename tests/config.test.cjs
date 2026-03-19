@@ -287,6 +287,16 @@ describe('config-set command', () => {
     );
   });
 
+  test('sets workflow.text_mode for remote session support', () => {
+    writeConfig(tmpDir, {});
+
+    const result = runGsdTools('config-set workflow.text_mode true', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.text_mode, true);
+  });
+
   test('errors when no key path provided', () => {
     const result = runGsdTools('config-set', tmpDir);
     assert.strictEqual(result.success, false);
