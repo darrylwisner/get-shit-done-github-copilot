@@ -234,6 +234,10 @@ See `~/.claude/get-shit-done/references/tdd.md` for structure.
 
 Your commits may trigger pre-commit hooks. Auto-fix hooks handle themselves transparently — files get fixed and re-staged automatically.
 
+**If running as a parallel executor agent (spawned by execute-phase):**
+Use `--no-verify` on all commits. Pre-commit hooks cause build lock contention when multiple agents commit simultaneously (e.g., cargo lock fights in Rust projects). The orchestrator validates once after all agents complete.
+
+**If running as the sole executor (sequential mode):**
 If a commit is BLOCKED by a hook:
 
 1. The `git commit` command fails with hook error output
@@ -241,9 +245,7 @@ If a commit is BLOCKED by a hook:
 3. Fix the issue (type error, lint violation, secret leak, etc.)
 4. `git add` the fixed files
 5. Retry the commit
-6. Do NOT use `--no-verify`
-
-This is normal and expected. Budget 1-2 retry cycles per commit.
+6. Budget 1-2 retry cycles per commit
 </precommit_failure_handling>
 
 <task_commit>

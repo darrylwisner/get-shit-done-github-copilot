@@ -331,7 +331,10 @@ node gsd-tools.cjs progress [json|table|bar]
 node gsd-tools.cjs todo complete <filename>
 
 # Git commit with config checks
-node gsd-tools.cjs commit <message> [--files f1 f2] [--amend]
+node gsd-tools.cjs commit <message> [--files f1 f2] [--amend] [--no-verify]
+```
+
+> **`--no-verify`**: Skips pre-commit hooks. Used by parallel executor agents during wave-based execution to avoid build lock contention (e.g., cargo lock fights in Rust projects). The orchestrator runs hooks once after each wave completes. Do not use `--no-verify` during sequential execution — let hooks run normally.
 
 # Web search (requires Brave API key)
 node gsd-tools.cjs websearch <query> [--limit N] [--freshness day|week|month]

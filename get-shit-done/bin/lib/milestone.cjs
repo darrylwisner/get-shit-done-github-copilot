@@ -137,10 +137,10 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
           // Count tasks
           const taskMatches = content.match(/##\s*Task\s*\d+/gi) || [];
           totalTasks += taskMatches.length;
-        } catch {}
+        } catch { /* intentionally empty */ }
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   // Archive ROADMAP.md
   if (fs.existsSync(roadmapPath)) {
@@ -220,7 +220,7 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
         archivedCount++;
       }
       phasesArchived = archivedCount > 0;
-    } catch {}
+    } catch { /* intentionally empty */ }
   }
 
   const result = {

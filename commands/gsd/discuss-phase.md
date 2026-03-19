@@ -1,7 +1,7 @@
 ---
 name: gsd:discuss-phase
 description: Gather phase context through adaptive questioning before planning. Use --auto to skip interactive questions (Claude picks recommended defaults).
-argument-hint: "<phase> [--auto]"
+argument-hint: "<phase> [--auto] [--batch] [--analyze]"
 allowed-tools:
   - Read
   - Write

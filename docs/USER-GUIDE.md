@@ -564,6 +564,21 @@ Since v1.17, the installer backs up locally modified files to `gsd-local-patches
 
 A known workaround exists for a Claude Code classification bug. GSD's orchestrators (execute-phase, quick) spot-check actual output before reporting failure. If you see a failure message but commits were made, check `git log` -- the work may have succeeded.
 
+### Parallel Execution Causes Build Lock Errors
+
+If you see pre-commit hook failures, cargo lock contention, or 30+ minute execution times during parallel wave execution, this is caused by multiple agents triggering build tools simultaneously. GSD handles this automatically since v1.26 — parallel agents use `--no-verify` on commits and the orchestrator runs hooks once after each wave. If you're on an older version, add this to your project's `CLAUDE.md`:
+
+```markdown
+## Git Commit Rules for Agents
+All subagent/executor commits MUST use `--no-verify`.
+```
+
+To disable parallel execution entirely: `/gsd:settings` → set `parallelization.enabled` to `false`.
+
+### Windows: Installation Crashes on Protected Directories
+
+If the installer crashes with `EPERM: operation not permitted, scandir` on Windows, this is caused by OS-protected directories (e.g., Chromium browser profiles). Fixed since v1.24 — update to the latest version. As a workaround, temporarily rename the problematic directory before running the installer.
+
 ---
 
 ## Recovery Quick Reference
@@ -581,6 +596,7 @@ A known workaround exists for a Claude Code classification bug. GSD's orchestrat
 | Update broke local changes | `/gsd:reapply-patches` |
 | Want session summary for stakeholder | `/gsd:session-report` |
 | Don't know what step is next | `/gsd:next` |
+| Parallel execution build errors | Update GSD or set `parallelization.enabled: false` |
 
 ---
 
