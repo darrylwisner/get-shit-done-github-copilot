@@ -867,3 +867,33 @@ describe('normalizeMd', () => {
     assert.ok(result.includes('\n\n- Decision 1'), 'list needs blank line before');
   });
 });
+
+// ─── Stale hook filter regression (#1200) ─────────────────────────────────────
+
+describe('stale hook filter', () => {
+  test('filter should only match gsd-prefixed .js files', () => {
+    const files = [
+      'gsd-check-update.js',
+      'gsd-context-monitor.js',
+      'gsd-statusline.js',
+      'gsd-workflow-guard.js',
+      'guard-edits-outside-project.js',  // user hook
+      'my-custom-hook.js',               // user hook
+      'gsd-check-update.js.bak',         // backup file
+      'README.md',                       // non-js file
+    ];
+
+    const gsdFilter = f => f.startsWith('gsd-') && f.endsWith('.js');
+    const filtered = files.filter(gsdFilter);
+
+    assert.deepStrictEqual(filtered, [
+      'gsd-check-update.js',
+      'gsd-context-monitor.js',
+      'gsd-statusline.js',
+      'gsd-workflow-guard.js',
+    ], 'should only include gsd-prefixed .js files');
+
+    assert.ok(!filtered.includes('guard-edits-outside-project.js'), 'must not include user hooks');
+    assert.ok(!filtered.includes('my-custom-hook.js'), 'must not include non-gsd hooks');
+  });
+});

@@ -445,6 +445,25 @@ Continue to discuss_areas with selected areas.
 <step name="discuss_areas">
 For each selected area, conduct a focused discussion loop.
 
+**Research-before-questions mode:** Check if `research_questions` is enabled in config (from init context or `.planning/config.json`). When enabled, before presenting questions for each area:
+1. Do a brief web search for best practices related to the area topic
+2. Summarize the top findings in 2-3 bullet points
+3. Present the research alongside the question so the user can make a more informed decision
+
+Example with research enabled:
+```
+Let's talk about [Authentication Strategy].
+
+📊 Best practices research:
+• OAuth 2.0 + PKCE is the current standard for SPAs (replaces implicit flow)
+• Session tokens with httpOnly cookies preferred over localStorage for XSS protection
+• Consider passkey/WebAuthn support — adoption is accelerating in 2025-2026
+
+With that context: How should users authenticate?
+```
+
+When disabled (default), skip the research and present questions directly as before.
+
 **Batch mode support:** Parse optional `--batch` from `$ARGUMENTS`.
 - Accept `--batch`, `--batch=N`, or `--batch N`
 
