@@ -428,7 +428,7 @@ function cmdValidateConsistency(cwd, raw) {
       const dm = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
       if (dm) diskPhases.add(dm[1]);
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   // Check: phases in ROADMAP but not on disk
   for (const p of roadmapPhases) {
@@ -490,7 +490,7 @@ function cmdValidateConsistency(cwd, raw) {
         }
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   // Check: frontmatter in plans has required fields
   try {
@@ -510,7 +510,7 @@ function cmdValidateConsistency(cwd, raw) {
         }
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   const passed = errors.length === 0;
   output({ passed, errors, warnings, warning_count: warnings.length }, raw, passed ? 'passed' : 'failed');
@@ -599,7 +599,7 @@ function cmdValidateHealth(cwd, options, raw) {
           if (m) diskPhases.add(m[1]);
         }
       }
-    } catch {}
+    } catch { /* intentionally empty */ }
     // Check for invalid references
     for (const ref of phaseRefs) {
       const normalizedRef = String(parseInt(ref, 10)).padStart(2, '0');
@@ -641,7 +641,7 @@ function cmdValidateHealth(cwd, options, raw) {
         addIssue('warning', 'W008', 'config.json: workflow.nyquist_validation absent (defaults to enabled but agents may skip)', 'Run /gsd:health --repair to add key', true);
         if (!repairs.includes('addNyquistKey')) repairs.push('addNyquistKey');
       }
-    } catch {}
+    } catch { /* intentionally empty */ }
   }
 
   // ─── Check 6: Phase directory naming (NN-name format) ─────────────────────
@@ -652,7 +652,7 @@ function cmdValidateHealth(cwd, options, raw) {
         addIssue('warning', 'W005', `Phase directory "${e.name}" doesn't follow NN-name format`, 'Rename to match pattern (e.g., 01-setup)');
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   // ─── Check 7: Orphaned plans (PLAN without SUMMARY) ───────────────────────
   try {
@@ -671,7 +671,7 @@ function cmdValidateHealth(cwd, options, raw) {
         }
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   // ─── Check 7b: Nyquist VALIDATION.md consistency ────────────────────────
   try {
@@ -689,7 +689,7 @@ function cmdValidateHealth(cwd, options, raw) {
         }
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   // ─── Check 8: Run existing consistency checks ─────────────────────────────
   // Inline subset of cmdValidateConsistency
@@ -712,7 +712,7 @@ function cmdValidateHealth(cwd, options, raw) {
           if (dm) diskPhases.add(dm[1]);
         }
       }
-    } catch {}
+    } catch { /* intentionally empty */ }
 
     // Phases in ROADMAP but not on disk
     for (const p of roadmapPhases) {

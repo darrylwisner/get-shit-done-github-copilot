@@ -19,7 +19,7 @@
  *   state signal-resume                Remove WAITING.json signal
  *   resolve-model <agent-type>         Get model for agent based on profile
  *   find-phase <phase>                 Find phase directory by number
- *   commit <message> [--files f1 f2]   Commit planning docs
+ *   commit <message> [--files f1 f2] [--no-verify]   Commit planning docs
  *   verify-summary <path>              Verify a SUMMARY.md file
  *   generate-slug <text>               Convert text to URL-safe slug
  *   current-timestamp [format]         Get timestamp (full|date|filename)
@@ -290,6 +290,7 @@ async function main() {
 
     case 'commit': {
       const amend = args.includes('--amend');
+      const noVerify = args.includes('--no-verify');
       const filesIndex = args.indexOf('--files');
       // Collect all positional args between command name and first flag,
       // then join them — handles both quoted ("multi word msg") and
@@ -298,7 +299,7 @@ async function main() {
       const messageArgs = args.slice(1, endIndex).filter(a => !a.startsWith('--'));
       const message = messageArgs.join(' ') || undefined;
       const files = filesIndex !== -1 ? args.slice(filesIndex + 1).filter(a => !a.startsWith('--')) : [];
-      commands.cmdCommit(cwd, message, files, raw, amend);
+      commands.cmdCommit(cwd, message, files, raw, amend, noVerify);
       break;
     }
 
@@ -534,8 +535,10 @@ async function main() {
       const subcommand = args[1];
       if (subcommand === 'complete') {
         commands.cmdTodoComplete(cwd, args[2], raw);
+      } else if (subcommand === 'match-phase') {
+        commands.cmdTodoMatchPhase(cwd, args[2], raw);
       } else {
-        error('Unknown todo subcommand. Available: complete');
+        error('Unknown todo subcommand. Available: complete, match-phase');
       }
       break;
     }

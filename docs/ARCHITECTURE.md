@@ -247,6 +247,14 @@ Each executor gets:
 - Project context (PROJECT.md, STATE.md)
 - Phase context (CONTEXT.md, RESEARCH.md if available)
 
+#### Parallel Commit Safety
+
+When multiple executors run within the same wave, two mechanisms prevent conflicts:
+
+1. **`--no-verify` commits** — Parallel agents skip pre-commit hooks (which can cause build lock contention, e.g., cargo lock fights in Rust projects). The orchestrator runs `git hook run pre-commit` once after each wave completes.
+
+2. **STATE.md file locking** — All `writeStateMd()` calls use lockfile-based mutual exclusion (`STATE.md.lock` with `O_EXCL` atomic creation). This prevents the read-modify-write race condition where two agents read STATE.md, modify different fields, and the last writer overwrites the other's changes. Includes stale lock detection (10s timeout) and spin-wait with jitter.
+
 ---
 
 ## Data Flow
@@ -358,7 +366,7 @@ Equivalent paths for other runtimes:
 
 ```
 .planning/
-├── PROJECT.md              # Project vision, constraints, decisions
+├── PROJECT.md              # Project vision, constraints, decisions, evolution rules
 ├── REQUIREMENTS.md         # Scoped requirements (v1/v2/out-of-scope)
 ├── ROADMAP.md              # Phase breakdown with status tracking
 ├── STATE.md                # Living memory: position, decisions, blockers, metrics

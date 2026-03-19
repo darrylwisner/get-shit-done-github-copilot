@@ -61,6 +61,10 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: initialize [p
 
 Each task gets its own commit immediately after completion.
 
+> **Parallel agents:** When running as a parallel executor (spawned by execute-phase),
+> use `--no-verify` on all commits to avoid pre-commit hook lock contention.
+> The orchestrator validates hooks once after all agents complete.
+
 ```
 {type}({phase}-{plan}): {task-name}
 

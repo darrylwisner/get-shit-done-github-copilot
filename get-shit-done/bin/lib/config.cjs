@@ -76,7 +76,7 @@ function ensureConfigFile(cwd) {
         delete userDefaults.depth;
         try {
           fs.writeFileSync(globalDefaultsPath, JSON.stringify(userDefaults, null, 2), 'utf-8');
-        } catch {}
+        } catch { /* intentionally empty */ }
       }
     }
   } catch (err) {

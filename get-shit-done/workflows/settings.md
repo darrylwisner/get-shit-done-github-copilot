@@ -160,7 +160,8 @@ Merge new settings into existing config.json:
     "branching_strategy": "none" | "phase" | "milestone"
   },
   "hooks": {
-    "context_warnings": true/false
+    "context_warnings": true/false,
+    "workflow_guard": true/false
   }
 }
 ```

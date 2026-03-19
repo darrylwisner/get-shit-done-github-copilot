@@ -157,3 +157,25 @@ Report final status.
 - Orphaned plan cleanup
 
 </repair_actions>
+
+<stale_task_cleanup>
+**Windows-specific:** Check for stale Claude Code task directories that accumulate on crash/freeze.
+These are left behind when subagents are force-killed and consume disk space.
+
+When `--repair` is active, detect and clean up:
+
+```bash
+# Check for stale task directories (older than 24 hours)
+TASKS_DIR="$HOME/.claude/tasks"
+if [ -d "$TASKS_DIR" ]; then
+  STALE_COUNT=$(find "$TASKS_DIR" -maxdepth 1 -type d -mtime +1 2>/dev/null | wc -l)
+  if [ "$STALE_COUNT" -gt 0 ]; then
+    echo "⚠️  Found $STALE_COUNT stale task directories in ~/.claude/tasks/"
+    echo "   These are leftover from crashed subagent sessions."
+    echo "   Run: rm -rf ~/.claude/tasks/*  (safe — only affects dead sessions)"
+  fi
+fi
+```
+
+Report as info diagnostic: `I002 | info | Stale subagent task directories found | Yes (--repair removes them)`
+</stale_task_cleanup>

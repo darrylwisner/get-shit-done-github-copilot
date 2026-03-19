@@ -568,6 +568,98 @@ describe('todo complete command', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// todo match-phase command
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('todo match-phase command', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+  afterEach(() => cleanup(tmpDir));
+
+  test('returns empty matches when no todos exist', () => {
+    const result = runGsdTools('todo match-phase 01', tmpDir);
+    assert.ok(result.success, 'should succeed');
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.todo_count, 0);
+    assert.deepStrictEqual(output.matches, []);
+  });
+
+  test('matches todo by keyword overlap with phase name', () => {
+    const pendingDir = path.join(tmpDir, '.planning', 'todos', 'pending');
+    fs.mkdirSync(pendingDir, { recursive: true });
+    fs.writeFileSync(path.join(pendingDir, 'auth-todo.md'),
+      'title: Add OAuth token refresh\narea: auth\ncreated: 2026-03-01\n\nNeed to handle token expiry for OAuth flows.');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap\n\n### Phase 01: Authentication and Session Management\n\n**Goal:** Implement OAuth login and session handling\n');
+
+    const result = runGsdTools('todo match-phase 01', tmpDir);
+    assert.ok(result.success, 'should succeed');
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.todo_count, 1, 'should find 1 todo');
+    assert.ok(output.matches.length > 0, 'should have matches');
+    assert.strictEqual(output.matches[0].title, 'Add OAuth token refresh');
+    assert.ok(output.matches[0].score > 0, 'score should be positive');
+    assert.ok(output.matches[0].reasons.length > 0, 'should have reasons');
+  });
+
+  test('does not match unrelated todo', () => {
+    const pendingDir = path.join(tmpDir, '.planning', 'todos', 'pending');
+    fs.mkdirSync(pendingDir, { recursive: true });
+    fs.writeFileSync(path.join(pendingDir, 'auth-todo.md'),
+      'title: Add OAuth token refresh\narea: auth\ncreated: 2026-03-01\n\nOAuth token expiry.');
+    fs.writeFileSync(path.join(pendingDir, 'unrelated-todo.md'),
+      'title: Fix CSS grid layout in dashboard\narea: ui\ncreated: 2026-03-01\n\nGrid columns break on mobile.');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap\n\n### Phase 01: Authentication and Session Management\n\n**Goal:** Implement OAuth login and session handling\n');
+
+    const result = runGsdTools('todo match-phase 01', tmpDir);
+    assert.ok(result.success, 'should succeed');
+    const output = JSON.parse(result.output);
+    const matchTitles = output.matches.map(m => m.title);
+    assert.ok(matchTitles.includes('Add OAuth token refresh'), 'auth todo should match');
+    assert.ok(!matchTitles.includes('Fix CSS grid layout in dashboard'), 'unrelated todo should not match');
+  });
+
+  test('matches todo by area overlap', () => {
+    const pendingDir = path.join(tmpDir, '.planning', 'todos', 'pending');
+    fs.mkdirSync(pendingDir, { recursive: true });
+    fs.writeFileSync(path.join(pendingDir, 'auth-todo.md'),
+      'title: Add OAuth token refresh\narea: auth\ncreated: 2026-03-01\n\nOAuth token handling.');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap\n\n### Phase 01: Auth System\n\n**Goal:** Build auth module\n');
+
+    const result = runGsdTools('todo match-phase 01', tmpDir);
+    const output = JSON.parse(result.output);
+    const authMatch = output.matches.find(m => m.title === 'Add OAuth token refresh');
+    assert.ok(authMatch, 'should find auth todo');
+    const hasAreaReason = authMatch.reasons.some(r => r.startsWith('area:'));
+    assert.ok(hasAreaReason, 'should match on area');
+  });
+
+  test('sorts matches by score descending', () => {
+    const pendingDir = path.join(tmpDir, '.planning', 'todos', 'pending');
+    fs.mkdirSync(pendingDir, { recursive: true });
+    fs.writeFileSync(path.join(pendingDir, 'weak-match.md'),
+      'title: Check token format\narea: general\ncreated: 2026-03-01\n\nToken format validation.');
+    fs.writeFileSync(path.join(pendingDir, 'strong-match.md'),
+      'title: Session management authentication OAuth token handling\narea: auth\ncreated: 2026-03-01\n\nSession auth OAuth tokens.');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap\n\n### Phase 01: Authentication and Session Management\n\n**Goal:** Implement OAuth login, session handling, and token management\n');
+
+    const result = runGsdTools('todo match-phase 01', tmpDir);
+    const output = JSON.parse(result.output);
+    assert.ok(output.matches.length >= 2, 'should have multiple matches');
+    for (let i = 1; i < output.matches.length; i++) {
+      assert.ok(output.matches[i - 1].score >= output.matches[i].score,
+        `match ${i-1} score (${output.matches[i-1].score}) should be >= match ${i} score (${output.matches[i].score})`);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // scaffold command
 // ─────────────────────────────────────────────────────────────────────────────
 
