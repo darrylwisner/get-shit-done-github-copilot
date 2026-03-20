@@ -13,13 +13,15 @@ const {
 
 const VALID_CONFIG_KEYS = new Set([
   'mode', 'granularity', 'parallelization', 'commit_docs', 'model_profile',
-  'search_gitignored', 'brave_search',
+  'search_gitignored', 'brave_search', 'firecrawl', 'exa_search',
   'workflow.research', 'workflow.plan_check', 'workflow.verifier',
   'workflow.nyquist_validation', 'workflow.ui_phase', 'workflow.ui_safety_gate',
+  'workflow.auto_advance', 'workflow.node_repair', 'workflow.node_repair_budget',
   'workflow.text_mode',
   'workflow._auto_chain_active',
   'git.branching_strategy', 'git.phase_branch_template', 'git.milestone_branch_template', 'git.quick_branch_template',
   'planning.commit_docs', 'planning.search_gitignored',
+  'hooks.context_warnings',
 ]);
 
 const CONFIG_KEY_SUGGESTIONS = {
@@ -32,6 +34,154 @@ function validateKnownConfigKeyPath(keyPath) {
   const suggested = CONFIG_KEY_SUGGESTIONS[keyPath];
   if (suggested) {
     error(`Unknown config key: ${keyPath}. Did you mean ${suggested}?`);
+  }
+}
+
+/**
+ * Build a fully-materialized config object for a new project.
+ *
+ * Merges (increasing priority):
+ *   1. Hardcoded defaults — every key that loadConfig() resolves, plus mode/granularity
+ *   2. User-level defaults from ~/.gsd/defaults.json (if present)
+ *   3. userChoices — the settings the user explicitly selected during /gsd:new-project
+ *
+ * Uses the canonical `git` namespace for branching keys (consistent with VALID_CONFIG_KEYS
+ * and the settings workflow). loadConfig() handles both flat and nested formats, so this
+ * is backward-compatible with existing projects that have flat keys.
+ *
+ * Returns a plain object — does NOT write any files.
+ */
+function buildNewProjectConfig(userChoices) {
+  const choices = userChoices || {};
+  const homedir = require('os').homedir();
+
+  // Detect API key availability
+  const braveKeyFile = path.join(homedir, '.gsd', 'brave_api_key');
+  const hasBraveSearch = !!(process.env.BRAVE_API_KEY || fs.existsSync(braveKeyFile));
+  const firecrawlKeyFile = path.join(homedir, '.gsd', 'firecrawl_api_key');
+  const hasFirecrawl = !!(process.env.FIRECRAWL_API_KEY || fs.existsSync(firecrawlKeyFile));
+  const exaKeyFile = path.join(homedir, '.gsd', 'exa_api_key');
+  const hasExaSearch = !!(process.env.EXA_API_KEY || fs.existsSync(exaKeyFile));
+
+  // Load user-level defaults from ~/.gsd/defaults.json if available
+  const globalDefaultsPath = path.join(homedir, '.gsd', 'defaults.json');
+  let userDefaults = {};
+  try {
+    if (fs.existsSync(globalDefaultsPath)) {
+      userDefaults = JSON.parse(fs.readFileSync(globalDefaultsPath, 'utf-8'));
+      // Migrate deprecated "depth" key to "granularity"
+      if ('depth' in userDefaults && !('granularity' in userDefaults)) {
+        const depthToGranularity = { quick: 'coarse', standard: 'standard', comprehensive: 'fine' };
+        userDefaults.granularity = depthToGranularity[userDefaults.depth] || userDefaults.depth;
+        delete userDefaults.depth;
+        try {
+          fs.writeFileSync(globalDefaultsPath, JSON.stringify(userDefaults, null, 2), 'utf-8');
+        } catch { /* intentionally empty */ }
+      }
+    }
+  } catch {
+    // Ignore malformed global defaults
+  }
+
+  const hardcoded = {
+    model_profile: 'balanced',
+    commit_docs: true,
+    parallelization: true,
+    search_gitignored: false,
+    brave_search: hasBraveSearch,
+    firecrawl: hasFirecrawl,
+    exa_search: hasExaSearch,
+    git: {
+      branching_strategy: 'none',
+      phase_branch_template: 'gsd/phase-{phase}-{slug}',
+      milestone_branch_template: 'gsd/{milestone}-{slug}',
+      quick_branch_template: null,
+    },
+    workflow: {
+      research: true,
+      plan_check: true,
+      verifier: true,
+      nyquist_validation: true,
+      auto_advance: false,
+      node_repair: true,
+      node_repair_budget: 2,
+      ui_phase: true,
+      ui_safety_gate: true,
+      text_mode: false,
+    },
+    hooks: {
+      context_warnings: true,
+    },
+  };
+
+  // Three-level deep merge: hardcoded <- userDefaults <- choices
+  return {
+    ...hardcoded,
+    ...userDefaults,
+    ...choices,
+    git: {
+      ...hardcoded.git,
+      ...(userDefaults.git || {}),
+      ...(choices.git || {}),
+    },
+    workflow: {
+      ...hardcoded.workflow,
+      ...(userDefaults.workflow || {}),
+      ...(choices.workflow || {}),
+    },
+    hooks: {
+      ...hardcoded.hooks,
+      ...(userDefaults.hooks || {}),
+      ...(choices.hooks || {}),
+    },
+  };
+}
+
+/**
+ * Command: create a fully-materialized .planning/config.json for a new project.
+ *
+ * Accepts user-chosen settings as a JSON string (the keys the user explicitly
+ * configured during /gsd:new-project). All remaining keys are filled from
+ * hardcoded defaults and optional ~/.gsd/defaults.json.
+ *
+ * Idempotent: if config.json already exists, returns { created: false }.
+ */
+function cmdConfigNewProject(cwd, choicesJson, raw) {
+  const configPath = path.join(cwd, '.planning', 'config.json');
+  const planningDir = path.join(cwd, '.planning');
+
+  // Idempotent: don't overwrite existing config
+  if (fs.existsSync(configPath)) {
+    output({ created: false, reason: 'already_exists' }, raw, 'exists');
+    return;
+  }
+
+  // Parse user choices
+  let userChoices = {};
+  if (choicesJson && choicesJson.trim() !== '') {
+    try {
+      userChoices = JSON.parse(choicesJson);
+    } catch (err) {
+      error('Invalid JSON for config-new-project: ' + err.message);
+    }
+  }
+
+  // Ensure .planning directory exists
+  try {
+    if (!fs.existsSync(planningDir)) {
+      fs.mkdirSync(planningDir, { recursive: true });
+    }
+  } catch (err) {
+    error('Failed to create .planning directory: ' + err.message);
+  }
+
+  const config = buildNewProjectConfig(userChoices);
+
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    output({ created: true, path: '.planning/config.json' }, raw, 'created');
+  } catch (err) {
+    error('Failed to write config.json: ' + err.message);
   }
 }
 
@@ -59,57 +209,10 @@ function ensureConfigFile(cwd) {
     return { created: false, reason: 'already_exists' };
   }
 
-  // Detect Brave Search API key availability
-  const homedir = require('os').homedir();
-  const braveKeyFile = path.join(homedir, '.gsd', 'brave_api_key');
-  const hasBraveSearch = !!(process.env.BRAVE_API_KEY || fs.existsSync(braveKeyFile));
-
-  // Load user-level defaults from ~/.gsd/defaults.json if available
-  const globalDefaultsPath = path.join(homedir, '.gsd', 'defaults.json');
-  let userDefaults = {};
-  try {
-    if (fs.existsSync(globalDefaultsPath)) {
-      userDefaults = JSON.parse(fs.readFileSync(globalDefaultsPath, 'utf-8'));
-      // Migrate deprecated "depth" key to "granularity"
-      if ('depth' in userDefaults && !('granularity' in userDefaults)) {
-        const depthToGranularity = { quick: 'coarse', standard: 'standard', comprehensive: 'fine' };
-        userDefaults.granularity = depthToGranularity[userDefaults.depth] || userDefaults.depth;
-        delete userDefaults.depth;
-        try {
-          fs.writeFileSync(globalDefaultsPath, JSON.stringify(userDefaults, null, 2), 'utf-8');
-        } catch { /* intentionally empty */ }
-      }
-    }
-  } catch (err) {
-    // Ignore malformed global defaults, fall back to hardcoded
-  }
-
-  // Create default config (user-level defaults override hardcoded defaults)
-  const hardcoded = {
-    model_profile: 'balanced',
-    commit_docs: true,
-    search_gitignored: false,
-    branching_strategy: 'none',
-    phase_branch_template: 'gsd/phase-{phase}-{slug}',
-    milestone_branch_template: 'gsd/{milestone}-{slug}',
-    quick_branch_template: null,
-    workflow: {
-      research: true,
-      plan_check: true,
-      verifier: true,
-      nyquist_validation: true,
-    },
-    parallelization: true,
-    brave_search: hasBraveSearch,
-  };
-  const defaults = {
-    ...hardcoded,
-    ...userDefaults,
-    workflow: { ...hardcoded.workflow, ...(userDefaults.workflow || {}) },
-  };
+  const config = buildNewProjectConfig({});
 
   try {
-    fs.writeFileSync(configPath, JSON.stringify(defaults, null, 2), 'utf-8');
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     return { created: true, path: '.planning/config.json' };
   } catch (err) {
     error('Failed to create config.json: ' + err.message);
@@ -306,4 +409,5 @@ module.exports = {
   cmdConfigSet,
   cmdConfigGet,
   cmdConfigSetModelProfile,
+  cmdConfigNewProject,
 };

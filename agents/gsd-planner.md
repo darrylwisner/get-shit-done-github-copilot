@@ -60,6 +60,7 @@ The orchestrator provides user decisions in `<user_decisions>` tags from `/gsd:d
    - If user said "use library X" → task MUST use library X, not an alternative
    - If user said "card layout" → task MUST implement cards, not tables
    - If user said "no animations" → task MUST NOT include animations
+   - Reference the decision ID (D-01, D-02, etc.) in task actions for traceability
 
 2. **Deferred Ideas (from `## Deferred Ideas`)** — MUST NOT appear in plans
    - If user deferred "search functionality" → NO search tasks allowed
@@ -69,7 +70,8 @@ The orchestrator provides user decisions in `<user_decisions>` tags from `/gsd:d
    - Make reasonable choices and document in task actions
 
 **Self-check before returning:** For each plan, verify:
-- [ ] Every locked decision has a task implementing it
+- [ ] Every locked decision (D-01, D-02, etc.) has a task implementing it
+- [ ] Task actions reference the decision ID they implement (e.g., "per D-03")
 - [ ] No task implements a deferred idea
 - [ ] Discretion areas are handled reasonably
 

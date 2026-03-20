@@ -188,7 +188,7 @@ async function main() {
   const command = args[0];
 
   if (!command) {
-    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, init');
+    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, config-new-project, init');
   }
 
   // Multi-repo guard: resolve project root for commands that read/write .planning/.
@@ -359,7 +359,12 @@ async function main() {
           name: nameIdx !== -1 ? args[nameIdx + 1] : null,
           type: typeIdx !== -1 ? args[typeIdx + 1] : 'execute',
           wave: waveIdx !== -1 ? args[waveIdx + 1] : '1',
-          fields: fieldsIdx !== -1 ? JSON.parse(args[fieldsIdx + 1]) : {},
+          fields: fieldsIdx !== -1 ? (() => {
+            const { safeJsonParse } = require('./lib/security.cjs');
+            const result = safeJsonParse(args[fieldsIdx + 1], { label: '--fields' });
+            if (!result.ok) error(result.error);
+            return result.value;
+          })() : {},
         }, raw);
       } else {
         error('Unknown template subcommand. Available: select, fill');
@@ -446,6 +451,11 @@ async function main() {
 
     case 'config-get': {
       config.cmdConfigGet(cwd, args[1], raw);
+      break;
+    }
+
+    case 'config-new-project': {
+      config.cmdConfigNewProject(cwd, args[1], raw);
       break;
     }
 

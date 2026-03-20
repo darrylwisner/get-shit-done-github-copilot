@@ -6,6 +6,58 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-03-20
+
+### Added
+- **Advisor mode** — Research-backed discussion with parallel agents evaluating gray areas before you decide
+- **Multi-repo workspace support** — Auto-detection and project root resolution for monorepos and multi-repo setups
+- **Cursor CLI runtime support** — Full installation and command conversion for Cursor
+- **`/gsd:fast` command** — Trivial inline tasks that skip planning entirely
+- **`/gsd:review` command** — Cross-AI peer review of current phase or branch
+- **`/gsd:plant-seed` command** — Backlog parking lot for ideas and persistent context threads
+- **`/gsd:pr-branch` command** — Clean PR branches filtering `.planning/` commits
+- **`/gsd:audit-uat` command** — Verification debt tracking across phases
+- **`--analyze` flag for discuss-phase** — Trade-off analysis during discussion
+- **`research_before_questions` config option** — Run research before discussion questions instead of after
+- **Ticket-based phase identifiers** — Support for team workflows using ticket IDs
+- **Worktree-aware `.planning/` resolution** — File locking for safe parallel access
+- **Discussion audit trail** — Auto-generated `DISCUSSION-LOG.md` during discuss-phase
+- **Context window size awareness** — Optimized behavior for 1M+ context models
+- **Exa and Firecrawl MCP support** — Additional research tools for research agents
+- **Runtime State Inventory** — Researcher capability for rename/refactor phases
+- **Quick-task branch support** — Isolated branches for quick-mode tasks
+- **Decision IDs** — Discuss-to-plan traceability via decision identifiers
+- **Stub detection** — Verifier and executor detect incomplete implementations
+- **Security hardening** — Centralized `security.cjs` module with path traversal prevention, prompt injection detection/sanitization, safe JSON parsing, field name validation, and shell argument validation. PreToolUse `gsd-prompt-guard` hook scans writes to `.planning/` for injection patterns
+
+### Changed
+- CI matrix updated to Node 20, 22, 24 — dropped EOL Node 18
+- GitHub Actions upgraded for Node 24 compatibility
+- Consolidated `planningPaths()` helper across 4 modules — eliminated 34 inline path constructions
+- Deduplicated code, annotated empty catches, consolidated STATE.md field helpers
+- Materialize full config on new-project initialization
+- Workflow enforcement guidance embedded in generated CLAUDE.md
+
+### Fixed
+- Path traversal in `readTextArgOrFile` — arguments validate paths resolve within project directory
+- Codex config.toml corruption from non-boolean `[features]` keys
+- Stale hooks check filtered to gsd-prefixed files only
+- Universal agent name replacement for non-Claude runtimes
+- `--no-verify` support for parallel executor commits
+- ROADMAP fallback for plan-phase, execute-phase, and verify-work
+- Copilot sequential fallback and spot-check completion detection
+- `text_mode` config for Claude Code remote session compatibility
+- Cursor: preserve slash-prefixed commands and unquoted skill names
+- Semver 3+ segment parsing and CRLF frontmatter corruption recovery
+- STATE.md parsing fixes (compound Plan field, progress tables, lifecycle extraction)
+- Windows HOME sandboxing for tests
+- Hook manifest tracking for local patch detection
+- Cross-platform code detection and STATE.md file locking
+- Auto-detect `commit_docs` from gitignore in `loadConfig`
+- Context monitor hook matcher and timeout
+- Codex EOL preservation when enabling hooks
+- macOS `/var` symlink resolution in path validation
+
 ## [1.26.0] - 2026-03-18
 
 ### Added
@@ -29,6 +81,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `result: blocked` with `blocked_by` tag for tests blocked by external dependencies (server, device, build, third-party)
   - `human_needed` verification items now persist as HUMAN-UAT.md files (trackable across sessions)
   - Phase completion and transition warnings surface verification debt non-blockingly
+- **Advisor mode for discuss-phase** — Spawns parallel research agents during `/gsd:discuss-phase` to evaluate gray areas before user decides. Returns structured comparison tables calibrated to user's vendor philosophy. Activates only when `USER-PROFILE.md` exists (#1211)
 
 ### Changed
 - Test suite consolidated: runtime converters deduplicated, helpers standardized (#1169)
@@ -1572,7 +1625,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.26.0...HEAD
+[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.27.0...HEAD
+[1.27.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.27.0
 [1.26.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.26.0
 [1.25.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.25.0
 [1.24.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.24.0

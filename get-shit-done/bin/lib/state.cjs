@@ -115,15 +115,30 @@ function cmdStateGet(cwd, section, raw) {
 function readTextArgOrFile(cwd, value, filePath, label) {
   if (!filePath) return value;
 
-  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath);
+  // Path traversal guard: ensure file resolves within project directory
+  const { validatePath } = require('./security.cjs');
+  const pathCheck = validatePath(filePath, cwd, { allowAbsolute: true });
+  if (!pathCheck.safe) {
+    throw new Error(`${label} path rejected: ${pathCheck.error}`);
+  }
+
   try {
-    return fs.readFileSync(resolvedPath, 'utf-8').trimEnd();
+    return fs.readFileSync(pathCheck.resolved, 'utf-8').trimEnd();
   } catch {
     throw new Error(`${label} file not found: ${filePath}`);
   }
 }
 
 function cmdStatePatch(cwd, patches, raw) {
+  // Validate all field names before processing
+  const { validateFieldName } = require('./security.cjs');
+  for (const field of Object.keys(patches)) {
+    const fieldCheck = validateFieldName(field);
+    if (!fieldCheck.valid) {
+      error(`state patch: ${fieldCheck.error}`);
+    }
+  }
+
   const statePath = planningPaths(cwd).state;
   try {
     let content = fs.readFileSync(statePath, 'utf-8');
@@ -159,6 +174,13 @@ function cmdStatePatch(cwd, patches, raw) {
 function cmdStateUpdate(cwd, field, value) {
   if (!field || value === undefined) {
     error('field and value required for state update');
+  }
+
+  // Validate field name to prevent regex injection via crafted field names
+  const { validateFieldName } = require('./security.cjs');
+  const fieldCheck = validateFieldName(field);
+  if (!fieldCheck.valid) {
+    error(`state update: ${fieldCheck.error}`);
   }
 
   const statePath = planningPaths(cwd).state;

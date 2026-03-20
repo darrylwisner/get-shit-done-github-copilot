@@ -236,6 +236,8 @@ const FRONTMATTER_SCHEMAS = {
 
 function cmdFrontmatterGet(cwd, filePath, field, raw) {
   if (!filePath) { error('file path required'); }
+  // Path traversal guard: reject null bytes
+  if (filePath.includes('\0')) { error('file path contains null bytes'); }
   const fullPath = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath);
   const content = safeReadFile(fullPath);
   if (!content) { output({ error: 'File not found', path: filePath }, raw); return; }
@@ -251,6 +253,8 @@ function cmdFrontmatterGet(cwd, filePath, field, raw) {
 
 function cmdFrontmatterSet(cwd, filePath, field, value, raw) {
   if (!filePath || !field || value === undefined) { error('file, field, and value required'); }
+  // Path traversal guard: reject null bytes
+  if (filePath.includes('\0')) { error('file path contains null bytes'); }
   const fullPath = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath);
   if (!fs.existsSync(fullPath)) { output({ error: 'File not found', path: filePath }, raw); return; }
   const content = fs.readFileSync(fullPath, 'utf-8');

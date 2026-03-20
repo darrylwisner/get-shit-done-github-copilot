@@ -29,7 +29,12 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd:new
     "ui_phase": true,
     "ui_safety_gate": true,
     "node_repair": true,
-    "node_repair_budget": 2
+    "node_repair_budget": 2,
+    "research_before_questions": false
+  },
+  "hooks": {
+    "context_warnings": true,
+    "workflow_guard": false
   },
   "parallelization": {
     "enabled": true,
@@ -91,6 +96,7 @@ All workflow toggles follow the **absent = enabled** pattern. If a key is missin
 | `workflow.ui_safety_gate` | boolean | `true` | Prompt to run /gsd:ui-phase for frontend phases during plan-phase |
 | `workflow.node_repair` | boolean | `true` | Autonomous task repair on verification failure |
 | `workflow.node_repair_budget` | number | `2` | Max repair attempts per failed task |
+| `workflow.research_before_questions` | boolean | `false` | Run research before discussion questions instead of after |
 
 ### Recommended Presets
 
@@ -112,6 +118,17 @@ All workflow toggles follow the **absent = enabled** pattern. If a key is missin
 ### Auto-Detection
 
 If `.planning/` is in `.gitignore`, `commit_docs` is automatically `false` regardless of config.json. This prevents git errors.
+
+---
+
+## Hook Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `hooks.context_warnings` | boolean | `true` | Show context window usage warnings via context monitor hook |
+| `hooks.workflow_guard` | boolean | `false` | Warn when file edits happen outside GSD workflow context (advises using `/gsd:quick` or `/gsd:fast`) |
+
+The prompt injection guard hook (`gsd-prompt-guard.js`) is always active and cannot be disabled — it's a security feature, not a workflow toggle.
 
 ### Private Planning Setup
 
