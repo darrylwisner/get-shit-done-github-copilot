@@ -2457,6 +2457,11 @@ function install(isGlobal, runtime = 'claude') {
     }
   }
 
+  // Clear stale update cache so next session re-evaluates hook versions
+  // targetDir is e.g. ~/.claude/get-shit-done/, parent is the config dir
+  const updateCacheFile = path.join(path.dirname(targetDir), 'cache', 'gsd-update-check.json');
+  try { fs.unlinkSync(updateCacheFile); } catch (e) { /* cache may not exist yet */ }
+
   if (failures.length > 0) {
     console.error(`\n  ${yellow}Installation incomplete!${reset} Failed: ${failures.join(', ')}`);
     process.exit(1);

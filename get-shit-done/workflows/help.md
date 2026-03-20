@@ -107,14 +107,16 @@ Result: Creates `.planning/phases/01-foundation/01-01-PLAN.md`
 ### Execution
 
 **`/gsd:execute-phase <phase-number>`**
-Execute all plans in a phase.
+Execute all plans in a phase, or run a specific wave.
 
 - Groups plans by wave (from frontmatter), executes waves sequentially
 - Plans within each wave run in parallel via Task tool
+- Optional `--wave N` flag executes only Wave `N` and stops unless the phase is now fully complete
 - Verifies phase goal after all plans complete
 - Updates REQUIREMENTS.md, ROADMAP.md, STATE.md
 
 Usage: `/gsd:execute-phase 5`
+Usage: `/gsd:execute-phase 5 --wave 2`
 
 ### Smart Router
 

@@ -65,9 +65,10 @@ const child = spawn(process.execPath, ['-e', `
   } catch (e) {}
 
   // Check for stale hooks — compare hook version headers against installed VERSION
+  // Hooks live inside get-shit-done/hooks/, not configDir/hooks/
   let staleHooks = [];
   if (configDir) {
-    const hooksDir = path.join(configDir, 'hooks');
+    const hooksDir = path.join(configDir, 'get-shit-done', 'hooks');
     try {
       if (fs.existsSync(hooksDir)) {
         const hookFiles = fs.readdirSync(hooksDir).filter(f => f.startsWith('gsd-') && f.endsWith('.js'));

@@ -47,6 +47,16 @@ Always use the exact name from this list — do not fall back to 'general-purpos
 
 <process>
 
+<step name="parse_args" priority="first">
+Parse `$ARGUMENTS` before loading any context:
+
+- First positional token → `PHASE_ARG`
+- Optional `--wave N` → `WAVE_FILTER`
+- Optional `--gaps-only` keeps its current meaning
+
+If `--wave` is absent, preserve the current behavior of executing all incomplete waves in the phase.
+</step>
+
 <step name="initialize" priority="first">
 Load all context in one call:
 
@@ -162,13 +172,19 @@ PLAN_INDEX=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" phase-plan-ind
 
 Parse JSON for: `phase`, `plans[]` (each with `id`, `wave`, `autonomous`, `objective`, `files_modified`, `task_count`, `has_summary`), `waves` (map of wave number → plan IDs), `incomplete`, `has_checkpoints`.
 
-**Filtering:** Skip plans where `has_summary: true`. If `--gaps-only`: also skip non-gap_closure plans. If all filtered: "No matching incomplete plans" → exit.
+**Filtering:** Skip plans where `has_summary: true`. If `--gaps-only`: also skip non-gap_closure plans. If `WAVE_FILTER` is set: also skip plans whose `wave` does not equal `WAVE_FILTER`.
+
+**Wave safety check:** If `WAVE_FILTER` is set and there are still incomplete plans in any lower wave that match the current execution mode, STOP and tell the user to finish earlier waves first. Do not let Wave 2+ execute while prerequisite earlier-wave plans remain incomplete.
+
+If all filtered: "No matching incomplete plans" → exit.
 
 Report:
 ```
 ## Execution Plan
 
-**Phase {X}: {Name}** — {total_plans} plans across {wave_count} waves
+**Phase {X}: {Name}** — {total_plans} matching plans across {wave_count} wave(s)
+
+{If WAVE_FILTER is set: `Wave filter active: executing only Wave {WAVE_FILTER}`.}
 
 | Wave | Plans | What it builds |
 |------|-------|----------------|
@@ -178,7 +194,7 @@ Report:
 </step>
 
 <step name="execute_waves">
-Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`, sequential if `false`.
+Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`, sequential if `false`.
 
 **For each wave:**
 
@@ -416,6 +432,37 @@ After all waves:
 ### Issues Encountered
 [Aggregate from SUMMARYs, or "None"]
 ```
+</step>
+
+<step name="handle_partial_wave_execution">
+If `WAVE_FILTER` was used, re-run plan discovery after execution:
+
+```bash
+POST_PLAN_INDEX=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" phase-plan-index "${PHASE_NUMBER}")
+```
+
+Apply the same "incomplete" filtering rules as earlier:
+- ignore plans with `has_summary: true`
+- if `--gaps-only`, only consider `gap_closure: true` plans
+
+**If incomplete plans still remain anywhere in the phase:**
+- STOP here
+- Do NOT run phase verification
+- Do NOT mark the phase complete in ROADMAP/STATE
+- Present:
+
+```markdown
+## Wave {WAVE_FILTER} Complete
+
+Selected wave finished successfully. This phase still has incomplete plans, so phase-level verification and completion were intentionally skipped.
+
+/gsd:execute-phase {phase}                # Continue remaining waves
+/gsd:execute-phase {phase} --wave {next}  # Run the next wave explicitly
+```
+
+**If no incomplete plans remain after the selected wave finishes:**
+- continue with the normal phase-level verification and completion flow below
+- this means the selected wave happened to be the last remaining work in the phase
 </step>
 
 <step name="close_parent_artifacts">
