@@ -20,6 +20,7 @@
  *   resolve-model <agent-type>         Get model for agent based on profile
  *   find-phase <phase>                 Find phase directory by number
  *   commit <message> [--files f1 f2] [--no-verify]   Commit planning docs
+ *   commit-to-subrepo <msg> --files f1 f2  Route commits to sub-repos
  *   verify-summary <path>              Verify a SUMMARY.md file
  *   generate-slug <text>               Convert text to URL-safe slug
  *   current-timestamp [format]         Get timestamp (full|date|filename)
@@ -134,7 +135,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { error } = require('./lib/core.cjs');
+const { error, findProjectRoot } = require('./lib/core.cjs');
 const state = require('./lib/state.cjs');
 const phase = require('./lib/phase.cjs');
 const roadmap = require('./lib/roadmap.cjs');
@@ -177,7 +178,6 @@ async function main() {
   const { resolveWorktreeRoot } = require('./lib/core.cjs');
   const worktreeRoot = resolveWorktreeRoot(cwd);
   if (worktreeRoot !== cwd) {
-    // Only override cwd for planning-related commands — keep original cwd for git operations
     cwd = worktreeRoot;
   }
 
@@ -189,6 +189,17 @@ async function main() {
 
   if (!command) {
     error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, init');
+  }
+
+  // Multi-repo guard: resolve project root for commands that read/write .planning/.
+  // Skip for pure-utility commands that don't touch .planning/ to avoid unnecessary
+  // filesystem traversal on every invocation.
+  const SKIP_ROOT_RESOLUTION = new Set([
+    'generate-slug', 'current-timestamp', 'verify-path-exists',
+    'verify-summary', 'template', 'frontmatter',
+  ]);
+  if (!SKIP_ROOT_RESOLUTION.has(command)) {
+    cwd = findProjectRoot(cwd);
   }
 
   switch (command) {
@@ -311,6 +322,14 @@ async function main() {
       const message = messageArgs.join(' ') || undefined;
       const files = filesIndex !== -1 ? args.slice(filesIndex + 1).filter(a => !a.startsWith('--')) : [];
       commands.cmdCommit(cwd, message, files, raw, amend, noVerify);
+      break;
+    }
+
+    case 'commit-to-subrepo': {
+      const message = args[1];
+      const filesIndex = args.indexOf('--files');
+      const files = filesIndex !== -1 ? args.slice(filesIndex + 1).filter(a => !a.startsWith('--')) : [];
+      commands.cmdCommitToSubrepo(cwd, message, files, raw);
       break;
     }
 
