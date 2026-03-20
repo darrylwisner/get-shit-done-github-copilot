@@ -200,6 +200,89 @@ describe('init commands', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ROADMAP fallback for init plan-phase / execute-phase / verify-work (#1238)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('init commands ROADMAP fallback when phase directory does not exist (#1238)', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap\n\n### Phase 1: Foundation Setup\n**Goal:** Bootstrap project\n**Requirements**: R-01, R-02\n**Plans:** TBD\n'
+    );
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('init plan-phase falls back to ROADMAP when no phase directory exists', () => {
+    const result = runGsdTools('init plan-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, true, 'phase_found should be true from ROADMAP fallback');
+    assert.strictEqual(output.phase_dir, null, 'phase_dir should be null (no directory yet)');
+    assert.strictEqual(output.phase_number, '1');
+    assert.strictEqual(output.phase_name, 'Foundation Setup');
+    assert.strictEqual(output.phase_slug, 'foundation-setup');
+    assert.strictEqual(output.padded_phase, '01');
+  });
+
+  test('init execute-phase falls back to ROADMAP when no phase directory exists', () => {
+    const result = runGsdTools('init execute-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, true, 'phase_found should be true from ROADMAP fallback');
+    assert.strictEqual(output.phase_dir, null, 'phase_dir should be null (no directory yet)');
+    assert.strictEqual(output.phase_number, '1');
+    assert.strictEqual(output.phase_name, 'Foundation Setup');
+    assert.strictEqual(output.phase_slug, 'foundation-setup');
+    assert.strictEqual(output.phase_req_ids, 'R-01, R-02');
+  });
+
+  test('init verify-work falls back to ROADMAP when no phase directory exists', () => {
+    const result = runGsdTools('init verify-work 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, true, 'phase_found should be true from ROADMAP fallback');
+    assert.strictEqual(output.phase_dir, null, 'phase_dir should be null (no directory yet)');
+    assert.strictEqual(output.phase_number, '1');
+    assert.strictEqual(output.phase_name, 'Foundation Setup');
+  });
+
+  test('init plan-phase returns phase_found false when neither directory nor ROADMAP entry exists', () => {
+    const result = runGsdTools('init plan-phase 99', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, false);
+    assert.strictEqual(output.phase_dir, null);
+    assert.strictEqual(output.phase_number, null);
+    assert.strictEqual(output.phase_name, null);
+  });
+
+  test('init plan-phase prefers disk directory over ROADMAP fallback', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-foundation-setup');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan');
+
+    const result = runGsdTools('init plan-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, true);
+    assert.ok(output.phase_dir !== null, 'phase_dir should point to disk directory');
+    assert.ok(output.phase_dir.includes('01-foundation-setup'));
+    assert.strictEqual(output.plan_count, 1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // cmdInitTodos (INIT-01)
 // ─────────────────────────────────────────────────────────────────────────────
 

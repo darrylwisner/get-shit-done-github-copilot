@@ -11,7 +11,6 @@ const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -51,7 +50,8 @@ describe('config-ensure-section command', () => {
     assert.strictEqual(typeof config.model_profile, 'string');
     assert.strictEqual(typeof config.commit_docs, 'boolean');
     assert.strictEqual(typeof config.parallelization, 'boolean');
-    assert.strictEqual(typeof config.branching_strategy, 'string');
+    assert.ok(config.git && typeof config.git === 'object', 'git should be an object');
+    assert.strictEqual(typeof config.git.branching_strategy, 'string');
     assert.ok(config.workflow && typeof config.workflow === 'object', 'workflow should be an object');
     assert.strictEqual(typeof config.workflow.research, 'boolean');
     assert.strictEqual(typeof config.workflow.plan_check, 'boolean');
@@ -76,121 +76,56 @@ describe('config-ensure-section command', () => {
     assert.strictEqual(secondOutput.reason, 'already_exists');
   });
 
-  // NOTE: This test touches ~/.gsd/ on the real filesystem. It uses save/restore
-  // try/finally and skips if the file already exists to avoid corrupting user config.
   test('detects Brave Search from file-based key', () => {
-    const homedir = os.homedir();
-    const gsdDir = path.join(homedir, '.gsd');
-    const braveKeyFile = path.join(gsdDir, 'brave_api_key');
+    // runGsdTools sandboxes HOME=tmpDir, so brave_api_key is written there —
+    // no real filesystem side effects, cleanup happens via afterEach.
+    const gsdDir = path.join(tmpDir, '.gsd');
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(path.join(gsdDir, 'brave_api_key'), 'test-key', 'utf-8');
 
-    // Skip if file already exists (don't mess with user's real config)
-    if (fs.existsSync(braveKeyFile)) {
-      return;
-    }
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
 
-    // Create .gsd dir and brave_api_key file
-    const gsdDirExisted = fs.existsSync(gsdDir);
-    try {
-      if (!gsdDirExisted) {
-        fs.mkdirSync(gsdDir, { recursive: true });
-      }
-      fs.writeFileSync(braveKeyFile, 'test-key', 'utf-8');
-
-      const result = runGsdTools('config-ensure-section', tmpDir);
-      assert.ok(result.success, `Command failed: ${result.error}`);
-
-      const config = readConfig(tmpDir);
-      assert.strictEqual(config.brave_search, true);
-    } finally {
-      // Clean up
-      try { fs.unlinkSync(braveKeyFile); } catch { /* ignore */ }
-      if (!gsdDirExisted) {
-        try { fs.rmdirSync(gsdDir); } catch { /* ignore if not empty */ }
-      }
-    }
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.brave_search, true);
   });
 
-  // NOTE: This test touches ~/.gsd/ on the real filesystem. It uses save/restore
-  // try/finally and skips if the file already exists to avoid corrupting user config.
   test('merges user defaults from defaults.json', () => {
-    const homedir = os.homedir();
-    const gsdDir = path.join(homedir, '.gsd');
-    const defaultsFile = path.join(gsdDir, 'defaults.json');
+    // runGsdTools sandboxes HOME=tmpDir, so defaults.json is written there —
+    // no real filesystem side effects, cleanup happens via afterEach.
+    const gsdDir = path.join(tmpDir, '.gsd');
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(path.join(gsdDir, 'defaults.json'), JSON.stringify({
+      model_profile: 'quality',
+      commit_docs: false,
+    }), 'utf-8');
 
-    // Save existing defaults if present
-    let existingDefaults = null;
-    const gsdDirExisted = fs.existsSync(gsdDir);
-    if (fs.existsSync(defaultsFile)) {
-      existingDefaults = fs.readFileSync(defaultsFile, 'utf-8');
-    }
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
 
-    try {
-      if (!gsdDirExisted) {
-        fs.mkdirSync(gsdDir, { recursive: true });
-      }
-      fs.writeFileSync(defaultsFile, JSON.stringify({
-        model_profile: 'quality',
-        commit_docs: false,
-      }), 'utf-8');
-
-      const result = runGsdTools('config-ensure-section', tmpDir);
-      assert.ok(result.success, `Command failed: ${result.error}`);
-
-      const config = readConfig(tmpDir);
-      assert.strictEqual(config.model_profile, 'quality', 'model_profile should be overridden');
-      assert.strictEqual(config.commit_docs, false, 'commit_docs should be overridden');
-      assert.strictEqual(typeof config.branching_strategy, 'string', 'branching_strategy should be a string');
-    } finally {
-      // Restore
-      if (existingDefaults !== null) {
-        fs.writeFileSync(defaultsFile, existingDefaults, 'utf-8');
-      } else {
-        try { fs.unlinkSync(defaultsFile); } catch { /* ignore */ }
-      }
-      if (!gsdDirExisted) {
-        try { fs.rmdirSync(gsdDir); } catch { /* ignore */ }
-      }
-    }
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.model_profile, 'quality', 'model_profile should be overridden');
+    assert.strictEqual(config.commit_docs, false, 'commit_docs should be overridden');
+    assert.ok(config.git && typeof config.git === 'object', 'git should be an object');
+    assert.strictEqual(typeof config.git.branching_strategy, 'string', 'git.branching_strategy should be a string');
   });
 
-  // NOTE: This test touches ~/.gsd/ on the real filesystem. It uses save/restore
-  // try/finally and skips if the file already exists to avoid corrupting user config.
   test('merges nested workflow keys from defaults.json preserving unset keys', () => {
-    const homedir = os.homedir();
-    const gsdDir = path.join(homedir, '.gsd');
-    const defaultsFile = path.join(gsdDir, 'defaults.json');
+    // runGsdTools sandboxes HOME=tmpDir, so defaults.json is written there —
+    // no real filesystem side effects, cleanup happens via afterEach.
+    const gsdDir = path.join(tmpDir, '.gsd');
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(path.join(gsdDir, 'defaults.json'), JSON.stringify({
+      workflow: { research: false },
+    }), 'utf-8');
 
-    let existingDefaults = null;
-    const gsdDirExisted = fs.existsSync(gsdDir);
-    if (fs.existsSync(defaultsFile)) {
-      existingDefaults = fs.readFileSync(defaultsFile, 'utf-8');
-    }
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
 
-    try {
-      if (!gsdDirExisted) {
-        fs.mkdirSync(gsdDir, { recursive: true });
-      }
-      fs.writeFileSync(defaultsFile, JSON.stringify({
-        workflow: { research: false },
-      }), 'utf-8');
-
-      const result = runGsdTools('config-ensure-section', tmpDir);
-      assert.ok(result.success, `Command failed: ${result.error}`);
-
-      const config = readConfig(tmpDir);
-      assert.strictEqual(config.workflow.research, false, 'research should be overridden');
-      assert.strictEqual(typeof config.workflow.plan_check, 'boolean', 'plan_check should be a boolean');
-      assert.strictEqual(typeof config.workflow.verifier, 'boolean', 'verifier should be a boolean');
-    } finally {
-      if (existingDefaults !== null) {
-        fs.writeFileSync(defaultsFile, existingDefaults, 'utf-8');
-      } else {
-        try { fs.unlinkSync(defaultsFile); } catch { /* ignore */ }
-      }
-      if (!gsdDirExisted) {
-        try { fs.rmdirSync(gsdDir); } catch { /* ignore */ }
-      }
-    }
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.research, false, 'research should be overridden');
+    assert.strictEqual(typeof config.workflow.plan_check, 'boolean', 'plan_check should be a boolean');
+    assert.strictEqual(typeof config.workflow.verifier, 'boolean', 'verifier should be a boolean');
   });
 });
 
@@ -380,5 +315,308 @@ describe('config-get command', () => {
   test('errors when no key path provided', () => {
     const result = runGsdTools('config-get', tmpDir);
     assert.strictEqual(result.success, false);
+  });
+});
+
+// ─── config-new-project ───────────────────────────────────────────────────────
+
+describe('config-new-project command', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('creates full config with all expected keys', () => {
+    const choices = JSON.stringify({
+      mode: 'interactive',
+      granularity: 'standard',
+      parallelization: true,
+      commit_docs: true,
+      model_profile: 'balanced',
+      workflow: { research: true, plan_check: true, verifier: true, nyquist_validation: true },
+    });
+    const result = runGsdTools(['config-new-project', choices], tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+
+    // User choices present
+    assert.strictEqual(config.mode, 'interactive');
+    assert.strictEqual(config.granularity, 'standard');
+    assert.strictEqual(config.parallelization, true);
+    assert.strictEqual(config.commit_docs, true);
+    assert.strictEqual(config.model_profile, 'balanced');
+
+    // Defaults materialized — these were silently missing before
+    assert.strictEqual(typeof config.search_gitignored, 'boolean');
+    assert.strictEqual(typeof config.brave_search, 'boolean');
+
+    // git section present with all three keys
+    assert.ok(config.git && typeof config.git === 'object', 'git section should exist');
+    assert.strictEqual(config.git.branching_strategy, 'none');
+    assert.strictEqual(config.git.phase_branch_template, 'gsd/phase-{phase}-{slug}');
+    assert.strictEqual(config.git.milestone_branch_template, 'gsd/{milestone}-{slug}');
+
+    // workflow section present with all keys
+    assert.ok(config.workflow && typeof config.workflow === 'object', 'workflow section should exist');
+    assert.strictEqual(config.workflow.research, true);
+    assert.strictEqual(config.workflow.plan_check, true);
+    assert.strictEqual(config.workflow.verifier, true);
+    assert.strictEqual(config.workflow.nyquist_validation, true);
+    assert.strictEqual(config.workflow.auto_advance, false);
+    assert.strictEqual(config.workflow.node_repair, true);
+    assert.strictEqual(config.workflow.node_repair_budget, 2);
+    assert.strictEqual(config.workflow.ui_phase, true);
+    assert.strictEqual(config.workflow.ui_safety_gate, true);
+
+    // hooks section present
+    assert.ok(config.hooks && typeof config.hooks === 'object', 'hooks section should exist');
+    assert.strictEqual(config.hooks.context_warnings, true);
+  });
+
+  test('user choices override defaults', () => {
+    const choices = JSON.stringify({
+      mode: 'yolo',
+      granularity: 'coarse',
+      parallelization: false,
+      commit_docs: false,
+      model_profile: 'quality',
+      workflow: { research: false, plan_check: false, verifier: true, nyquist_validation: false },
+    });
+    const result = runGsdTools(['config-new-project', choices], tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.mode, 'yolo');
+    assert.strictEqual(config.granularity, 'coarse');
+    assert.strictEqual(config.parallelization, false);
+    assert.strictEqual(config.commit_docs, false);
+    assert.strictEqual(config.model_profile, 'quality');
+    assert.strictEqual(config.workflow.research, false);
+    assert.strictEqual(config.workflow.plan_check, false);
+    assert.strictEqual(config.workflow.verifier, true);
+    assert.strictEqual(config.workflow.nyquist_validation, false);
+    // Defaults still present for non-chosen keys
+    assert.strictEqual(config.git.branching_strategy, 'none');
+    assert.strictEqual(typeof config.search_gitignored, 'boolean');
+  });
+
+  test('works with empty choices — all defaults materialized', () => {
+    const result = runGsdTools(['config-new-project', '{}'], tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.model_profile, 'balanced');
+    assert.strictEqual(config.commit_docs, true);
+    assert.strictEqual(config.parallelization, true);
+    assert.strictEqual(config.search_gitignored, false);
+    assert.ok(config.git && typeof config.git === 'object');
+    assert.strictEqual(config.git.branching_strategy, 'none');
+    assert.ok(config.workflow && typeof config.workflow === 'object');
+    assert.strictEqual(config.workflow.nyquist_validation, true);
+    assert.strictEqual(config.workflow.auto_advance, false);
+    assert.strictEqual(config.workflow.node_repair, true);
+    assert.strictEqual(config.workflow.node_repair_budget, 2);
+    assert.strictEqual(config.workflow.ui_phase, true);
+    assert.strictEqual(config.workflow.ui_safety_gate, true);
+    assert.ok(config.hooks && typeof config.hooks === 'object');
+    assert.strictEqual(config.hooks.context_warnings, true);
+  });
+
+  test('is idempotent — returns already_exists if config exists', () => {
+    const choices = JSON.stringify({ mode: 'yolo', granularity: 'fine' });
+
+    const first = runGsdTools(['config-new-project', choices], tmpDir);
+    assert.ok(first.success, `First call failed: ${first.error}`);
+    const firstOut = JSON.parse(first.output);
+    assert.strictEqual(firstOut.created, true);
+
+    const second = runGsdTools(['config-new-project', choices], tmpDir);
+    assert.ok(second.success, `Second call failed: ${second.error}`);
+    const secondOut = JSON.parse(second.output);
+    assert.strictEqual(secondOut.created, false);
+    assert.strictEqual(secondOut.reason, 'already_exists');
+
+    // Config unchanged
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.mode, 'yolo');
+    assert.strictEqual(config.granularity, 'fine');
+  });
+
+  test('auto_advance in workflow choices is preserved', () => {
+    const choices = JSON.stringify({
+      mode: 'yolo',
+      granularity: 'standard',
+      workflow: { research: true, plan_check: true, verifier: true, nyquist_validation: true, auto_advance: true },
+    });
+    const result = runGsdTools(['config-new-project', choices], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.auto_advance, true);
+  });
+
+  test('rejects invalid JSON choices', () => {
+    const result = runGsdTools(['config-new-project', '{not-json}'], tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(result.error.includes('Invalid JSON'), `Expected "Invalid JSON" in: ${result.error}`);
+  });
+
+  test('output has created:true and path on success', () => {
+    const choices = JSON.stringify({ mode: 'interactive', granularity: 'standard' });
+    const result = runGsdTools(['config-new-project', choices], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const out = JSON.parse(result.output);
+    assert.strictEqual(out.created, true);
+    assert.strictEqual(out.path, '.planning/config.json');
+  });
+});
+
+// ─── config-set (additional coverage) ────────────────────────────────────────
+
+describe('config-set unknown key (no suggestion)', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    runGsdTools('config-ensure-section', tmpDir);
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('rejects a key that has no suggestion', () => {
+    const result = runGsdTools('config-set totally.unknown.key value', tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(
+      result.error.includes('Unknown config key'),
+      `Expected "Unknown config key" in error: ${result.error}`
+    );
+  });
+});
+
+// ─── config-get (additional coverage) ────────────────────────────────────────
+
+describe('config-get edge cases', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('errors when traversing a dot-path through a non-object value', () => {
+    // model_profile is a string — requesting model_profile.something traverses into a non-object
+    writeConfig(tmpDir, { model_profile: 'balanced' });
+    const result = runGsdTools('config-get model_profile.something', tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(
+      result.error.includes('Key not found'),
+      `Expected "Key not found" in error: ${result.error}`
+    );
+  });
+
+  test('errors when config.json contains malformed JSON', () => {
+    const configPath = path.join(tmpDir, '.planning', 'config.json');
+    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    fs.writeFileSync(configPath, '{not valid json', 'utf-8');
+    const result = runGsdTools('config-get model_profile', tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(
+      result.error.includes('Failed to read config.json'),
+      `Expected "Failed to read config.json" in error: ${result.error}`
+    );
+  });
+});
+
+// ─── config-set-model-profile ─────────────────────────────────────────────────
+
+describe('config-set-model-profile command', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    runGsdTools('config-ensure-section', tmpDir);
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('sets a valid profile and updates config', () => {
+    const result = runGsdTools('config-set-model-profile quality', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const out = JSON.parse(result.output);
+    assert.strictEqual(out.updated, true);
+    assert.strictEqual(out.profile, 'quality');
+    assert.ok(out.agentToModelMap && typeof out.agentToModelMap === 'object');
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.model_profile, 'quality');
+  });
+
+  test('reports previous profile in output', () => {
+    const result = runGsdTools('config-set-model-profile budget', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const out = JSON.parse(result.output);
+    assert.strictEqual(out.previousProfile, 'balanced'); // default was balanced
+    assert.strictEqual(out.profile, 'budget');
+  });
+
+  test('setting the same profile is a no-op on config but still succeeds', () => {
+    // Set to quality first, then set to quality again
+    runGsdTools('config-set-model-profile quality', tmpDir);
+    const result = runGsdTools('config-set-model-profile quality', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const out = JSON.parse(result.output);
+    assert.strictEqual(out.profile, 'quality');
+    assert.strictEqual(out.previousProfile, 'quality');
+  });
+
+  test('is case-insensitive', () => {
+    const result = runGsdTools('config-set-model-profile BALANCED', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.model_profile, 'balanced');
+  });
+
+  test('rejects invalid profile', () => {
+    const result = runGsdTools('config-set-model-profile turbo', tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(
+      result.error.includes('Invalid profile'),
+      `Expected "Invalid profile" in error: ${result.error}`
+    );
+  });
+
+  test('errors when no profile provided', () => {
+    const result = runGsdTools('config-set-model-profile', tmpDir);
+    assert.strictEqual(result.success, false);
+  });
+
+  test('creates config if missing before setting profile', () => {
+    const emptyDir = createTempProject();
+    try {
+      const result = runGsdTools('config-set-model-profile budget', emptyDir);
+      assert.ok(result.success, `Command failed: ${result.error}`);
+
+      const config = readConfig(emptyDir);
+      assert.strictEqual(config.model_profile, 'budget');
+    } finally {
+      cleanup(emptyDir);
+    }
   });
 });

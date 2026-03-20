@@ -277,9 +277,11 @@ issue:
 
 **Process:**
 1. Parse CONTEXT.md sections: Decisions, Claude's Discretion, Deferred Ideas
-2. For each locked Decision, find implementing task(s)
-3. Verify no tasks implement Deferred Ideas (scope creep)
-4. Verify Discretion areas are handled (planner's choice is valid)
+2. Extract all numbered decisions (D-01, D-02, etc.) from the `<decisions>` section
+3. For each locked Decision, find implementing task(s) — check task actions for D-XX references
+4. Verify 100% decision coverage: every D-XX must appear in at least one task's action or rationale
+5. Verify no tasks implement Deferred Ideas (scope creep)
+6. Verify Discretion areas are handled (planner's choice is valid)
 
 **Red flags:**
 - Locked decision has no implementing task

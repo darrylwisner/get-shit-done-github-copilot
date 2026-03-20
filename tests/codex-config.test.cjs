@@ -21,9 +21,56 @@ const {
   generateCodexConfigBlock,
   stripGsdFromCodexConfig,
   mergeCodexConfig,
+  install,
   GSD_CODEX_MARKER,
   CODEX_AGENT_SANDBOX,
 } = require('../bin/install.js');
+
+function runCodexInstall(codexHome, cwd = path.join(__dirname, '..')) {
+  const previousCodeHome = process.env.CODEX_HOME;
+  const previousCwd = process.cwd();
+  process.env.CODEX_HOME = codexHome;
+
+  try {
+    process.chdir(cwd);
+    return install(true, 'codex');
+  } finally {
+    process.chdir(previousCwd);
+    if (previousCodeHome === undefined) {
+      delete process.env.CODEX_HOME;
+    } else {
+      process.env.CODEX_HOME = previousCodeHome;
+    }
+  }
+}
+
+function readCodexConfig(codexHome) {
+  return fs.readFileSync(path.join(codexHome, 'config.toml'), 'utf8');
+}
+
+function writeCodexConfig(codexHome, content) {
+  fs.mkdirSync(codexHome, { recursive: true });
+  fs.writeFileSync(path.join(codexHome, 'config.toml'), content, 'utf8');
+}
+
+function countMatches(content, pattern) {
+  return (content.match(pattern) || []).length;
+}
+
+function assertNoDraftRootKeys(content) {
+  assert.ok(!content.includes('model = "gpt-5.4"'), 'does not inject draft model default');
+  assert.ok(!content.includes('model_reasoning_effort = "high"'), 'does not inject draft reasoning default');
+  assert.ok(!content.includes('disable_response_storage = true'), 'does not inject draft storage default');
+}
+
+function assertUsesOnlyEol(content, eol) {
+  if (eol === '\r\n') {
+    assert.ok(content.includes('\r\n'), 'contains CRLF line endings');
+    assert.ok(!content.replace(/\r\n/g, '').includes('\n'), 'does not contain bare LF line endings');
+    return;
+  }
+  assert.ok(!content.includes('\r\n'), 'does not contain CRLF line endings');
+}
 
 // ─── getCodexSkillAdapterHeader ─────────────────────────────────────────────────
 
@@ -474,6 +521,77 @@ describe('mergeCodexConfig', () => {
     assert.ok(!beforeMarker.includes('[agents.gsd-'), 'no leaked [agents.gsd-*] above marker');
   });
 
+  test('case 2 strips leaked GSD-managed sections above marker in CRLF files', () => {
+    const configPath = path.join(tmpDir, 'config.toml');
+    const brokenContent = [
+      '[features]',
+      'child_agents_md = false',
+      '',
+      '[agents]',
+      'max_threads = 4',
+      '',
+      '[agents.gsd-executor]',
+      'description = "stale"',
+      'config_file = "agents/gsd-executor.toml"',
+      '',
+      GSD_CODEX_MARKER,
+      '',
+      '[agents.gsd-executor]',
+      'description = "Executes plans"',
+      'config_file = "agents/gsd-executor.toml"',
+      '',
+    ].join('\r\n');
+    fs.writeFileSync(configPath, brokenContent, 'utf8');
+
+    mergeCodexConfig(configPath, sampleBlock);
+    mergeCodexConfig(configPath, sampleBlock);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const markerIndex = content.indexOf(GSD_CODEX_MARKER);
+    const beforeMarker = content.slice(0, markerIndex);
+
+    assert.ok(content.includes('child_agents_md = false'), 'preserves user feature keys');
+    assert.strictEqual(countMatches(beforeMarker, /^\[agents\]\s*$/gm), 0, 'removes leaked [agents] above marker');
+    assert.strictEqual(countMatches(beforeMarker, /^\[agents\.gsd-executor\]\s*$/gm), 0, 'removes leaked GSD agent section above marker');
+    assert.strictEqual(countMatches(content, /^\[agents\.gsd-executor\]\s*$/gm), 1, 'keeps one managed agent section');
+    assertUsesOnlyEol(content, '\r\n');
+  });
+
+  test('case 2 preserves user-authored [agents] tables while stripping leaked GSD sections in CRLF files', () => {
+    const configPath = path.join(tmpDir, 'config.toml');
+    const brokenContent = [
+      '[features]',
+      'child_agents_md = false',
+      '',
+      '[agents]',
+      'default = "custom-agent"',
+      '',
+      '[agents.gsd-executor]',
+      'description = "stale"',
+      'config_file = "agents/gsd-executor.toml"',
+      '',
+      GSD_CODEX_MARKER,
+      '',
+      '[agents.gsd-executor]',
+      'description = "Executes plans"',
+      'config_file = "agents/gsd-executor.toml"',
+      '',
+    ].join('\r\n');
+    fs.writeFileSync(configPath, brokenContent, 'utf8');
+
+    mergeCodexConfig(configPath, sampleBlock);
+    mergeCodexConfig(configPath, sampleBlock);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const markerIndex = content.indexOf(GSD_CODEX_MARKER);
+    const beforeMarker = content.slice(0, markerIndex);
+
+    assert.ok(beforeMarker.includes('[agents]\r\ndefault = "custom-agent"\r\n'), 'preserves user-authored [agents] table');
+    assert.strictEqual(countMatches(beforeMarker, /^\[agents\.gsd-executor\]\s*$/gm), 0, 'removes leaked GSD agent section above marker');
+    assert.strictEqual(countMatches(content, /^\[agents\.gsd-executor\]\s*$/gm), 1, 'keeps one managed agent section in the GSD block');
+    assertUsesOnlyEol(content, '\r\n');
+  });
+
   test('case 2 idempotent after case 3 with existing [features]', () => {
     const configPath = path.join(tmpDir, 'config.toml');
     fs.writeFileSync(configPath, '[features]\nother_feature = true\n');
@@ -488,6 +606,29 @@ describe('mergeCodexConfig', () => {
 
     assert.strictEqual(first, second, 'idempotent after 2nd merge');
     assert.strictEqual(second, third, 'idempotent after 3rd merge');
+  });
+
+  test('preserves CRLF when appending GSD block to existing config', () => {
+    const configPath = path.join(tmpDir, 'config.toml');
+    fs.writeFileSync(configPath, '[model]\r\nname = "o3"\r\n', 'utf8');
+
+    mergeCodexConfig(configPath, sampleBlock);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    assert.ok(content.includes('[model]\r\nname = "o3"\r\n'), 'preserves existing CRLF content');
+    assert.ok(content.includes(`${GSD_CODEX_MARKER}\r\n`), 'writes marker with CRLF');
+    assertUsesOnlyEol(content, '\r\n');
+  });
+
+  test('uses the first newline style when appending GSD block to mixed-EOL configs', () => {
+    const configPath = path.join(tmpDir, 'config.toml');
+    fs.writeFileSync(configPath, '# first line wins\n[model]\r\nname = "o3"\r\n', 'utf8');
+
+    mergeCodexConfig(configPath, sampleBlock);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    assert.ok(content.includes('# first line wins\n[model]\r\nname = "o3"'), 'preserves the existing mixed-EOL model content');
+    assert.ok(content.includes(`\n\n${GSD_CODEX_MARKER}\n`), 'writes the managed block using the first newline style');
   });
 });
 
@@ -570,5 +711,711 @@ describe('codex features section safety', () => {
       .map(line => line.trim());
 
     assert.strictEqual(nonBooleanKeys.length, 0, 'no non-boolean keys in a clean config');
+  });
+});
+
+describe('Codex install hook configuration (e2e)', () => {
+  let tmpDir;
+  let codexHome;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-codex-e2e-'));
+    codexHome = path.join(tmpDir, 'codex-home');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('fresh CODEX_HOME enables codex_hooks without draft root defaults', () => {
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.ok(content.includes('[features]\ncodex_hooks = true\n'), 'writes codex_hooks feature');
+    assert.ok(content.includes('# GSD Hooks\n[[hooks]]\nevent = "SessionStart"\n'), 'writes GSD SessionStart hook block');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'writes one codex_hooks key');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'writes one GSD update hook');
+    assertNoDraftRootKeys(content);
+    assertUsesOnlyEol(content, '\n');
+  });
+
+  test('existing LF config without [features] gets one features block and preserves user content', () => {
+    writeCodexConfig(codexHome, [
+      '# user comment',
+      '[model]',
+      'name = "o3"',
+      '',
+      '[[hooks]]',
+      'event = "SessionStart"',
+      'command = "echo custom"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'creates one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'creates one codex_hooks key');
+    assert.ok(content.includes('# user comment'), 'preserves user comment');
+    assert.ok(content.includes('[model]\nname = "o3"'), 'preserves model section');
+    assert.ok(content.includes('command = "echo custom"'), 'preserves custom hook');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'adds one GSD update hook');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing CRLF config without [features] preserves CRLF and adds codex_hooks', () => {
+    writeCodexConfig(codexHome, '# user comment\r\n[model]\r\nname = "o3"\r\n');
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'creates one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'creates one codex_hooks key');
+    assert.ok(content.includes('# user comment\r\n[model]\r\nname = "o3"\r\n'), 'preserves existing CRLF content');
+    assertUsesOnlyEol(content, '\r\n');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing CRLF [features] comment-only table gets codex_hooks without losing adjacent text', () => {
+    writeCodexConfig(codexHome, [
+      '# user comment',
+      '[features]',
+      '# keep me',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\r\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.ok(content.includes('[features]\r\n# keep me\r\n\r\ncodex_hooks = true\r\n'), 'adds codex_hooks within comment-only table');
+    assert.ok(content.includes('[model]\r\nname = "o3"\r\n'), 'preserves following table');
+    assertUsesOnlyEol(content, '\r\n');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing [features] with trailing comment gets one codex_hooks without a second table', () => {
+    writeCodexConfig(codexHome, [
+      '[features] # keep comment',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\s*\[features\](?:\s*#.*)?$/gm), 1, 'keeps one commented [features] header');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.ok(content.includes('[features] # keep comment\nother_feature = true'), 'preserves commented features table');
+    assert.ok(content.indexOf('codex_hooks = true') > content.indexOf('[features] # keep comment'), 'adds codex_hooks within existing features table');
+    assert.ok(content.indexOf('codex_hooks = true') < content.indexOf('[model]'), 'does not create a second features table before model');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing [features] at EOF without trailing newline is updated in place', () => {
+    writeCodexConfig(codexHome, '[model]\nname = "o3"\n\n[features]');
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.ok(content.indexOf('codex_hooks = true') > content.indexOf('[features]'), 'adds codex_hooks after the existing EOF features header');
+    assert.ok(content.indexOf('codex_hooks = true') < content.indexOf('[agents.gsd-codebase-mapper]'), 'keeps codex_hooks before the next real table');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing empty [features] and codex_hooks = false are normalized and remain idempotent', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = false',
+      'other_feature = true',
+      '',
+      '[[hooks]]',
+      'event = "SessionStart"',
+      'command = "echo custom"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'normalizes to one codex_hooks = true');
+    assert.ok(!content.includes('codex_hooks = false'), 'removes false codex_hooks value');
+    assert.ok(content.includes('other_feature = true'), 'preserves other feature keys');
+    assert.ok(content.includes('command = "echo custom"'), 'preserves custom hook');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'does not duplicate GSD update hook');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('quoted codex_hooks keys inside [features] are normalized without adding a bare duplicate', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      '"codex_hooks" = false',
+      'other_feature = true',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^"codex_hooks" = true$/gm), 1, 'normalizes the quoted key to true');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 0, 'does not append a bare duplicate codex_hooks key');
+    assert.ok(content.includes('other_feature = true'), 'preserves other feature keys');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('quoted [features] headers are recognized as the existing features table', () => {
+    writeCodexConfig(codexHome, [
+      '["features"]',
+      '"codex_hooks" = false',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[(?:"features"|'features'|features)\]\s*$/gm), 1, 'keeps one features table');
+    assert.strictEqual(countMatches(content, /^"codex_hooks" = true$/gm), 1, 'normalizes the quoted codex_hooks key to true');
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 0, 'does not prepend a second bare features table');
+    assert.ok(content.includes('other_feature = true'), 'preserves existing feature keys');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'keeps one GSD update hook');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('quoted table headers containing # are parsed without treating # as a comment start', () => {
+    writeCodexConfig(codexHome, [
+      '[features."a#b"]',
+      'enabled = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.ok(content.includes('[features."a#b"]\nenabled = true'), 'preserves the quoted nested features table');
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'adds one real top-level features table');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'remains idempotent for the GSD hook block');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing dotted features config stays dotted and does not grow a [features] table', () => {
+    writeCodexConfig(codexHome, [
+      'features.other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 0, 'does not add a [features] table');
+    assert.strictEqual(countMatches(content, /^features\.codex_hooks = true$/gm), 1, 'adds one dotted codex_hooks key');
+    assert.ok(content.includes('features.other_feature = true'), 'preserves existing dotted features key');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'adds one GSD update hook for dotted codex_hooks and remains idempotent');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('root inline-table features assignments are left untouched without appending invalid dotted keys or hooks', () => {
+    writeCodexConfig(codexHome, [
+      'features = { other_feature = true }',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.ok(content.includes('features = { other_feature = true }'), 'preserves the root inline-table assignment');
+    assert.strictEqual(countMatches(content, /^features\.codex_hooks = true$/gm), 0, 'does not append an invalid dotted codex_hooks key');
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 0, 'does not prepend a features table');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 0, 'does not add the GSD hook block when codex_hooks cannot be enabled safely');
+    assert.ok(content.includes('[agents.gsd-executor]'), 'still installs the managed agent block');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('root scalar features assignments are left untouched without appending invalid dotted keys or hooks', () => {
+    writeCodexConfig(codexHome, [
+      'features = "disabled"',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.ok(content.includes('features = "disabled"'), 'preserves the root scalar assignment');
+    assert.strictEqual(countMatches(content, /^features\.codex_hooks = true$/gm), 0, 'does not append an invalid dotted codex_hooks key');
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 0, 'does not prepend a features table');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 0, 'does not add the GSD hook block when codex_hooks cannot be enabled safely');
+    assert.ok(content.includes('[agents.gsd-executor]'), 'still installs the managed agent block');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('quoted dotted codex_hooks keys stay dotted and are normalized without duplication', () => {
+    writeCodexConfig(codexHome, [
+      'features."codex_hooks" = false',
+      'features.other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 0, 'does not add a [features] table');
+    assert.strictEqual(countMatches(content, /^features\."codex_hooks" = true$/gm), 1, 'normalizes the quoted dotted key to true');
+    assert.strictEqual(countMatches(content, /^features\.codex_hooks = true$/gm), 0, 'does not append a bare dotted duplicate');
+    assert.ok(content.includes('features.other_feature = true'), 'preserves other dotted features keys');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'adds one GSD update hook for quoted dotted codex_hooks and remains idempotent');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('multiline dotted features assignments insert codex_hooks after the full assignment block', () => {
+    writeCodexConfig(codexHome, [
+      'features.notes = """',
+      'keep-me',
+      '"""',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.ok(content.includes('features.notes = """\nkeep-me\n"""'), 'preserves the multiline dotted assignment');
+    assert.strictEqual(countMatches(content, /^features\.codex_hooks = true$/gm), 1, 'adds one dotted codex_hooks key');
+    assert.ok(content.indexOf('features.codex_hooks = true') > content.indexOf('"""'), 'inserts codex_hooks after the multiline assignment closes');
+    assert.ok(content.indexOf('features.codex_hooks = true') < content.indexOf('[model]'), 'inserts codex_hooks before the next table');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing empty [features] table is populated with one codex_hooks key', () => {
+    writeCodexConfig(codexHome, '[features]\r\n\r\n[model]\r\nname = "o3"\r\n');
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.ok(content.includes('[features]\r\n\r\ncodex_hooks = true\r\n'), 'adds codex_hooks to empty table');
+    assertUsesOnlyEol(content, '\r\n');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('multiline strings inside [features] do not create fake tables or fake codex_hooks matches', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'notes = \'\'\'',
+      '[model]',
+      'codex_hooks = false',
+      '\'\'\'',
+      'other_feature = true',
+      '',
+      '[[hooks]]',
+      'event = "AfterCommand"',
+      'command = "echo custom-after-command"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds a real codex_hooks key once');
+    assert.ok(content.includes('notes = \'\'\'\n[model]\ncodex_hooks = false\n\'\'\''), 'preserves multiline string content');
+    assert.strictEqual(countMatches(content, /^codex_hooks = false$/gm), 1, 'does not rewrite codex_hooks text inside multiline string');
+    assert.ok(content.indexOf('codex_hooks = true') > content.indexOf('other_feature = true'), 'does not stop the features section at multiline string content');
+    assert.ok(content.indexOf('codex_hooks = true') < content.indexOf('[[hooks]]'), 'inserts the real codex_hooks key before the next table');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('non-boolean codex_hooks assignments are normalized to true without duplication', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = "sometimes"',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'normalizes to one true value');
+    assert.ok(!content.includes('codex_hooks = "sometimes"'), 'removes non-boolean value');
+    assert.ok(content.includes('other_feature = true'), 'preserves other feature keys');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('multiline basic-string codex_hooks assignments are fully normalized without leaving trailing lines behind', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = """',
+      'multiline-basic-sentinel',
+      'still-in-string',
+      '"""',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'replaces the multiline basic-string assignment with one true value');
+    assert.ok(!content.includes('multiline-basic-sentinel'), 'removes multiline basic-string continuation lines');
+    assert.ok(content.includes('other_feature = true'), 'preserves following feature keys');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'remains idempotent for the GSD hook block');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('multiline literal-string codex_hooks assignments are fully normalized without leaving trailing lines behind', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = \'\'\'',
+      'multiline-literal-sentinel',
+      'still-in-literal',
+      '\'\'\'',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'replaces the multiline literal-string assignment with one true value');
+    assert.ok(!content.includes('multiline-literal-sentinel'), 'removes multiline literal-string continuation lines');
+    assert.ok(content.includes('other_feature = true'), 'preserves following feature keys');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'remains idempotent for the GSD hook block');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('multiline array codex_hooks assignments are fully normalized without leaving trailing lines behind', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = [',
+      '  "array-sentinel-1",',
+      '  "array-sentinel-2",',
+      ']',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'replaces the multiline array assignment with one true value');
+    assert.ok(!content.includes('array-sentinel-1'), 'removes multiline array continuation lines');
+    assert.ok(!content.includes('array-sentinel-2'), 'removes multiline array continuation lines');
+    assert.ok(content.includes('other_feature = true'), 'preserves following feature keys');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'remains idempotent for the GSD hook block');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('triple-quoted codex_hooks values keep inline comments when normalized', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = """sometimes""" # keep me',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true # keep me$/gm), 1, 'normalizes to true and preserves inline comment');
+    assert.ok(!content.includes('"""sometimes"""'), 'removes the old triple-quoted value');
+    assert.ok(content.includes('other_feature = true'), 'preserves other feature keys');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('existing CRLF codex_hooks = true stays single and preserves non-GSD hooks', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = true',
+      'other_feature = true',
+      '',
+      '[[hooks]]',
+      'event = "AfterCommand"',
+      'command = "echo custom-after-command"',
+      '',
+    ].join('\r\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'keeps one codex_hooks = true');
+    assert.ok(content.includes('other_feature = true'), 'preserves other feature keys');
+    assert.strictEqual(countMatches(content, /echo custom-after-command/g), 1, 'preserves non-GSD hook exactly once');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'keeps one GSD update hook');
+    assertUsesOnlyEol(content, '\r\n');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('codex_hooks = true with an inline comment is treated as enabled for hook installation', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = true # keep me',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true # keep me$/gm), 1, 'preserves the commented true value');
+    assert.ok(content.includes('other_feature = true'), 'preserves other feature keys');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'adds the GSD update hook once');
+    assertNoDraftRootKeys(content);
+  });
+
+  test('mixed-EOL configs use the first newline style for inserted Codex content', () => {
+    writeCodexConfig(codexHome, '# first line wins\n[model]\r\nname = "o3"\r\n');
+
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    assert.ok(content.includes('[features]\ncodex_hooks = true\n\n# first line wins\n'), 'prepends the features block using the first newline style');
+    assert.ok(content.includes(`# GSD Agent Configuration — managed by get-shit-done installer\n`), 'writes the managed agent block using the first newline style');
+    assert.ok(content.includes('# GSD Hooks\n[[hooks]]\nevent = "SessionStart"\n'), 'writes the GSD hook block using the first newline style');
+    assert.ok(content.includes('[model]\r\nname = "o3"'), 'preserves the existing CRLF model lines');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'remains idempotent on repeated installs');
+    assert.strictEqual(countMatches(content, /gsd-update-check\.js/g), 1, 'does not duplicate the GSD hook block');
+    assertNoDraftRootKeys(content);
+  });
+});
+
+describe('Codex uninstall symmetry for hook-enabled configs', () => {
+  let tmpDir;
+  let codexHome;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-codex-uninstall-'));
+    codexHome = path.join(tmpDir, 'codex-home');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('fresh install removes the GSD-added codex_hooks feature on uninstall', () => {
+    runCodexInstall(codexHome);
+
+    const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+    assert.strictEqual(cleaned, null, 'fresh GSD-only config strips back to nothing');
+  });
+
+  test('install then uninstall removes [features].codex_hooks while preserving other feature keys, comments, hooks, and CRLF', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      '# keep me',
+      'other_feature = true',
+      '',
+      '[[hooks]]',
+      'event = "AfterCommand"',
+      'command = "echo custom-after-command"',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\r\n'));
+
+    runCodexInstall(codexHome);
+
+    const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+    assert.ok(cleaned, 'preserves user config after uninstall cleanup');
+    assert.strictEqual(countMatches(cleaned, /^\[features\](?:\s*#.*)?$/gm), 1, 'keeps the existing features table');
+    assert.strictEqual(countMatches(cleaned, /^codex_hooks = true$/gm), 0, 'removes the GSD-added codex_hooks key');
+    assert.ok(cleaned.includes('# keep me'), 'preserves user comments in [features]');
+    assert.ok(cleaned.includes('other_feature = true'), 'preserves other feature keys');
+    assert.strictEqual(countMatches(cleaned, /echo custom-after-command/g), 1, 'preserves non-GSD hooks');
+    assert.strictEqual(countMatches(cleaned, /gsd-update-check\.js/g), 0, 'removes only the GSD update hook');
+    assert.strictEqual(countMatches(cleaned, /\[agents\.gsd-/g), 0, 'removes managed GSD agent sections');
+    assertUsesOnlyEol(cleaned, '\r\n');
+  });
+
+  test('install then uninstall removes dotted features.codex_hooks without creating a [features] table', () => {
+    writeCodexConfig(codexHome, [
+      'features.other_feature = true',
+      '',
+      '[[hooks]]',
+      'event = "AfterCommand"',
+      'command = "echo custom-after-command"',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+    assert.ok(cleaned.includes('features.other_feature = true'), 'preserves other dotted feature keys');
+    assert.strictEqual(countMatches(cleaned, /^features\.codex_hooks = true$/gm), 0, 'removes the dotted GSD codex_hooks key');
+    assert.strictEqual(countMatches(cleaned, /^\[features\]\s*$/gm), 0, 'does not leave behind a [features] table');
+    assert.strictEqual(countMatches(cleaned, /echo custom-after-command/g), 1, 'preserves non-GSD hooks');
+    assert.strictEqual(countMatches(cleaned, /gsd-update-check\.js/g), 0, 'removes the GSD update hook');
+  });
+
+  test('install then uninstall preserves a pre-existing [features].codex_hooks = true', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = true',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+    assert.ok(cleaned.includes('[features]\ncodex_hooks = true\nother_feature = true'), 'preserves the user-authored codex_hooks assignment');
+    assert.strictEqual(countMatches(cleaned, /^codex_hooks = true$/gm), 1, 'keeps the pre-existing codex_hooks key');
+    assert.strictEqual(countMatches(cleaned, /gsd-update-check\.js/g), 0, 'removes the GSD update hook');
+    assert.strictEqual(countMatches(cleaned, /\[agents\.gsd-/g), 0, 'removes managed GSD agent sections');
+  });
+
+  test('install then uninstall preserves a pre-existing quoted [features].\"codex_hooks\" = true', () => {
+    writeCodexConfig(codexHome, [
+      '[features]',
+      '"codex_hooks" = true',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+    assert.ok(cleaned.includes('[features]\n"codex_hooks" = true\nother_feature = true'), 'preserves the user-authored quoted codex_hooks assignment');
+    assert.strictEqual(countMatches(cleaned, /^"codex_hooks" = true$/gm), 1, 'keeps the pre-existing quoted codex_hooks key');
+    assert.strictEqual(countMatches(cleaned, /gsd-update-check\.js/g), 0, 'removes the GSD update hook');
+    assert.strictEqual(countMatches(cleaned, /\[agents\.gsd-/g), 0, 'removes managed GSD agent sections');
+  });
+
+  test('install then uninstall preserves a pre-existing root dotted features.codex_hooks = true', () => {
+    writeCodexConfig(codexHome, [
+      'features.codex_hooks = true',
+      'features.other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+    assert.ok(cleaned.includes('features.codex_hooks = true\nfeatures.other_feature = true'), 'preserves the user-authored dotted codex_hooks assignment');
+    assert.strictEqual(countMatches(cleaned, /^features\.codex_hooks = true$/gm), 1, 'keeps the pre-existing dotted codex_hooks key');
+    assert.strictEqual(countMatches(cleaned, /gsd-update-check\.js/g), 0, 'removes the GSD update hook');
+    assert.strictEqual(countMatches(cleaned, /\[agents\.gsd-/g), 0, 'removes managed GSD agent sections');
+  });
+
+  test('install then uninstall leaves short-circuited root features assignments untouched', () => {
+    const cases = [
+      'features = { other_feature = true }\n\n[model]\nname = "o3"\n',
+      'features = "disabled"\n\n[model]\nname = "o3"\n',
+    ];
+
+    for (const initialContent of cases) {
+      writeCodexConfig(codexHome, initialContent);
+      runCodexInstall(codexHome);
+
+      const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+      assert.strictEqual(cleaned, initialContent, `preserves short-circuited root features assignment: ${initialContent.split('\n')[0]}`);
+
+      fs.rmSync(codexHome, { recursive: true, force: true });
+      fs.mkdirSync(codexHome, { recursive: true });
+    }
+  });
+
+  test('install then uninstall keeps mixed-EOL user content stable while removing GSD hook state', () => {
+    const initialContent = [
+      '# first line wins',
+      '[features]',
+      'other_feature = true',
+      '',
+      '[model]',
+      'name = "o3"',
+      '',
+    ].join('\r\n').replace(/^# first line wins\r\n/, '# first line wins\n');
+
+    writeCodexConfig(codexHome, initialContent);
+    runCodexInstall(codexHome);
+
+    const cleaned = stripGsdFromCodexConfig(readCodexConfig(codexHome));
+    assert.ok(cleaned.includes('# first line wins\n[features]\r\nother_feature = true\r\n\r\n[model]\r\nname = "o3"'), 'preserves the original mixed-EOL user content');
+    assert.strictEqual(countMatches(cleaned, /^codex_hooks = true$/gm), 0, 'removes the injected codex_hooks key');
+    assert.strictEqual(countMatches(cleaned, /gsd-update-check\.js/g), 0, 'removes the GSD update hook');
+    assert.strictEqual(countMatches(cleaned, /\[agents\.gsd-/g), 0, 'removes managed GSD agent sections');
   });
 });

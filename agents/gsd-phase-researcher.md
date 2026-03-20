@@ -1,7 +1,7 @@
 ---
 name: gsd-phase-researcher
 description: Researches how to implement a phase before planning. Produces RESEARCH.md consumed by gsd-planner. Spawned by /gsd:plan-phase orchestrator.
-tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch, mcp__context7__*
+tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch, mcp__context7__*, mcp__firecrawl__*, mcp__exa__*
 color: cyan
 # hooks:
 #   PostToolUse:
@@ -137,6 +137,31 @@ If `brave_search: false` (or not set), use built-in WebSearch tool instead.
 
 Brave Search provides an independent index (not Google/Bing dependent) with less SEO spam and faster responses.
 
+### Exa Semantic Search (MCP)
+
+Check `exa_search` from init context. If `true`, use Exa for semantic, research-heavy queries:
+
+```
+mcp__exa__web_search_exa with query: "your semantic query"
+```
+
+**Best for:** Research questions where keyword search fails — "best approaches to X", finding technical/academic content, discovering niche libraries. Returns semantically relevant results.
+
+If `exa_search: false` (or not set), fall back to WebSearch or Brave Search.
+
+### Firecrawl Deep Scraping (MCP)
+
+Check `firecrawl` from init context. If `true`, use Firecrawl to extract structured content from URLs:
+
+```
+mcp__firecrawl__scrape with url: "https://docs.example.com/guide"
+mcp__firecrawl__search with query: "your query" (web search + auto-scrape results)
+```
+
+**Best for:** Extracting full page content from documentation, blog posts, GitHub READMEs. Use after finding a URL from Exa, WebSearch, or known docs. Returns clean markdown.
+
+If `firecrawl: false` (or not set), fall back to WebFetch.
+
 ## Verification Protocol
 
 **WebSearch findings MUST be verified:**
@@ -161,7 +186,7 @@ For each WebSearch finding:
 | MEDIUM | WebSearch verified with official source, multiple credible sources | State with attribution |
 | LOW | WebSearch only, single source, unverified | Flag as needing validation |
 
-Priority: Context7 > Official Docs > Official GitHub > Verified WebSearch > Unverified WebSearch
+Priority: Context7 > Exa (verified) > Firecrawl (official docs) > Official GitHub > Brave/WebSearch (verified) > WebSearch (unverified)
 
 </source_hierarchy>
 

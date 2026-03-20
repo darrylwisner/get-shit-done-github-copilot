@@ -84,6 +84,11 @@ function cmdVerifyPathExists(cwd, targetPath, raw) {
     error('path required for verification');
   }
 
+  // Reject null bytes and validate path does not contain traversal attempts
+  if (targetPath.includes('\0')) {
+    error('path contains null bytes');
+  }
+
   const fullPath = path.isAbsolute(targetPath) ? targetPath : path.join(cwd, targetPath);
 
   try {
@@ -217,6 +222,13 @@ function cmdResolveModel(cwd, agentType, raw) {
 function cmdCommit(cwd, message, files, raw, amend, noVerify) {
   if (!message && !amend) {
     error('commit message required');
+  }
+
+  // Sanitize commit message: strip invisible chars and injection markers
+  // that could hijack agent context when commit messages are read back
+  if (message) {
+    const { sanitizeForPrompt } = require('./security.cjs');
+    message = sanitizeForPrompt(message);
   }
 
   const config = loadConfig(cwd);

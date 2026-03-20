@@ -53,6 +53,15 @@
   - [Developer Profiling](#38-developer-profiling)
   - [Execution Hardening](#39-execution-hardening)
   - [Verification Debt Tracking](#40-verification-debt-tracking)
+- [v1.27 Features](#v127-features)
+  - [Fast Mode](#41-fast-mode)
+  - [Cross-AI Peer Review](#42-cross-ai-peer-review)
+  - [Backlog Parking Lot](#43-backlog-parking-lot)
+  - [Persistent Context Threads](#44-persistent-context-threads)
+  - [PR Branch Filtering](#45-pr-branch-filtering)
+  - [Security Hardening](#46-security-hardening)
+  - [Multi-Repo Workspace Support](#47-multi-repo-workspace-support)
+  - [Discussion Audit Trail](#48-discussion-audit-trail)
 
 ---
 
@@ -973,3 +982,145 @@ When verification returns `human_needed`, items are persisted as a trackable HUM
 - REQ-DEBT-04: System MUST persist human_needed verification items as trackable UAT files
 - REQ-DEBT-05: System MUST warn (non-blocking) during phase completion and transition when verification debt exists
 - REQ-DEBT-06: `/gsd:audit-uat` MUST scan all phases, categorize items by testability, and produce a human test plan
+
+---
+
+## v1.27 Features
+
+### 41. Fast Mode
+
+**Command:** `/gsd:fast [task description]`
+
+**Purpose:** Execute trivial tasks inline without spawning subagents or generating PLAN.md files. For tasks too small to justify planning overhead: typo fixes, config changes, small refactors, forgotten commits, simple additions.
+
+**Requirements:**
+- REQ-FAST-01: System MUST execute the task directly in the current context without subagents
+- REQ-FAST-02: System MUST produce an atomic git commit for the change
+- REQ-FAST-03: System MUST track the task in `.planning/quick/` for state consistency
+- REQ-FAST-04: System MUST NOT be used for tasks requiring research, multi-step planning, or verification
+
+**When to use vs `/gsd:quick`:**
+- `/gsd:fast` — One-sentence tasks executable in under 2 minutes (typo, config change, small addition)
+- `/gsd:quick` — Anything needing research, multi-step planning, or verification
+
+---
+
+### 42. Cross-AI Peer Review
+
+**Command:** `/gsd:review --phase N [--gemini] [--claude] [--codex] [--all]`
+
+**Purpose:** Invoke external AI CLIs (Gemini, Claude, Codex) to independently review phase plans. Produces structured REVIEWS.md with per-reviewer feedback.
+
+**Requirements:**
+- REQ-REVIEW-01: System MUST detect available AI CLIs on the system
+- REQ-REVIEW-02: System MUST build a structured review prompt from phase plans
+- REQ-REVIEW-03: System MUST invoke each selected CLI independently
+- REQ-REVIEW-04: System MUST collect responses and produce `REVIEWS.md`
+- REQ-REVIEW-05: Reviews MUST be consumable by `/gsd:plan-phase --reviews`
+
+**Produces:** `{phase}-REVIEWS.md` — Per-reviewer structured feedback
+
+---
+
+### 43. Backlog Parking Lot
+
+**Commands:** `/gsd:add-backlog <description>`, `/gsd:review-backlog`, `/gsd:plant-seed <idea>`
+
+**Purpose:** Capture ideas that aren't ready for active planning. Backlog items use 999.x numbering to stay outside the active phase sequence. Seeds are forward-looking ideas with trigger conditions that surface automatically at the right milestone.
+
+**Requirements:**
+- REQ-BACKLOG-01: Backlog items MUST use 999.x numbering to stay outside active phase sequence
+- REQ-BACKLOG-02: Phase directories MUST be created immediately so `/gsd:discuss-phase` and `/gsd:plan-phase` work on them
+- REQ-BACKLOG-03: `/gsd:review-backlog` MUST support promote, keep, and remove actions per item
+- REQ-BACKLOG-04: Promoted items MUST be renumbered into the active milestone sequence
+- REQ-SEED-01: Seeds MUST capture the full WHY and WHEN to surface conditions
+- REQ-SEED-02: `/gsd:new-milestone` MUST scan seeds and present matches
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `.planning/phases/999.x-slug/` | Backlog item directory |
+| `.planning/seeds/SEED-NNN-slug.md` | Seed with trigger conditions |
+
+---
+
+### 44. Persistent Context Threads
+
+**Command:** `/gsd:thread [name | description]`
+
+**Purpose:** Lightweight cross-session knowledge stores for work that spans multiple sessions but doesn't belong to any specific phase. Lighter weight than `/gsd:pause-work` — no phase state, no plan context.
+
+**Requirements:**
+- REQ-THREAD-01: System MUST support create, list, and resume modes
+- REQ-THREAD-02: Threads MUST be stored in `.planning/threads/` as markdown files
+- REQ-THREAD-03: Thread files MUST include Goal, Context, References, and Next Steps sections
+- REQ-THREAD-04: Resuming a thread MUST load its full context into the current session
+- REQ-THREAD-05: Threads MUST be promotable to phases or backlog items
+
+**Produces:** `.planning/threads/{slug}.md` — Persistent context thread
+
+---
+
+### 45. PR Branch Filtering
+
+**Command:** `/gsd:pr-branch [target branch]`
+
+**Purpose:** Create a clean branch suitable for pull requests by filtering out `.planning/` commits. Reviewers see only code changes, not GSD planning artifacts.
+
+**Requirements:**
+- REQ-PRBRANCH-01: System MUST identify commits that only modify `.planning/` files
+- REQ-PRBRANCH-02: System MUST create a new branch with planning commits filtered out
+- REQ-PRBRANCH-03: Code changes MUST be preserved exactly as committed
+
+---
+
+### 46. Security Hardening
+
+**Purpose:** Defense-in-depth security for GSD's planning artifacts. Because GSD generates markdown files that become LLM system prompts, user-controlled text flowing into these files is a potential indirect prompt injection vector.
+
+**Components:**
+
+**1. Centralized Security Module** (`security.cjs`)
+- Path traversal prevention — validates file paths resolve within the project directory
+- Prompt injection detection — scans for known injection patterns in user-supplied text
+- Safe JSON parsing — catches malformed input before state corruption
+- Field name validation — prevents injection through config field names
+- Shell argument validation — sanitizes user text before shell interpolation
+
+**2. Prompt Injection Guard Hook** (`gsd-prompt-guard.js`)
+PreToolUse hook that scans Write/Edit calls targeting `.planning/` for injection patterns. Advisory-only — logs detection for awareness without blocking legitimate operations.
+
+**3. Workflow Guard Hook** (`gsd-workflow-guard.js`)
+PreToolUse hook that detects when Claude attempts file edits outside a GSD workflow context. Advises using `/gsd:quick` or `/gsd:fast` instead of direct edits. Configurable via `hooks.workflow_guard` (default: false).
+
+**4. CI-Ready Injection Scanner** (`prompt-injection-scan.test.cjs`)
+Test suite that scans all agent, workflow, and command files for embedded injection vectors.
+
+**Requirements:**
+- REQ-SEC-01: All user-supplied file paths MUST be validated against the project directory
+- REQ-SEC-02: Prompt injection patterns MUST be detected before text enters planning artifacts
+- REQ-SEC-03: Security hooks MUST be advisory-only (never block legitimate operations)
+- REQ-SEC-04: JSON parsing of user input MUST catch malformed data gracefully
+- REQ-SEC-05: macOS `/var` → `/private/var` symlink resolution MUST be handled in path validation
+
+---
+
+### 47. Multi-Repo Workspace Support
+
+**Purpose:** Auto-detection and project root resolution for monorepos and multi-repo setups. Supports workspaces where `.planning/` may need to resolve across repository boundaries.
+
+**Requirements:**
+- REQ-MULTIREPO-01: System MUST auto-detect multi-repo workspace configuration
+- REQ-MULTIREPO-02: System MUST resolve project root across repository boundaries
+- REQ-MULTIREPO-03: Executor MUST record per-repo commit hashes in multi-repo mode
+
+---
+
+### 48. Discussion Audit Trail
+
+**Purpose:** Auto-generate `DISCUSSION-LOG.md` during `/gsd:discuss-phase` for full audit trail of decisions made during discussion.
+
+**Requirements:**
+- REQ-DISCLOG-01: System MUST auto-generate DISCUSSION-LOG.md during discuss-phase
+- REQ-DISCLOG-02: Log MUST capture questions asked, options presented, and decisions made
+- REQ-DISCLOG-03: Decision IDs MUST enable traceability from discuss-phase to plan-phase

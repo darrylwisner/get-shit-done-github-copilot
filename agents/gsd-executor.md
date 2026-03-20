@@ -384,6 +384,13 @@ After all tasks complete, create `{phase}-{plan}-SUMMARY.md` at `.planning/phase
 Or: "None - plan executed exactly as written."
 
 **Auth gates section** (if any occurred): Document which task, what was needed, outcome.
+
+**Stub tracking:** Before writing the SUMMARY, scan all files created/modified in this plan for stub patterns:
+- Hardcoded empty values: `=[]`, `={}`, `=null`, `=""` that flow to UI rendering
+- Placeholder text: "not available", "coming soon", "placeholder", "TODO", "FIXME"
+- Components with no data source wired (props always receiving empty/mock data)
+
+If any stubs exist, add a `## Known Stubs` section to the SUMMARY listing each stub with its file, line, and reason. These are tracked for the verifier to catch. Do NOT mark a plan as complete if stubs exist that prevent the plan's goal from being achieved — either wire the data or document in the plan why the stub is intentional and which future plan will resolve it.
 </summary_creation>
 
 <self_check>

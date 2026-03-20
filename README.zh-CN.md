@@ -4,7 +4,7 @@
 
 [English](README.md) · **简体中文**
 
-**一个轻量但强大的元提示、上下文工程与规格驱动开发系统，适用于 Claude Code、OpenCode、Gemini CLI 和 Codex。**
+**一个轻量但强大的元提示、上下文工程与规格驱动开发系统，适用于 Claude Code、OpenCode、Gemini CLI、Codex、Copilot、Cursor 和 Antigravity。**
 
 **它解决的是 context rot：随着 Claude 的上下文窗口被填满，输出质量逐步劣化的问题。**
 
@@ -82,13 +82,15 @@ npx get-shit-done-cc@latest
 ```
 
 安装器会提示你选择：
-1. **运行时**：Claude Code、OpenCode、Gemini、Codex，或全部
+1. **运行时**：Claude Code、OpenCode、Gemini、Codex、Copilot、Cursor、Antigravity，或全部
 2. **安装位置**：全局（所有项目）或本地（仅当前项目）
 
 安装后可这样验证：
 - Claude Code / Gemini：`/gsd:help`
 - OpenCode：`/gsd-help`
 - Codex：`$gsd-help`
+- Copilot：`/gsd:help`
+- Antigravity：`/gsd:help`
 
 > [!NOTE]
 > Codex 安装走的是 skill 机制（`skills/gsd-*/SKILL.md`），不是自定义 prompt。
@@ -119,12 +121,24 @@ npx get-shit-done-cc --gemini --global   # 安装到 ~/.gemini/
 npx get-shit-done-cc --codex --global    # 安装到 ~/.codex/
 npx get-shit-done-cc --codex --local     # 安装到 ./.codex/
 
+# Copilot（GitHub Copilot CLI）
+npx get-shit-done-cc --copilot --global  # 安装到 ~/.github/
+npx get-shit-done-cc --copilot --local   # 安装到 ./.github/
+
+# Cursor CLI
+npx get-shit-done-cc --cursor --global   # 安装到 ~/.cursor/
+npx get-shit-done-cc --cursor --local    # 安装到 ./.cursor/
+
+# Antigravity（Google，以 skills 为主，基于 Gemini）
+npx get-shit-done-cc --antigravity --global # 安装到 ~/.gemini/antigravity/
+npx get-shit-done-cc --antigravity --local  # 安装到 ./.agent/
+
 # 所有运行时
 npx get-shit-done-cc --all --global      # 安装到所有目录
 ```
 
 使用 `--global`（`-g`）或 `--local`（`-l`）可以跳过安装位置提示。
-使用 `--claude`、`--opencode`、`--gemini`、`--codex` 或 `--all` 可以跳过运行时提示。
+使用 `--claude`、`--opencode`、`--gemini`、`--codex`、`--copilot`、`--cursor`、`--antigravity` 或 `--all` 可以跳过运行时提示。
 
 </details>
 
@@ -332,19 +346,26 @@ claude --dangerously-skip-permissions
 
 ---
 
-### 6. 重复 → 完成 → 下一个里程碑
+### 6. 重复 → 发布 → 完成 → 下一个里程碑
 
 ```
 /gsd:discuss-phase 2
 /gsd:plan-phase 2
 /gsd:execute-phase 2
 /gsd:verify-work 2
+/gsd:ship 2                  # 从已验证的工作创建 PR
 ...
 /gsd:complete-milestone
 /gsd:new-milestone
 ```
 
-循环执行 **讨论 → 规划 → 执行 → 验证**，直到整个里程碑完成。
+或者让 GSD 自动判断下一步：
+
+```
+/gsd:next                    # 自动检测并执行下一步
+```
+
+循环执行 **讨论 → 规划 → 执行 → 验证 → 发布**，直到整个里程碑完成。
 
 如果你希望在讨论阶段更快收集信息，可以用 `/gsd:discuss-phase <n> --batch`，一次回答一小组问题，而不是逐个问答。
 
@@ -367,10 +388,16 @@ claude --dangerously-skip-permissions
 快速模式保留 GSD 的核心保障（原子提交、状态跟踪），但路径更短：
 
 - **相同的代理体系**：同样是 planner + executor，质量不降
-- **跳过可选步骤**：没有 research、plan checker、verifier
+- **跳过可选步骤**：默认不启用 research、plan checker、verifier
 - **独立跟踪**：数据存放在 `.planning/quick/`，不和 phase 混在一起
 
-适用场景：修 bug、小功能、配置改动、一次性任务。
+**`--discuss` 参数：** 在规划前先进行轻量讨论，理清灰区。
+
+**`--research` 参数：** 在规划前拉起研究代理。调查实现方式、库选型和潜在坑点。适合你不确定怎么下手的场景。
+
+**`--full` 参数：** 启用计划检查（最多 2 轮迭代）和执行后验证。
+
+参数可组合使用：`--discuss --research --full` 可同时获得讨论 + 研究 + 计划检查 + 验证。
 
 ```
 /gsd:quick
@@ -471,19 +498,30 @@ lmn012o feat(08-02): create registration endpoint
 | 命令 | 作用 |
 |------|------|
 | `/gsd:new-project [--auto]` | 完整初始化：提问 → 研究 → 需求 → 路线图 |
-| `/gsd:discuss-phase [N] [--auto]` | 在规划前收集实现决策 |
+| `/gsd:discuss-phase [N] [--auto] [--analyze]` | 在规划前收集实现决策（`--analyze` 增加权衡分析） |
 | `/gsd:plan-phase [N] [--auto]` | 为某个阶段执行研究 + 规划 + 验证 |
 | `/gsd:execute-phase <N>` | 以并行 wave 执行全部计划，完成后验证 |
 | `/gsd:verify-work [N]` | 人工用户验收测试 ¹ |
+| `/gsd:ship [N] [--draft]` | 从已验证的阶段工作创建 PR，自动生成 PR 描述 |
+| `/gsd:fast <text>` | 内联处理琐碎任务——完全跳过规划，立即执行 |
+| `/gsd:next` | 自动推进到下一个逻辑工作流步骤 |
 | `/gsd:audit-milestone` | 验证里程碑是否达到完成定义 |
 | `/gsd:complete-milestone` | 归档里程碑并打 release tag |
 | `/gsd:new-milestone [name]` | 开始下一个版本：提问 → 研究 → 需求 → 路线图 |
+
+### UI 设计
+
+| 命令 | 作用 |
+|------|------|
+| `/gsd:ui-phase [N]` | 为前端阶段生成 UI 设计合约（UI-SPEC.md） |
+| `/gsd:ui-review [N]` | 对已实现前端代码进行 6 维视觉审计 |
 
 ### 导航
 
 | 命令 | 作用 |
 |------|------|
 | `/gsd:progress` | 我现在在哪？下一步是什么？ |
+| `/gsd:next` | 自动检测状态并执行下一步 |
 | `/gsd:help` | 显示全部命令和使用指南 |
 | `/gsd:update` | 更新 GSD，并预览变更日志 |
 | `/gsd:join-discord` | 加入 GSD Discord 社区 |
@@ -504,24 +542,43 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd:list-phase-assumptions [N]` | 在规划前查看 Claude 打算采用的方案 |
 | `/gsd:plan-milestone-gaps` | 为 audit 发现的缺口创建 phase |
 
+### 代码质量
+
+| 命令 | 作用 |
+|------|------|
+| `/gsd:review` | 对当前阶段或分支进行跨 AI 同行评审 |
+| `/gsd:pr-branch` | 创建过滤 `.planning/` 提交的干净 PR 分支 |
+| `/gsd:audit-uat` | 审计验证债务——找出缺少 UAT 的阶段 |
+
+### 积压
+
+| 命令 | 作用 |
+|------|------|
+| `/gsd:plant-seed <idea>` | 将想法存入积压停车场，留待未来里程碑 |
+
 ### 会话
 
 | 命令 | 作用 |
 |------|------|
-| `/gsd:pause-work` | 在中途暂停时创建交接上下文 |
+| `/gsd:pause-work` | 在中途暂停时创建交接上下文（写入 HANDOFF.json） |
 | `/gsd:resume-work` | 从上一次会话恢复 |
+| `/gsd:session-report` | 生成会话摘要，包含已完成工作和结果 |
 
 ### 工具
 
 | 命令 | 作用 |
 |------|------|
 | `/gsd:settings` | 配置模型 profile 和工作流代理 |
-| `/gsd:set-profile <profile>` | 切换模型 profile（quality / balanced / budget） |
+| `/gsd:set-profile <profile>` | 切换模型 profile（quality / balanced / budget / inherit） |
 | `/gsd:add-todo [desc]` | 记录一个待办想法 |
 | `/gsd:check-todos` | 查看待办列表 |
 | `/gsd:debug [desc]` | 使用持久状态进行系统化调试 |
-| `/gsd:quick [--full] [--discuss]` | 以 GSD 保障执行临时任务（`--full` 增加计划检查和验证，`--discuss` 先补上下文） |
+| `/gsd:do <text>` | 将自由文本自动路由到正确的 GSD 命令 |
+| `/gsd:note <text>` | 零摩擦想法捕捉——追加、列出或提升为待办 |
+| `/gsd:quick [--full] [--discuss] [--research]` | 以 GSD 保障执行临时任务（`--full` 增加计划检查和验证，`--discuss` 先补上下文，`--research` 在规划前先调研） |
 | `/gsd:health [--repair]` | 校验 `.planning/` 目录完整性，带 `--repair` 时自动修复 |
+| `/gsd:stats` | 显示项目统计——阶段、计划、需求、git 指标 |
+| `/gsd:profile-user [--questionnaire] [--refresh]` | 从会话分析生成开发者行为档案，用于个性化响应 |
 
 <sup>¹ 由 reddit 用户 OracleGreyBeard 贡献</sup>
 
@@ -547,11 +604,14 @@ GSD 将项目设置保存在 `.planning/config.json`。你可以在 `/gsd:new-pr
 | `quality` | Opus | Opus | Sonnet |
 | `balanced`（默认） | Opus | Sonnet | Sonnet |
 | `budget` | Sonnet | Sonnet | Haiku |
+| `inherit` | Inherit | Inherit | Inherit |
 
 切换方式：
 ```
 /gsd:set-profile budget
 ```
+
+使用非 Anthropic 提供商（OpenRouter、本地模型）时，或想跟随当前运行时的模型选择时（如 OpenCode 的 `/model`），可用 `inherit`。
 
 也可以通过 `/gsd:settings` 配置。
 
@@ -565,6 +625,7 @@ GSD 将项目设置保存在 `.planning/config.json`。你可以在 `/gsd:new-pr
 | `workflow.plan_check` | `true` | 执行前验证计划是否真能达成阶段目标 |
 | `workflow.verifier` | `true` | 执行后确认“必须交付项”是否已经落地 |
 | `workflow.auto_advance` | `false` | 自动串联 discuss → plan → execute，不中途停下 |
+| `workflow.research_before_questions` | `false` | 在讨论提问前先运行研究，而非之后 |
 
 可以用 `/gsd:settings` 开关这些项，也可以在单次命令里覆盖：
 - `/gsd:plan-phase --skip-research`
@@ -576,6 +637,7 @@ GSD 将项目设置保存在 `.planning/config.json`。你可以在 `/gsd:new-pr
 |---------|---------|------|
 | `parallelization.enabled` | `true` | 是否并行执行独立计划 |
 | `planning.commit_docs` | `true` | 是否将 `.planning/` 纳入 git 跟踪 |
+| `hooks.context_warnings` | `true` | 显示上下文窗口使用量警告 |
 
 ### Git 分支策略
 
@@ -659,12 +721,19 @@ CLAUDE_CONFIG_DIR=/home/youruser/.claude npx get-shit-done-cc --global
 # 全局安装
 npx get-shit-done-cc --claude --global --uninstall
 npx get-shit-done-cc --opencode --global --uninstall
+npx get-shit-done-cc --gemini --global --uninstall
 npx get-shit-done-cc --codex --global --uninstall
+npx get-shit-done-cc --copilot --global --uninstall
+npx get-shit-done-cc --cursor --global --uninstall
+npx get-shit-done-cc --antigravity --global --uninstall
 
 # 本地安装（当前项目）
 npx get-shit-done-cc --claude --local --uninstall
 npx get-shit-done-cc --opencode --local --uninstall
 npx get-shit-done-cc --codex --local --uninstall
+npx get-shit-done-cc --copilot --local --uninstall
+npx get-shit-done-cc --cursor --local --uninstall
+npx get-shit-done-cc --antigravity --local --uninstall
 ```
 
 这会移除所有 GSD 命令、代理、hooks 和设置，但会保留你其他配置。
