@@ -14,6 +14,102 @@ function toPosixPath(p) {
   return p.split(path.sep).join('/');
 }
 
+/**
+ * Scan immediate child directories for separate git repos.
+ * Returns a sorted array of directory names that have their own `.git`.
+ * Excludes hidden directories and node_modules.
+ */
+function detectSubRepos(cwd) {
+  const results = [];
+  try {
+    const entries = fs.readdirSync(cwd, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      const gitPath = path.join(cwd, entry.name, '.git');
+      try {
+        if (fs.existsSync(gitPath)) {
+          results.push(entry.name);
+        }
+      } catch {}
+    }
+  } catch {}
+  return results.sort();
+}
+
+/**
+ * Walk up from `startDir` to find the project root that owns `.planning/`.
+ *
+ * In multi-repo workspaces, Claude may open inside a sub-repo (e.g. `backend/`)
+ * instead of the project root. This function prevents `.planning/` from being
+ * created inside the sub-repo by locating the nearest ancestor that already has
+ * a `.planning/` directory.
+ *
+ * Detection strategy (checked in order for each ancestor):
+ * 1. Parent has `.planning/config.json` with `sub_repos` listing this directory
+ * 2. Parent has `.planning/config.json` with `multiRepo: true` (legacy format)
+ * 3. Parent has `.planning/` and current dir has its own `.git` (heuristic)
+ *
+ * Returns `startDir` unchanged when no ancestor `.planning/` is found (first-run
+ * or single-repo projects).
+ */
+function findProjectRoot(startDir) {
+  const resolved = path.resolve(startDir);
+  const root = path.parse(resolved).root;
+  const homedir = require('os').homedir();
+
+  // Check if startDir or any of its ancestors (up to but not including a
+  // candidate project root) contains a .git directory. This handles both
+  // `backend/` (direct sub-repo) and `backend/src/modules/` (nested inside).
+  function isInsideGitRepo(candidateParent) {
+    let d = resolved;
+    while (d !== candidateParent && d !== root) {
+      if (fs.existsSync(path.join(d, '.git'))) return true;
+      d = path.dirname(d);
+    }
+    return false;
+  }
+
+  let dir = resolved;
+  while (dir !== root) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // filesystem root
+    if (parent === homedir) break; // never go above home
+
+    const parentPlanning = path.join(parent, '.planning');
+    if (fs.existsSync(parentPlanning) && fs.statSync(parentPlanning).isDirectory()) {
+      const configPath = path.join(parentPlanning, 'config.json');
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const subRepos = config.sub_repos || config.planning?.sub_repos || [];
+
+        // Check explicit sub_repos list
+        if (Array.isArray(subRepos) && subRepos.length > 0) {
+          const relPath = path.relative(parent, resolved);
+          const topSegment = relPath.split(path.sep)[0];
+          if (subRepos.includes(topSegment)) {
+            return parent;
+          }
+        }
+
+        // Check legacy multiRepo flag
+        if (config.multiRepo === true && isInsideGitRepo(parent)) {
+          return parent;
+        }
+      } catch {
+        // config.json missing or malformed — fall back to .git heuristic
+      }
+
+      // Heuristic: parent has .planning/ and we're inside a git repo
+      if (isInsideGitRepo(parent)) {
+        return parent;
+      }
+    }
+    dir = parent;
+  }
+  return startDir;
+}
+
 // ─── Output helpers ───────────────────────────────────────────────────────────
 
 function output(result, raw, rawValue) {
@@ -66,6 +162,7 @@ function loadConfig(cwd) {
     parallelization: true,
     brave_search: false,
     text_mode: false, // when true, use plain-text numbered lists instead of AskUserQuestion menus
+    sub_repos: [],
     resolve_model_ids: false, // when true, resolve aliases (opus/sonnet/haiku) to full model IDs
     context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
     phase_naming: 'sequential', // 'sequential' (default, auto-increment) or 'custom' (arbitrary string IDs)
@@ -81,6 +178,39 @@ function loadConfig(cwd) {
       parsed.granularity = depthToGranularity[parsed.depth] || parsed.depth;
       delete parsed.depth;
       try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch { /* intentionally empty */ }
+    }
+
+    // Auto-detect and sync sub_repos: scan for child directories with .git
+    let configDirty = false;
+
+    // Migrate legacy "multiRepo: true" boolean → sub_repos array
+    if (parsed.multiRepo === true && !parsed.sub_repos && !parsed.planning?.sub_repos) {
+      const detected = detectSubRepos(cwd);
+      if (detected.length > 0) {
+        parsed.sub_repos = detected;
+        if (!parsed.planning) parsed.planning = {};
+        parsed.planning.commit_docs = false;
+        delete parsed.multiRepo;
+        configDirty = true;
+      }
+    }
+
+    // Keep sub_repos in sync with actual filesystem
+    const currentSubRepos = parsed.sub_repos || parsed.planning?.sub_repos || [];
+    if (Array.isArray(currentSubRepos) && currentSubRepos.length > 0) {
+      const detected = detectSubRepos(cwd);
+      if (detected.length > 0) {
+        const sorted = [...currentSubRepos].sort();
+        if (JSON.stringify(sorted) !== JSON.stringify(detected)) {
+          parsed.sub_repos = detected;
+          configDirty = true;
+        }
+      }
+    }
+
+    // Persist sub_repos changes (migration or sync)
+    if (configDirty) {
+      try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch {}
     }
 
     const get = (key, nested) => {
@@ -113,6 +243,7 @@ function loadConfig(cwd) {
       parallelization,
       brave_search: get('brave_search') ?? defaults.brave_search,
       text_mode: get('text_mode', { section: 'workflow', field: 'text_mode' }) ?? defaults.text_mode,
+      sub_repos: get('sub_repos', { section: 'planning', field: 'sub_repos' }) ?? defaults.sub_repos,
       resolve_model_ids: get('resolve_model_ids') ?? defaults.resolve_model_ids,
       context_window: get('context_window') ?? defaults.context_window,
       phase_naming: get('phase_naming') ?? defaults.phase_naming,
@@ -860,6 +991,8 @@ module.exports = {
   extractOneLinerFromBody,
   resolveWorktreeRoot,
   withPlanningLock,
+  findProjectRoot,
+  detectSubRepos,
   MODEL_ALIAS_MAP,
   planningDir,
   planningPaths,
