@@ -182,6 +182,57 @@ describe('AGENT: required frontmatter fields', () => {
   }
 });
 
+// ─── CLAUDE.md Compliance ───────────────────────────────────────────────────
+
+describe('CLAUDEMD: CLAUDE.md compliance enforcement', () => {
+  test('gsd-plan-checker has Dimension 10: CLAUDE.md Compliance', () => {
+    const content = fs.readFileSync(path.join(AGENTS_DIR, 'gsd-plan-checker.md'), 'utf-8');
+    assert.ok(
+      content.includes('Dimension 10: CLAUDE.md Compliance'),
+      'gsd-plan-checker must have Dimension 10 for CLAUDE.md compliance checking'
+    );
+    assert.ok(
+      content.includes('claude_md_compliance'),
+      'gsd-plan-checker must use claude_md_compliance as dimension identifier'
+    );
+  });
+
+  test('gsd-phase-researcher has CLAUDE.md enforcement directive', () => {
+    const content = fs.readFileSync(path.join(AGENTS_DIR, 'gsd-phase-researcher.md'), 'utf-8');
+    assert.ok(
+      content.includes('CLAUDE.md enforcement'),
+      'gsd-phase-researcher must enforce CLAUDE.md directives during research'
+    );
+    assert.ok(
+      content.includes('Project Constraints (from CLAUDE.md)'),
+      'gsd-phase-researcher must output a Project Constraints section from CLAUDE.md'
+    );
+  });
+
+  test('gsd-executor has CLAUDE.md enforcement directive', () => {
+    const content = fs.readFileSync(path.join(AGENTS_DIR, 'gsd-executor.md'), 'utf-8');
+    assert.ok(
+      content.includes('CLAUDE.md enforcement'),
+      'gsd-executor must enforce CLAUDE.md directives during execution'
+    );
+    assert.ok(
+      content.includes('CLAUDE.md rule — it takes precedence over plan instructions'),
+      'gsd-executor must specify CLAUDE.md precedence over plan instructions'
+    );
+  });
+
+  test('all three agents read CLAUDE.md in project_context', () => {
+    const agents = ['gsd-plan-checker', 'gsd-phase-researcher', 'gsd-executor'];
+    for (const agent of agents) {
+      const content = fs.readFileSync(path.join(AGENTS_DIR, agent + '.md'), 'utf-8');
+      assert.ok(
+        content.includes('Read `./CLAUDE.md`'),
+        `${agent} must read ./CLAUDE.md in project_context section`
+      );
+    }
+  });
+});
+
 // ─── Discussion Log ──────────────────────────────────────────────────────────
 
 describe('DISCUSS: discussion log generation', () => {

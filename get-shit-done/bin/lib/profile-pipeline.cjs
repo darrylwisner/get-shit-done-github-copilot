@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const readline = require('readline');
-const { output, error, safeReadFile } = require('./core.cjs');
+const { output, error, safeReadFile, reapStaleTempFiles } = require('./core.cjs');
 
 // ─── Session I/O Helpers ──────────────────────────────────────────────────────
 
@@ -333,6 +333,7 @@ async function cmdExtractMessages(projectArg, options, raw, overridePath) {
     sessions = sessions.slice(0, options.limit);
   }
 
+  reapStaleTempFiles('gsd-pipeline-', { dirsOnly: true });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-pipeline-'));
   const outputPath = path.join(tmpDir, 'extracted-messages.jsonl');
 
@@ -511,6 +512,7 @@ async function cmdProfileSample(overridePath, options, raw) {
     }
   }
 
+  reapStaleTempFiles('gsd-profile-', { dirsOnly: true });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-profile-'));
   const outputPath = path.join(tmpDir, 'profile-sample.jsonl');
   for (const msg of allMessages) {
