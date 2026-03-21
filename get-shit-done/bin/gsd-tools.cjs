@@ -655,6 +655,9 @@ async function main() {
         case 'progress':
           init.cmdInitProgress(cwd, raw);
           break;
+        case 'manager':
+          init.cmdInitManager(cwd, raw);
+          break;
         case 'new-workspace':
           init.cmdInitNewWorkspace(cwd, raw);
           break;
@@ -665,7 +668,7 @@ async function main() {
           init.cmdInitRemoveWorkspace(cwd, args[2], raw);
           break;
         default:
-          error(`Unknown init workflow: ${workflow}\nAvailable: execute-phase, plan-phase, new-project, new-milestone, quick, resume, verify-work, phase-op, todos, milestone-op, map-codebase, progress, new-workspace, list-workspaces, remove-workspace`);
+          error(`Unknown init workflow: ${workflow}\nAvailable: execute-phase, plan-phase, new-project, new-milestone, quick, resume, verify-work, phase-op, todos, milestone-op, map-codebase, progress, manager, new-workspace, list-workspaces, remove-workspace`);
       }
       break;
     }

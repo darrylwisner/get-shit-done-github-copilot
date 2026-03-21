@@ -26,6 +26,41 @@ describe('workflow.discuss_mode config', () => {
     assert.ok(command.includes('workflow.discuss_mode'), 'should reference config key');
   });
 
+  test('discuss-phase command process block defers to workflow file (not inline instructions)', () => {
+    const command = fs.readFileSync(
+      path.join(__dirname, '..', 'commands', 'gsd', 'discuss-phase.md'), 'utf8'
+    );
+    // Extract the <process> block
+    const processMatch = command.match(/<process>([\s\S]*?)<\/process>/);
+    assert.ok(processMatch, 'should have a <process> block');
+    const processBlock = processMatch[1];
+
+    // The process block must explicitly tell the agent to read the workflow file
+    assert.ok(
+      processBlock.includes('Read and execute'),
+      'process block should direct agent to read and execute workflow file'
+    );
+    assert.ok(
+      processBlock.includes('MANDATORY'),
+      'process block should include MANDATORY instruction to read workflow files'
+    );
+
+    // The process block must NOT contain detailed step-by-step instructions
+    // that could substitute for the actual workflow file
+    assert.ok(
+      !processBlock.includes('Scout codebase'),
+      'process block should not contain detailed workflow steps (Scout codebase)'
+    );
+    assert.ok(
+      !processBlock.includes('Deep-dive each area'),
+      'process block should not contain detailed workflow steps (Deep-dive)'
+    );
+    assert.ok(
+      !processBlock.includes('Probing depth'),
+      'process block should not contain detailed workflow steps (Probing depth)'
+    );
+  });
+
   test('discuss-phase command argument-hint includes --text', () => {
     const command = fs.readFileSync(
       path.join(__dirname, '..', 'commands', 'gsd', 'discuss-phase.md'), 'utf8'

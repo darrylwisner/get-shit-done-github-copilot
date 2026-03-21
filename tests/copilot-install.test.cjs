@@ -620,7 +620,7 @@ describe('copyCommandsAsCopilotSkills', () => {
       // Count gsd-* directories — should be 31
       const dirs = fs.readdirSync(tempDir, { withFileTypes: true })
         .filter(e => e.isDirectory() && e.name.startsWith('gsd-'));
-      assert.strictEqual(dirs.length, 53, `expected 53 skill folders, got ${dirs.length}`);
+      assert.strictEqual(dirs.length, 54, `expected 54 skill folders, got ${dirs.length}`);
     } finally {
       fs.rmSync(tempDir, { recursive: true });
     }
@@ -1114,7 +1114,7 @@ const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
 const INSTALL_PATH = path.join(__dirname, '..', 'bin', 'install.js');
-const EXPECTED_SKILLS = 53;
+const EXPECTED_SKILLS = 54;
 const EXPECTED_AGENTS = 18;
 
 function runCopilotInstall(cwd) {

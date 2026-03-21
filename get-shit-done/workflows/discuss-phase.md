@@ -570,7 +570,7 @@ Track deferred ideas internally.
 
 For each selected area, conduct a focused discussion loop.
 
-**Research-before-questions mode:** Check if `research_questions` is enabled in config (from init context or `.planning/config.json`). When enabled, before presenting questions for each area:
+**Research-before-questions mode:** Check if `workflow.research_before_questions` is enabled in config (from init context or `.planning/config.json`). When enabled, before presenting questions for each area:
 1. Do a brief web search for best practices related to the area topic
 2. Summarize the top findings in 2-3 bullet points
 3. Present the research alongside the question so the user can make a more informed decision
