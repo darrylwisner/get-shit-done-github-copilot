@@ -280,6 +280,31 @@ describe('resolveModelInternal', () => {
       assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'opus');
     });
   });
+
+  describe('resolve_model_ids: "omit"', () => {
+    test('returns empty string for known agents', () => {
+      writeConfig({ resolve_model_ids: 'omit' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), '');
+    });
+
+    test('returns empty string for unknown agents', () => {
+      writeConfig({ resolve_model_ids: 'omit' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), '');
+    });
+
+    test('still respects model_overrides even when omit', () => {
+      writeConfig({
+        resolve_model_ids: 'omit',
+        model_overrides: { 'gsd-planner': 'openai/gpt-5.4' },
+      });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'openai/gpt-5.4');
+    });
+
+    test('returns empty string with inherit profile', () => {
+      writeConfig({ resolve_model_ids: 'omit', model_profile: 'inherit' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), '');
+    });
+  });
 });
 
 // ─── escapeRegex ───────────────────────────────────────────────────────────────

@@ -170,7 +170,7 @@ function loadConfig(cwd) {
     exa_search: false,
     text_mode: false, // when true, use plain-text numbered lists instead of AskUserQuestion menus
     sub_repos: [],
-    resolve_model_ids: false, // when true, resolve aliases (opus/sonnet/haiku) to full model IDs
+    resolve_model_ids: false, // false: return alias as-is | true: map to full Claude model ID | "omit": return '' (runtime uses its default)
     context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
     phase_naming: 'sequential', // 'sequential' (default, auto-increment) or 'custom' (arbitrary string IDs)
   };
@@ -850,10 +850,18 @@ const MODEL_ALIAS_MAP = {
 function resolveModelInternal(cwd, agentType) {
   const config = loadConfig(cwd);
 
-  // Check per-agent override first
+  // Check per-agent override first — always respected regardless of resolve_model_ids.
+  // Users who set fully-qualified model IDs (e.g., "openai/gpt-5.4") get exactly that.
   const override = config.model_overrides?.[agentType];
   if (override) {
     return override;
+  }
+
+  // resolve_model_ids: "omit" — return empty string so the runtime uses its configured
+  // default model. For non-Claude runtimes (OpenCode, Codex, etc.) that don't recognize
+  // Claude aliases (opus/sonnet/haiku/inherit). Set automatically during install. See #1156.
+  if (config.resolve_model_ids === 'omit') {
+    return '';
   }
 
   // Fall back to profile lookup
@@ -863,8 +871,8 @@ function resolveModelInternal(cwd, agentType) {
   if (profile === 'inherit') return 'inherit';
   const alias = agentModels[profile] || agentModels['balanced'] || 'sonnet';
 
-  // If resolve_model_ids is true, map alias to full model ID
-  // This prevents 404s when the Task tool passes aliases directly to the API
+  // resolve_model_ids: true — map alias to full Claude model ID
+  // Prevents 404s when the Task tool passes aliases directly to the API
   if (config.resolve_model_ids) {
     return MODEL_ALIAS_MAP[alias] || alias;
   }
