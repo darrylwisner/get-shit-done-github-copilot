@@ -62,6 +62,7 @@ function createTempGitProject() {
   execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'pipe' });
   execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'pipe' });
+  execSync('git config commit.gpgsign false', { cwd: tmpDir, stdio: 'pipe' });
 
   fs.writeFileSync(
     path.join(tmpDir, '.planning', 'PROJECT.md'),

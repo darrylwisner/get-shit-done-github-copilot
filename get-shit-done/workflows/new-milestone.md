@@ -43,6 +43,38 @@ If the flag is absent, keep the current behavior of continuing phase numbering f
 - Suggest next version (v1.0 → v1.1, or v2.0 for major)
 - Confirm with user
 
+## 3.5. Verify Milestone Understanding
+
+Before writing any files, present a summary of what was gathered and ask for confirmation.
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► MILESTONE SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Milestone v[X.Y]: [Name]**
+
+**Goal:** [One sentence]
+
+**Target features:**
+- [Feature 1]
+- [Feature 2]
+- [Feature 3]
+
+**Key context:** [Any important constraints, decisions, or notes from questioning]
+```
+
+AskUserQuestion:
+- header: "Confirm?"
+- question: "Does this capture what you want to build in this milestone?"
+- options:
+  - "Looks good" — Proceed to write PROJECT.md
+  - "Adjust" — Let me correct or add details
+
+**If "Adjust":** Ask what needs changing (plain text, NOT AskUserQuestion). Incorporate changes, re-present the summary. Loop until "Looks good" is selected.
+
+**If "Looks good":** Proceed to Step 4.
+
 ## 4. Update PROJECT.md
 
 Add/update:

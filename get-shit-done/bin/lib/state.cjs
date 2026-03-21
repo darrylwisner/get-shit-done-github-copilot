@@ -733,9 +733,20 @@ function stripFrontmatter(content) {
 }
 
 function syncStateFrontmatter(content, cwd) {
+  // Read existing frontmatter BEFORE stripping — it may contain values
+  // that the body no longer has (e.g., Status field removed by an agent).
+  const existingFm = extractFrontmatter(content);
   const body = stripFrontmatter(content);
-  const fm = buildStateFrontmatter(body, cwd);
-  const yamlStr = reconstructFrontmatter(fm);
+  const derivedFm = buildStateFrontmatter(body, cwd);
+
+  // Preserve existing frontmatter status when body-derived status is 'unknown'.
+  // This prevents a missing Status: field in the body from overwriting a
+  // previously valid status (e.g., 'executing' → 'unknown').
+  if (derivedFm.status === 'unknown' && existingFm.status && existingFm.status !== 'unknown') {
+    derivedFm.status = existingFm.status;
+  }
+
+  const yamlStr = reconstructFrontmatter(derivedFm);
   return `---\n${yamlStr}\n---\n\n${body}`;
 }
 

@@ -113,8 +113,9 @@ function findProjectRoot(startDir) {
 // ─── Output helpers ───────────────────────────────────────────────────────────
 
 function output(result, raw, rawValue) {
+  let data;
   if (raw && rawValue !== undefined) {
-    process.stdout.write(String(rawValue));
+    data = String(rawValue);
   } else {
     const json = JSON.stringify(result, null, 2);
     // Large payloads exceed Claude Code's Bash tool buffer (~50KB).
@@ -122,16 +123,20 @@ function output(result, raw, rawValue) {
     if (json.length > 50000) {
       const tmpPath = path.join(require('os').tmpdir(), `gsd-${Date.now()}.json`);
       fs.writeFileSync(tmpPath, json, 'utf-8');
-      process.stdout.write('@file:' + tmpPath);
+      data = '@file:' + tmpPath;
     } else {
-      process.stdout.write(json);
+      data = json;
     }
   }
-  process.exit(0);
+  // process.stdout.write() is async when stdout is a pipe — process.exit()
+  // can tear down the process before the reader consumes the buffer.
+  // fs.writeSync(1, ...) blocks until the kernel accepts the bytes, and
+  // skipping process.exit() lets the event loop drain naturally.
+  fs.writeSync(1, data);
 }
 
 function error(message) {
-  process.stderr.write('Error: ' + message + '\n');
+  fs.writeSync(2, 'Error: ' + message + '\n');
   process.exit(1);
 }
 
@@ -578,6 +583,7 @@ function searchPhaseInDir(baseDir, relBase, normalized) {
     const hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
     const hasContext = phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
     const hasVerification = phaseFiles.some(f => f.endsWith('-VERIFICATION.md') || f === 'VERIFICATION.md');
+    const hasReviews = phaseFiles.some(f => f.endsWith('-REVIEWS.md') || f === 'REVIEWS.md');
 
     const completedPlanIds = new Set(
       summaries.map(s => s.replace('-SUMMARY.md', '').replace('SUMMARY.md', ''))
@@ -599,6 +605,7 @@ function searchPhaseInDir(baseDir, relBase, normalized) {
       has_research: hasResearch,
       has_context: hasContext,
       has_verification: hasVerification,
+      has_reviews: hasReviews,
     };
   } catch {
     return null;

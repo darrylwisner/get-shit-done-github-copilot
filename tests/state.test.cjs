@@ -475,6 +475,30 @@ describe('STATE.md frontmatter sync', () => {
     assert.ok(content.includes('status: paused'), 'frontmatter should reflect latest status');
   });
 
+  test('preserves frontmatter status when body Status field is missing', () => {
+    // Simulate: frontmatter has status: executing, but body lost Status: field
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `---
+status: executing
+milestone: v1.0
+---
+
+# Project State
+
+**Current Phase:** 03
+**Current Plan:** 03-02
+`
+    );
+
+    // Any writeStateMd triggers syncStateFrontmatter — use state update on a field that exists
+    runGsdTools('state update "Current Plan" "03-03"', tmpDir);
+
+    const content = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(content.includes('status: executing'), 'should preserve existing status, not overwrite with unknown');
+    assert.ok(!content.includes('status: unknown'), 'should not contain unknown status');
+  });
+
   test('round-trip: write then read via state json', () => {
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'STATE.md'),
