@@ -100,19 +100,17 @@ Research, plan, and verify a phase.
 
 ### `/gsd:execute-phase`
 
-Execute all plans in a phase with wave-based parallelization, or run a specific wave.
+Execute all plans in a phase with wave-based parallelization.
 
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `N` | **Yes** | Phase number to execute |
-| `--wave N` | No | Execute only Wave `N` in the phase |
 
 **Prerequisites:** Phase has PLAN.md files
-**Produces:** per-plan `{phase}-{N}-SUMMARY.md`, git commits, and `{phase}-VERIFICATION.md` when the phase is fully complete
+**Produces:** `{phase}-{N}-SUMMARY.md`, `{phase}-VERIFICATION.md`, git commits
 
 ```bash
 /gsd:execute-phase 1                # Execute phase 1
-/gsd:execute-phase 1 --wave 2       # Execute only Wave 2
 ```
 
 ---
