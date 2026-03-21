@@ -6,7 +6,8 @@
     "plan_check": true,
     "verifier": true,
     "auto_advance": false,
-    "nyquist_validation": true
+    "nyquist_validation": true,
+    "discuss_mode": "discuss"
   },
   "planning": {
     "commit_docs": true,

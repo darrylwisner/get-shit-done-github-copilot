@@ -247,6 +247,43 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
     return;
   }
 
+  // Ensure branching strategy branch exists before first commit (#1278).
+  // Pre-execution workflows (discuss, plan, research) commit artifacts but the branch
+  // was previously only created during execute-phase — too late.
+  if (config.branching_strategy && config.branching_strategy !== 'none') {
+    let branchName = null;
+    if (config.branching_strategy === 'phase') {
+      // Determine which phase we're committing for from the file paths
+      const phaseMatch = (files || []).join(' ').match(/(\d+)-/);
+      if (phaseMatch) {
+        const phaseNum = phaseMatch[1];
+        const phaseInfo = findPhaseInternal(cwd, phaseNum);
+        if (phaseInfo) {
+          branchName = config.phase_branch_template
+            .replace('{phase}', phaseInfo.phase_number)
+            .replace('{slug}', phaseInfo.phase_slug || 'phase');
+        }
+      }
+    } else if (config.branching_strategy === 'milestone') {
+      const milestone = getMilestoneInfo(cwd);
+      if (milestone && milestone.version) {
+        branchName = config.milestone_branch_template
+          .replace('{milestone}', milestone.version)
+          .replace('{slug}', generateSlugInternal(milestone.name) || 'milestone');
+      }
+    }
+    if (branchName) {
+      const currentBranch = execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+      if (currentBranch.exitCode === 0 && currentBranch.stdout.trim() !== branchName) {
+        // Create branch if it doesn't exist, or switch to it if it does
+        const create = execGit(cwd, ['checkout', '-b', branchName]);
+        if (create.exitCode !== 0) {
+          execGit(cwd, ['checkout', branchName]);
+        }
+      }
+    }
+  }
+
   // Stage files
   const filesToStage = files && files.length > 0 ? files : ['.planning/'];
   for (const file of filesToStage) {

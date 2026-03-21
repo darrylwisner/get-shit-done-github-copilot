@@ -187,11 +187,19 @@ If `context_path` is not null, display: `Using phase context from: ${context_pat
 
 **If `context_path` is null (no CONTEXT.md exists):**
 
+Read discuss mode for context gate label:
+```bash
+DISCUSS_MODE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
+```
+
 Use AskUserQuestion:
 - header: "No context"
 - question: "No CONTEXT.md found for Phase {X}. Plans will use research and requirements only — your design preferences won't be included. Continue or capture context first?"
 - options:
   - "Continue without context" — Plan using research + requirements only
+  If `DISCUSS_MODE` is `"assumptions"`:
+  - "Gather context (assumptions mode)" — Analyze codebase and surface assumptions before planning
+  If `DISCUSS_MODE` is `"discuss"` (or unset):
   - "Run discuss-phase first" — Capture design decisions before planning
 
 If "Continue without context": Proceed to step 5.

@@ -1,7 +1,7 @@
 ---
 name: gsd:discuss-phase
 description: Gather phase context through adaptive questioning before planning. Use --auto to skip interactive questions (Claude picks recommended defaults).
-argument-hint: "<phase> [--auto] [--batch] [--analyze]"
+argument-hint: "<phase> [--auto] [--batch] [--analyze] [--text]"
 allowed-tools:
   - Read
   - Write
@@ -30,6 +30,7 @@ Extract implementation decisions that downstream agents need — researcher and 
 
 <execution_context>
 @~/.claude/get-shit-done/workflows/discuss-phase.md
+@~/.claude/get-shit-done/workflows/discuss-phase-assumptions.md
 @~/.claude/get-shit-done/templates/context.md
 </execution_context>
 
@@ -40,6 +41,17 @@ Context files are resolved in-workflow using `init phase-op` and roadmap/state t
 </context>
 
 <process>
+**Mode routing:**
+```bash
+DISCUSS_MODE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
+```
+
+If `DISCUSS_MODE` is `"assumptions"`: **Follow the discuss-phase-assumptions.md workflow instead of the steps below.** Skip all remaining steps in this process section.
+
+If `DISCUSS_MODE` is `"discuss"` (or unset, or any other value): Continue with the steps below (current behavior).
+
+---
+
 1. Validate phase number (error if missing or not in roadmap)
 2. Check if CONTEXT.md exists (offer update/view/skip if yes)
 3. **Load prior context** — Read PROJECT.md, REQUIREMENTS.md, STATE.md, and all prior CONTEXT.md files

@@ -746,10 +746,10 @@ describe('Copilot agent conversion - real files', () => {
     assert.ok(toolsLine.includes("'read'"), 'Read mapped');
   });
 
-  test('all 17 agents convert without error', () => {
+  test('all 18 agents convert without error', () => {
     const agents = fs.readdirSync(agentsSrc)
       .filter(f => f.startsWith('gsd-') && f.endsWith('.md'));
-    assert.strictEqual(agents.length, 17, `expected 17 agents, got ${agents.length}`);
+    assert.strictEqual(agents.length, 18, `expected 18 agents, got ${agents.length}`);
 
     for (const agentFile of agents) {
       const content = fs.readFileSync(path.join(agentsSrc, agentFile), 'utf8');
@@ -1120,7 +1120,7 @@ const crypto = require('crypto');
 
 const INSTALL_PATH = path.join(__dirname, '..', 'bin', 'install.js');
 const EXPECTED_SKILLS = 53;
-const EXPECTED_AGENTS = 17;
+const EXPECTED_AGENTS = 18;
 
 function runCopilotInstall(cwd) {
   const env = { ...process.env };
@@ -1189,6 +1189,7 @@ describe('E2E: Copilot full install verification', () => {
     const gsdAgents = files.filter(f => f.startsWith('gsd-') && f.endsWith('.agent.md')).sort();
     const expected = [
       'gsd-advisor-researcher.agent.md',
+      'gsd-assumptions-analyzer.agent.md',
       'gsd-codebase-mapper.agent.md',
       'gsd-debugger.agent.md',
       'gsd-executor.agent.md',
