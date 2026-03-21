@@ -2642,27 +2642,6 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
     configureOpencodePermissions(isGlobal);
   }
 
-  // For non-Claude runtimes, set resolve_model_ids: "omit" in ~/.gsd/defaults.json
-  // so resolveModelInternal() returns '' instead of Claude aliases (opus/sonnet/haiku)
-  // that the runtime can't resolve. Users can still use model_overrides for explicit IDs.
-  // See #1156.
-  if (runtime !== 'claude') {
-    const gsdDir = path.join(os.homedir(), '.gsd');
-    const defaultsPath = path.join(gsdDir, 'defaults.json');
-    try {
-      fs.mkdirSync(gsdDir, { recursive: true });
-      let defaults = {};
-      try { defaults = JSON.parse(fs.readFileSync(defaultsPath, 'utf8')); } catch { /* new file */ }
-      if (defaults.resolve_model_ids !== 'omit') {
-        defaults.resolve_model_ids = 'omit';
-        fs.writeFileSync(defaultsPath, JSON.stringify(defaults, null, 2) + '\n');
-        console.log(`  ${green}✓${reset} Set resolve_model_ids: "omit" in ~/.gsd/defaults.json`);
-      }
-    } catch (e) {
-      console.log(`  ${yellow}⚠${reset} Could not write ~/.gsd/defaults.json: ${e.message}`);
-    }
-  }
-
   let program = 'Claude Code';
   if (runtime === 'opencode') program = 'OpenCode';
   if (runtime === 'gemini') program = 'Gemini';
