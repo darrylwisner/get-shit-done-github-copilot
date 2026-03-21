@@ -86,6 +86,19 @@ describe('init commands', () => {
     assert.strictEqual(output.uat_path, '.planning/phases/03-api/03-UAT.md');
   });
 
+  test('init plan-phase detects has_reviews and reviews_path when REVIEWS.md exists', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '03-REVIEWS.md'), '# Cross-AI Reviews');
+
+    const result = runGsdTools('init plan-phase 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.has_reviews, true);
+    assert.strictEqual(output.reviews_path, '.planning/phases/03-api/03-REVIEWS.md');
+  });
+
   test('init plan-phase omits optional paths if files missing', () => {
     const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
     fs.mkdirSync(phaseDir, { recursive: true });
@@ -96,6 +109,8 @@ describe('init commands', () => {
     const output = JSON.parse(result.output);
     assert.strictEqual(output.context_path, undefined);
     assert.strictEqual(output.research_path, undefined);
+    assert.strictEqual(output.reviews_path, undefined);
+    assert.strictEqual(output.has_reviews, false);
   });
 
   // ── phase_req_ids extraction (fix for #684) ──────────────────────────────

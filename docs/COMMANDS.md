@@ -32,6 +32,62 @@ Initialize a new project with deep context gathering.
 
 ---
 
+### `/gsd:new-workspace`
+
+Create an isolated workspace with repo copies and independent `.planning/` directory.
+
+| Flag | Description |
+|------|-------------|
+| `--name <name>` | Workspace name (required) |
+| `--repos repo1,repo2` | Comma-separated repo paths or names |
+| `--path /target` | Target directory (default: `~/gsd-workspaces/<name>`) |
+| `--strategy worktree\|clone` | Copy strategy (default: `worktree`) |
+| `--branch <name>` | Branch to checkout (default: `workspace/<name>`) |
+| `--auto` | Skip interactive questions |
+
+**Use cases:**
+- Multi-repo: work on a subset of repos with isolated GSD state
+- Feature isolation: `--repos .` creates a worktree of the current repo
+
+**Produces:** `WORKSPACE.md`, `.planning/`, repo copies (worktrees or clones)
+
+```bash
+/gsd:new-workspace --name feature-b --repos hr-ui,ZeymoAPI
+/gsd:new-workspace --name feature-b --repos . --strategy worktree  # Same-repo isolation
+/gsd:new-workspace --name spike --repos api,web --strategy clone   # Full clones
+```
+
+---
+
+### `/gsd:list-workspaces`
+
+List active GSD workspaces and their status.
+
+**Scans:** `~/gsd-workspaces/` for `WORKSPACE.md` manifests
+**Shows:** Name, repo count, strategy, GSD project status
+
+```bash
+/gsd:list-workspaces
+```
+
+---
+
+### `/gsd:remove-workspace`
+
+Remove a workspace and clean up git worktrees.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<name>` | Yes | Workspace name to remove |
+
+**Safety:** Refuses removal if any repo has uncommitted changes. Requires name confirmation.
+
+```bash
+/gsd:remove-workspace feature-b
+```
+
+---
+
 ### `/gsd:discuss-phase`
 
 Capture implementation decisions before planning.
@@ -84,8 +140,12 @@ Research, plan, and verify a phase.
 | Flag | Description |
 |------|-------------|
 | `--auto` | Skip interactive confirmations |
+| `--research` | Force re-research even if RESEARCH.md exists |
 | `--skip-research` | Skip domain research step |
+| `--gaps` | Gap closure mode (reads VERIFICATION.md, skips research) |
 | `--skip-verify` | Skip plan checker verification loop |
+| `--prd <file>` | Use a PRD file instead of discuss-phase for context |
+| `--reviews` | Replan with cross-AI review feedback from REVIEWS.md |
 
 **Prerequisites:** `.planning/ROADMAP.md` exists
 **Produces:** `{phase}-RESEARCH.md`, `{phase}-{N}-PLAN.md`, `{phase}-VALIDATION.md`

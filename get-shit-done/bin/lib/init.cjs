@@ -60,6 +60,7 @@ function cmdInitExecutePhase(cwd, phase, raw) {
       has_research: false,
       has_context: false,
       has_verification: false,
+      has_reviews: false,
     };
   }
   const reqMatch = roadmapPhase?.section?.match(/^\*\*Requirements\*\*:[^\S\n]*([^\n]*)$/m);
@@ -152,6 +153,7 @@ function cmdInitPlanPhase(cwd, phase, raw) {
       has_research: false,
       has_context: false,
       has_verification: false,
+      has_reviews: false,
     };
   }
   const reqMatch = roadmapPhase?.section?.match(/^\*\*Requirements\*\*:[^\S\n]*([^\n]*)$/m);
@@ -184,6 +186,7 @@ function cmdInitPlanPhase(cwd, phase, raw) {
     // Existing artifacts
     has_research: phaseInfo?.has_research || false,
     has_context: phaseInfo?.has_context || false,
+    has_reviews: phaseInfo?.has_reviews || false,
     has_plans: (phaseInfo?.plans?.length || 0) > 0,
     plan_count: phaseInfo?.plans?.length || 0,
 
@@ -217,6 +220,10 @@ function cmdInitPlanPhase(cwd, phase, raw) {
       const uatFile = files.find(f => f.endsWith('-UAT.md') || f === 'UAT.md');
       if (uatFile) {
         result.uat_path = toPosixPath(path.join(phaseInfo.directory, uatFile));
+      }
+      const reviewsFile = files.find(f => f.endsWith('-REVIEWS.md') || f === 'REVIEWS.md');
+      if (reviewsFile) {
+        result.reviews_path = toPosixPath(path.join(phaseInfo.directory, reviewsFile));
       }
     } catch { /* intentionally empty */ }
   }
@@ -557,6 +564,7 @@ function cmdInitPhaseOp(cwd, phase, raw) {
     has_context: phaseInfo?.has_context || false,
     has_plans: (phaseInfo?.plans?.length || 0) > 0,
     has_verification: phaseInfo?.has_verification || false,
+    has_reviews: phaseInfo?.has_reviews || false,
     plan_count: phaseInfo?.plans?.length || 0,
 
     // File existence
@@ -588,6 +596,10 @@ function cmdInitPhaseOp(cwd, phase, raw) {
       const uatFile = files.find(f => f.endsWith('-UAT.md') || f === 'UAT.md');
       if (uatFile) {
         result.uat_path = toPosixPath(path.join(phaseInfo.directory, uatFile));
+      }
+      const reviewsFile = files.find(f => f.endsWith('-REVIEWS.md') || f === 'REVIEWS.md');
+      if (reviewsFile) {
+        result.reviews_path = toPosixPath(path.join(phaseInfo.directory, reviewsFile));
       }
     } catch { /* intentionally empty */ }
   }
@@ -896,6 +908,165 @@ function cmdInitProgress(cwd, raw) {
   output(withProjectRoot(cwd, result), raw);
 }
 
+/**
+ * Detect child git repos in a directory (one level deep).
+ * Returns array of { name, path, has_uncommitted } objects.
+ */
+function detectChildRepos(dir) {
+  const repos = [];
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return repos; }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('.')) continue;
+    const fullPath = path.join(dir, entry.name);
+    const gitDir = path.join(fullPath, '.git');
+    if (fs.existsSync(gitDir)) {
+      let hasUncommitted = false;
+      try {
+        const status = execSync('git status --porcelain', { cwd: fullPath, encoding: 'utf8', timeout: 5000 });
+        hasUncommitted = status.trim().length > 0;
+      } catch { /* best-effort */ }
+      repos.push({ name: entry.name, path: fullPath, has_uncommitted: hasUncommitted });
+    }
+  }
+  return repos;
+}
+
+function cmdInitNewWorkspace(cwd, raw) {
+  const homedir = process.env.HOME || require('os').homedir();
+  const defaultBase = path.join(homedir, 'gsd-workspaces');
+
+  // Detect child git repos for interactive selection
+  const childRepos = detectChildRepos(cwd);
+
+  // Check if git worktree is available
+  let worktreeAvailable = false;
+  try {
+    execSync('git --version', { encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
+    worktreeAvailable = true;
+  } catch { /* no git at all */ }
+
+  const result = {
+    default_workspace_base: defaultBase,
+    child_repos: childRepos,
+    child_repo_count: childRepos.length,
+    worktree_available: worktreeAvailable,
+    is_git_repo: pathExistsInternal(cwd, '.git'),
+    cwd_repo_name: path.basename(cwd),
+  };
+
+  output(withProjectRoot(cwd, result), raw);
+}
+
+function cmdInitListWorkspaces(cwd, raw) {
+  const homedir = process.env.HOME || require('os').homedir();
+  const defaultBase = path.join(homedir, 'gsd-workspaces');
+
+  const workspaces = [];
+  if (fs.existsSync(defaultBase)) {
+    let entries;
+    try { entries = fs.readdirSync(defaultBase, { withFileTypes: true }); } catch { entries = []; }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const wsPath = path.join(defaultBase, entry.name);
+      const manifestPath = path.join(wsPath, 'WORKSPACE.md');
+      if (!fs.existsSync(manifestPath)) continue;
+
+      let repoCount = 0;
+      let hasProject = false;
+      let strategy = 'unknown';
+      try {
+        const manifest = fs.readFileSync(manifestPath, 'utf8');
+        const strategyMatch = manifest.match(/^Strategy:\s*(.+)$/m);
+        if (strategyMatch) strategy = strategyMatch[1].trim();
+        // Count table rows (lines starting with |, excluding header and separator)
+        const tableRows = manifest.split('\n').filter(l => l.match(/^\|\s*\w/) && !l.includes('Repo') && !l.includes('---'));
+        repoCount = tableRows.length;
+      } catch { /* best-effort */ }
+      hasProject = fs.existsSync(path.join(wsPath, '.planning', 'PROJECT.md'));
+
+      workspaces.push({
+        name: entry.name,
+        path: wsPath,
+        repo_count: repoCount,
+        strategy,
+        has_project: hasProject,
+      });
+    }
+  }
+
+  const result = {
+    workspace_base: defaultBase,
+    workspaces,
+    workspace_count: workspaces.length,
+  };
+
+  output(result, raw);
+}
+
+function cmdInitRemoveWorkspace(cwd, name, raw) {
+  const homedir = process.env.HOME || require('os').homedir();
+  const defaultBase = path.join(homedir, 'gsd-workspaces');
+
+  if (!name) {
+    error('workspace name required for init remove-workspace');
+  }
+
+  const wsPath = path.join(defaultBase, name);
+  const manifestPath = path.join(wsPath, 'WORKSPACE.md');
+
+  if (!fs.existsSync(wsPath)) {
+    error(`Workspace not found: ${wsPath}`);
+  }
+
+  // Parse manifest for repo info
+  const repos = [];
+  let strategy = 'unknown';
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const manifest = fs.readFileSync(manifestPath, 'utf8');
+      const strategyMatch = manifest.match(/^Strategy:\s*(.+)$/m);
+      if (strategyMatch) strategy = strategyMatch[1].trim();
+
+      // Parse table rows for repo names and source paths
+      const lines = manifest.split('\n');
+      for (const line of lines) {
+        const match = line.match(/^\|\s*(\S+)\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|$/);
+        if (match && match[1] !== 'Repo' && !match[1].includes('---')) {
+          repos.push({ name: match[1], source: match[2], branch: match[3], strategy: match[4] });
+        }
+      }
+    } catch { /* best-effort */ }
+  }
+
+  // Check for uncommitted changes in workspace repos
+  const dirtyRepos = [];
+  for (const repo of repos) {
+    const repoPath = path.join(wsPath, repo.name);
+    if (!fs.existsSync(repoPath)) continue;
+    try {
+      const status = execSync('git status --porcelain', { cwd: repoPath, encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
+      if (status.trim().length > 0) {
+        dirtyRepos.push(repo.name);
+      }
+    } catch { /* best-effort */ }
+  }
+
+  const result = {
+    workspace_name: name,
+    workspace_path: wsPath,
+    has_manifest: fs.existsSync(manifestPath),
+    strategy,
+    repos,
+    repo_count: repos.length,
+    dirty_repos: dirtyRepos,
+    has_dirty_repos: dirtyRepos.length > 0,
+  };
+
+  output(result, raw);
+}
+
 module.exports = {
   cmdInitExecutePhase,
   cmdInitPlanPhase,
@@ -909,4 +1080,8 @@ module.exports = {
   cmdInitMilestoneOp,
   cmdInitMapCodebase,
   cmdInitProgress,
+  cmdInitNewWorkspace,
+  cmdInitListWorkspaces,
+  cmdInitRemoveWorkspace,
+  detectChildRepos,
 };

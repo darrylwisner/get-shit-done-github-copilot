@@ -526,6 +526,31 @@ claude --dangerously-skip-permissions
 /gsd:remove-phase 7         # Descope phase 7 and renumber
 ```
 
+### Multi-Project Workspaces
+
+Work on multiple repos or features in parallel with isolated GSD state.
+
+```bash
+# Create a workspace with repos from your monorepo
+/gsd:new-workspace --name feature-b --repos hr-ui,ZeymoAPI
+
+# Feature branch isolation — worktree of current repo with its own .planning/
+/gsd:new-workspace --name feature-b --repos .
+
+# Then cd into the workspace and initialize GSD
+cd ~/gsd-workspaces/feature-b
+/gsd:new-project
+
+# List and manage workspaces
+/gsd:list-workspaces
+/gsd:remove-workspace feature-b
+```
+
+Each workspace gets:
+- Its own `.planning/` directory (fully independent from source repos)
+- Git worktrees (default) or clones of specified repos
+- A `WORKSPACE.md` manifest tracking member repos
+
 ---
 
 ## Troubleshooting
