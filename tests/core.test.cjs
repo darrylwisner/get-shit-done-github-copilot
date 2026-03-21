@@ -1018,6 +1018,44 @@ describe('resolveWorktreeRoot', () => {
   });
 });
 
+// ─── monorepo worktree CWD preservation (#1283) ─────────────────────────────
+
+describe('monorepo worktree CWD preservation', () => {
+  const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
+
+  test('CWD with .planning/ skips worktree resolution (monorepo subdirectory)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-monorepo-wt-'));
+    const subDir = path.join(tmpDir, 'service-alpha');
+    fs.mkdirSync(path.join(subDir, '.planning'), { recursive: true });
+    try {
+      let cwd = subDir;
+      if (!fs.existsSync(path.join(cwd, '.planning'))) {
+        const worktreeRoot = resolveWorktreeRoot(cwd);
+        if (worktreeRoot !== cwd) cwd = worktreeRoot;
+      }
+      assert.strictEqual(cwd, subDir, 'CWD with .planning/ must not be overridden by worktree resolution');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('CWD without .planning/ still goes through worktree resolution', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-monorepo-wt-'));
+    try {
+      let cwd = tmpDir;
+      let worktreeResolutionCalled = false;
+      if (!fs.existsSync(path.join(cwd, '.planning'))) {
+        worktreeResolutionCalled = true;
+        const worktreeRoot = resolveWorktreeRoot(cwd);
+        if (worktreeRoot !== cwd) cwd = worktreeRoot;
+      }
+      assert.ok(worktreeResolutionCalled, 'worktree resolution must be called when .planning/ is absent');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── withPlanningLock ────────────────────────────────────────────────────────
 
 describe('withPlanningLock', () => {

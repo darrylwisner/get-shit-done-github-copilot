@@ -150,18 +150,13 @@ describe('Source code integration (Copilot)', () => {
     assert.ok(src.includes('--copilot'), 'help text has --copilot option');
   });
 
-  test('CLI-02: promptRuntime has Copilot as option 5', () => {
-    assert.ok(src.includes("choice === '5'"), 'choice 5 exists');
-    // Verify choice 5 maps to copilot (the line after choice === '5' should reference copilot)
-    const choice5Index = src.indexOf("choice === '5'");
-    const nextLines = src.substring(choice5Index, choice5Index + 100);
-    assert.ok(nextLines.includes('copilot'), 'choice 5 maps to copilot');
+  test('CLI-02: promptRuntime runtimeMap has Copilot as option 5', () => {
+    assert.ok(src.includes("'5': 'copilot'"), 'runtimeMap has 5 -> copilot');
   });
 
-  test('CLI-02: promptRuntime has All option including copilot', () => {
-    // All option callback includes copilot in the runtimes array
-    const allCallbackMatch = src.match(/callback\(\[(['a-z', ]+)\]\)/g);
-    assert.ok(allCallbackMatch && allCallbackMatch.some(m => m.includes('copilot')), 'All option includes copilot');
+  test('CLI-02: promptRuntime allRuntimes array includes copilot', () => {
+    const allMatch = src.match(/const allRuntimes = \[([^\]]+)\]/);
+    assert.ok(allMatch && allMatch[1].includes('copilot'), 'allRuntimes includes copilot');
   });
 
   test('isCopilot variable exists in install function', () => {

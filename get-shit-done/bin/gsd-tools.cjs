@@ -174,11 +174,15 @@ async function main() {
     error(`Invalid --cwd: ${cwd}`);
   }
 
-  // Resolve worktree root: in a linked worktree, .planning/ lives in the main worktree
+  // Resolve worktree root: in a linked worktree, .planning/ lives in the main worktree.
+  // However, in monorepo worktrees where the subdirectory itself owns .planning/,
+  // skip worktree resolution — the CWD is already the correct project root.
   const { resolveWorktreeRoot } = require('./lib/core.cjs');
-  const worktreeRoot = resolveWorktreeRoot(cwd);
-  if (worktreeRoot !== cwd) {
-    cwd = worktreeRoot;
+  if (!fs.existsSync(path.join(cwd, '.planning'))) {
+    const worktreeRoot = resolveWorktreeRoot(cwd);
+    if (worktreeRoot !== cwd) {
+      cwd = worktreeRoot;
+    }
   }
 
   const rawIndex = args.indexOf('--raw');
