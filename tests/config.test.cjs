@@ -477,6 +477,60 @@ describe('config-new-project command', () => {
   });
 });
 
+// ─── config-set (research_before_questions and discuss_mode) ──────────────────
+
+describe('config-set research_before_questions and discuss_mode', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    runGsdTools('config-ensure-section', tmpDir);
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('workflow.research_before_questions is a valid config key', () => {
+    const result = runGsdTools('config-set workflow.research_before_questions true', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.research_before_questions, true);
+  });
+
+  test('workflow.discuss_mode is a valid config key', () => {
+    const result = runGsdTools('config-set workflow.discuss_mode assumptions', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.discuss_mode, 'assumptions');
+  });
+
+  test('research_before_questions defaults to false in new configs', () => {
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.research_before_questions, false);
+  });
+
+  test('discuss_mode defaults to discuss in new configs', () => {
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.discuss_mode, 'discuss');
+  });
+
+  test('hooks.research_questions is rejected with suggestion', () => {
+    const result = runGsdTools('config-set hooks.research_questions true', tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(
+      result.error.includes('Unknown config key'),
+      `Expected "Unknown config key" in error: ${result.error}`
+    );
+    assert.ok(
+      result.error.includes('workflow.research_before_questions'),
+      `Expected suggestion for workflow.research_before_questions in error: ${result.error}`
+    );
+  });
+});
+
 // ─── config-set (additional coverage) ────────────────────────────────────────
 
 describe('config-set unknown key (no suggestion)', () => {

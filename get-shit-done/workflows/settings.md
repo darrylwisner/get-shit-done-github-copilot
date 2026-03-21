@@ -163,7 +163,10 @@ Merge new settings into existing config.json:
     "auto_advance": true/false,
     "nyquist_validation": true/false,
     "ui_phase": true/false,
-    "ui_safety_gate": true/false
+    "ui_safety_gate": true/false,
+    "text_mode": true/false,
+    "research_before_questions": true/false,
+    "discuss_mode": "discuss" | "assumptions"
   },
   "git": {
     "branching_strategy": "none" | "phase" | "milestone",
@@ -171,11 +174,7 @@ Merge new settings into existing config.json:
   },
   "hooks": {
     "context_warnings": true/false,
-    "workflow_guard": true/false,
-    "research_questions": true/false
-  },
-  "workflow": {
-    "text_mode": true/false  // Use plain-text questions instead of TUI menus (for /rc remote sessions)
+    "workflow_guard": true/false
   }
 }
 ```

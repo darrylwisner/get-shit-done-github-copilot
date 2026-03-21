@@ -18,6 +18,8 @@ const VALID_CONFIG_KEYS = new Set([
   'workflow.nyquist_validation', 'workflow.ui_phase', 'workflow.ui_safety_gate',
   'workflow.auto_advance', 'workflow.node_repair', 'workflow.node_repair_budget',
   'workflow.text_mode',
+  'workflow.research_before_questions',
+  'workflow.discuss_mode',
   'workflow._auto_chain_active',
   'git.branching_strategy', 'git.phase_branch_template', 'git.milestone_branch_template', 'git.quick_branch_template',
   'planning.commit_docs', 'planning.search_gitignored',
@@ -28,6 +30,8 @@ const CONFIG_KEY_SUGGESTIONS = {
   'workflow.nyquist_validation_enabled': 'workflow.nyquist_validation',
   'agents.nyquist_validation_enabled': 'workflow.nyquist_validation',
   'nyquist.validation_enabled': 'workflow.nyquist_validation',
+  'hooks.research_questions': 'workflow.research_before_questions',
+  'workflow.research_questions': 'workflow.research_before_questions',
 };
 
 function validateKnownConfigKeyPath(keyPath) {
@@ -108,6 +112,8 @@ function buildNewProjectConfig(userChoices) {
       ui_phase: true,
       ui_safety_gate: true,
       text_mode: false,
+      research_before_questions: false,
+      discuss_mode: 'discuss',
     },
     hooks: {
       context_warnings: true,
