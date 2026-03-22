@@ -674,3 +674,78 @@ describe('config-set-model-profile command', () => {
     }
   });
 });
+
+// ─── config-set (workflow.skip_discuss) ───────────────────────────────────────
+
+describe('config-set workflow.skip_discuss', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    runGsdTools('config-ensure-section', tmpDir);
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('workflow.skip_discuss is a valid config key', () => {
+    const result = runGsdTools('config-set workflow.skip_discuss true', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.skip_discuss, true);
+  });
+
+  test('skip_discuss defaults to false in new configs', () => {
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.skip_discuss, false);
+  });
+
+  test('skip_discuss can be toggled back to false', () => {
+    runGsdTools('config-set workflow.skip_discuss true', tmpDir);
+    const result = runGsdTools('config-set workflow.skip_discuss false', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.skip_discuss, false);
+  });
+
+  test('skip_discuss is present in config-new-project output', () => {
+    const emptyDir = createTempProject();
+    try {
+      const result = runGsdTools(['config-new-project', '{}'], emptyDir, { HOME: emptyDir, USERPROFILE: emptyDir });
+      assert.ok(result.success, `Command failed: ${result.error}`);
+
+      const config = readConfig(emptyDir);
+      assert.strictEqual(config.workflow.skip_discuss, false, 'skip_discuss should default to false');
+    } finally {
+      cleanup(emptyDir);
+    }
+  });
+
+  test('skip_discuss can be set via config-new-project choices', () => {
+    const emptyDir = createTempProject();
+    try {
+      const choices = JSON.stringify({
+        workflow: { skip_discuss: true },
+      });
+      const result = runGsdTools(['config-new-project', choices], emptyDir, { HOME: emptyDir, USERPROFILE: emptyDir });
+      assert.ok(result.success, `Command failed: ${result.error}`);
+
+      const config = readConfig(emptyDir);
+      assert.strictEqual(config.workflow.skip_discuss, true);
+    } finally {
+      cleanup(emptyDir);
+    }
+  });
+
+  test('config-get workflow.skip_discuss returns the set value', () => {
+    runGsdTools('config-set workflow.skip_discuss true', tmpDir);
+    const result = runGsdTools('config-get workflow.skip_discuss', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output, true);
+  });
+});

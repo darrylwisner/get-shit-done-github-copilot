@@ -136,7 +136,79 @@ Phase ${PHASE_NUM}: Context exists — skipping discuss.
 
 Proceed to 3b.
 
-**If has_context is false:** Execute the smart_discuss step for this phase.
+**If has_context is false:** Check if discuss is disabled via settings:
+
+```bash
+SKIP_DISCUSS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.skip_discuss 2>/dev/null || echo "false")
+```
+
+**If SKIP_DISCUSS is `true`:** Skip discuss entirely — the ROADMAP phase description is the spec. Display:
+
+```
+Phase ${PHASE_NUM}: Discuss skipped (workflow.skip_discuss=true) — using ROADMAP phase goal as spec.
+```
+
+Write a minimal CONTEXT.md so downstream plan-phase has valid input. Get phase details:
+
+```bash
+DETAIL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase ${PHASE_NUM})
+```
+
+Extract `goal` and `requirements` from JSON. Write `${phase_dir}/${padded_phase}-CONTEXT.md` with:
+
+```markdown
+# Phase {PHASE_NUM}: {Phase Name} - Context
+
+**Gathered:** {date}
+**Status:** Ready for planning
+**Mode:** Auto-generated (discuss skipped via workflow.skip_discuss)
+
+<domain>
+## Phase Boundary
+
+{goal from ROADMAP phase description}
+
+</domain>
+
+<decisions>
+## Implementation Decisions
+
+### Claude's Discretion
+All implementation choices are at Claude's discretion — discuss phase was skipped per user setting. Use ROADMAP phase goal, success criteria, and codebase conventions to guide decisions.
+
+</decisions>
+
+<code_context>
+## Existing Code Insights
+
+Codebase context will be gathered during plan-phase research.
+
+</code_context>
+
+<specifics>
+## Specific Ideas
+
+No specific requirements — discuss phase skipped. Refer to ROADMAP phase description and success criteria.
+
+</specifics>
+
+<deferred>
+## Deferred Ideas
+
+None — discuss phase skipped.
+
+</deferred>
+```
+
+Commit the minimal context:
+
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(${PADDED_PHASE}): auto-generated context (discuss skipped)" --files "${phase_dir}/${padded_phase}-CONTEXT.md"
+```
+
+Proceed to 3b.
+
+**If SKIP_DISCUSS is `false` (or unset):** Execute the smart_discuss step for this phase.
 
 After smart_discuss completes, verify context was written:
 
