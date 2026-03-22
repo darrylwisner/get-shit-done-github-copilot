@@ -442,7 +442,7 @@ Example quick-task branching:
 - **quality** -- Opus for all decision-making agents, Sonnet for read-only verification. Use when quota is available and the work is critical.
 - **balanced** -- Opus only for planning (where architecture decisions happen), Sonnet for everything else. The default for good reason.
 - **budget** -- Sonnet for anything that writes code, Haiku for research and verification. Use for high-volume work or less critical phases.
-- **inherit** -- All agents use the current session model. Best when switching models dynamically (e.g. OpenCode `/model`), or **required** when using non-Anthropic providers (OpenRouter, local models) to avoid unexpected API costs.
+- **inherit** -- All agents use the current session model. Best when switching models dynamically (e.g. OpenCode `/model`), or when using Claude Code with non-Anthropic providers (OpenRouter, local models) to avoid unexpected API costs. For non-Claude runtimes (Codex, OpenCode, Gemini CLI), the installer sets `resolve_model_ids: "omit"` automatically -- see [Non-Claude Runtimes](#using-non-claude-runtimes-codex-opencode-gemini-cli).
 
 ---
 
@@ -583,7 +583,25 @@ Do not re-run `/gsd:execute-phase`. Use `/gsd:quick` for targeted fixes, or `/gs
 
 Switch to budget profile: `/gsd:set-profile budget`. Disable research and plan-check agents via `/gsd:settings` if the domain is familiar to you (or to Claude).
 
-### Using Non-Anthropic Models (OpenRouter, Local)
+### Using Non-Claude Runtimes (Codex, OpenCode, Gemini CLI)
+
+If you installed GSD for a non-Claude runtime, the installer already configured model resolution so all agents use the runtime's default model. No manual setup is needed.
+
+To assign different models to different agents on a non-Claude runtime, add `model_overrides` to `.planning/config.json` with model IDs your runtime recognizes:
+
+```json
+{
+  "model_overrides": {
+    "gsd-planner": "o3",
+    "gsd-executor": "o4-mini",
+    "gsd-debugger": "o3"
+  }
+}
+```
+
+See the [Configuration Reference](CONFIGURATION.md#non-claude-runtimes-codex-opencode-gemini-cli) for the full explanation.
+
+### Using Claude Code with Non-Anthropic Providers (OpenRouter, Local)
 
 If GSD subagents call Anthropic models and you're paying through OpenRouter or a local provider, switch to the `inherit` profile: `/gsd:set-profile inherit`. This makes all agents use your current session model instead of specific Anthropic models. See also `/gsd:settings` → Model Profile → Inherit.
 

@@ -250,7 +250,44 @@ Override specific agents without changing the entire profile:
 }
 ```
 
-Valid override values: `opus`, `sonnet`, `haiku`, `inherit`
+Valid override values: `opus`, `sonnet`, `haiku`, `inherit`, or any fully-qualified model ID (e.g., `"openai/o3"`, `"google/gemini-2.5-pro"`).
+
+### Non-Claude Runtimes (Codex, OpenCode, Gemini CLI)
+
+When GSD is installed for a non-Claude runtime, the installer automatically sets `resolve_model_ids: "omit"` in `~/.gsd/defaults.json`. This causes GSD to return an empty model parameter for all agents, so each agent uses whatever model the runtime is configured with. No additional setup is needed for the default case.
+
+If you want different agents to use different models, use `model_overrides` with fully-qualified model IDs that your runtime recognizes:
+
+```json
+{
+  "resolve_model_ids": "omit",
+  "model_overrides": {
+    "gsd-planner": "o3",
+    "gsd-executor": "o4-mini",
+    "gsd-debugger": "o3",
+    "gsd-codebase-mapper": "o4-mini"
+  }
+}
+```
+
+The intent is the same as the Claude profile tiers -- use a stronger model for planning and debugging (where reasoning quality matters most), and a cheaper model for execution and mapping (where the plan already contains the reasoning).
+
+**When to use which approach:**
+
+| Scenario | Setting | Effect |
+|----------|---------|--------|
+| Non-Claude runtime, single model | `resolve_model_ids: "omit"` (installer default) | All agents use the runtime's default model |
+| Non-Claude runtime, tiered models | `resolve_model_ids: "omit"` + `model_overrides` | Named agents use specific models, others use runtime default |
+| Claude Code with OpenRouter/local provider | `model_profile: "inherit"` | All agents follow the session model |
+| Claude Code with OpenRouter, tiered | `model_profile: "inherit"` + `model_overrides` | Named agents use specific models, others inherit |
+
+**`resolve_model_ids` values:**
+
+| Value | Behavior | Use When |
+|-------|----------|----------|
+| `false` (default) | Returns Claude aliases (`opus`, `sonnet`, `haiku`) | Claude Code with native Anthropic API |
+| `true` | Maps aliases to full Claude model IDs (`claude-opus-4-0`) | Claude Code with API that requires full IDs |
+| `"omit"` | Returns empty string (runtime picks its default) | Non-Claude runtimes (Codex, OpenCode, Gemini CLI) |
 
 ### Profile Philosophy
 
