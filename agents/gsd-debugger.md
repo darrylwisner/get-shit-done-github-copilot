@@ -409,6 +409,39 @@ git bisect bad              # or good, based on testing
 
 100 commits between working and broken: ~7 tests to find exact breaking commit.
 
+## Follow the Indirection
+
+**When:** Code constructs paths, URLs, keys, or references from variables — and the constructed value might not point where you expect.
+
+**The trap:** You read code that builds a path like `path.join(configDir, 'hooks')` and assume it's correct because it looks reasonable. But you never verified that the constructed path matches where another part of the system actually writes/reads.
+
+**How:**
+1. Find the code that **produces** the value (writer/installer/creator)
+2. Find the code that **consumes** the value (reader/checker/validator)
+3. Trace the actual resolved value in both — do they agree?
+4. Check every variable in the path construction — where does each come from? What's its actual value at runtime?
+
+**Common indirection bugs:**
+- Path A writes to `dir/sub/hooks/` but Path B checks `dir/hooks/` (directory mismatch)
+- Config value comes from cache/template that wasn't updated
+- Variable is derived differently in two places (e.g., one adds a subdirectory, the other doesn't)
+- Template placeholder (`{{VERSION}}`) not substituted in all code paths
+
+**Example:** Stale hook warning persists after update
+```
+Check code says:  hooksDir = path.join(configDir, 'hooks')
+                  configDir = ~/.claude
+                  → checks ~/.claude/hooks/
+
+Installer says:   hooksDest = path.join(targetDir, 'hooks')
+                  targetDir = ~/.claude/get-shit-done
+                  → writes to ~/.claude/get-shit-done/hooks/
+
+MISMATCH: Checker looks in wrong directory → hooks "not found" → reported as stale
+```
+
+**The discipline:** Never assume a constructed path is correct. Resolve it to its actual value and verify the other side agrees. When two systems share a resource (file, directory, key), trace the full path in both.
+
 ## Technique Selection
 
 | Situation | Technique |
@@ -419,6 +452,7 @@ git bisect bad              # or good, based on testing
 | Know the desired output | Working backwards |
 | Used to work, now doesn't | Differential debugging, Git bisect |
 | Many possible causes | Comment out everything, Binary search |
+| Paths, URLs, keys constructed from variables | Follow the indirection |
 | Always | Observability first (before making changes) |
 
 ## Combining Techniques
