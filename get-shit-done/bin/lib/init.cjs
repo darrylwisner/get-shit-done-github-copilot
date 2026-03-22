@@ -252,7 +252,23 @@ function cmdInitNewProject(cwd, raw) {
   let hasCode = false;
   let hasPackageFile = false;
   try {
-    const codeExtensions = new Set(['.ts', '.js', '.py', '.go', '.rs', '.swift', '.java']);
+    const codeExtensions = new Set([
+      '.ts', '.js', '.py', '.go', '.rs', '.swift', '.java',
+      '.kt', '.kts',           // Kotlin (Android, server-side)
+      '.c', '.cpp', '.h',      // C/C++
+      '.cs',                   // C#
+      '.rb',                   // Ruby
+      '.php',                  // PHP
+      '.dart',                 // Dart (Flutter)
+      '.m', '.mm',             // Objective-C / Objective-C++
+      '.scala',                // Scala
+      '.groovy',               // Groovy (Gradle build scripts)
+      '.lua',                  // Lua
+      '.r', '.R',              // R
+      '.zig',                  // Zig
+      '.ex', '.exs',           // Elixir
+      '.clj',                  // Clojure
+    ]);
     const skipDirs = new Set(['node_modules', '.git', '.planning', '.claude', '__pycache__', 'target', 'dist', 'build']);
     function findCodeFiles(dir, depth) {
       if (depth > 3) return false;
@@ -273,7 +289,18 @@ function cmdInitNewProject(cwd, raw) {
                    pathExistsInternal(cwd, 'requirements.txt') ||
                    pathExistsInternal(cwd, 'Cargo.toml') ||
                    pathExistsInternal(cwd, 'go.mod') ||
-                   pathExistsInternal(cwd, 'Package.swift');
+                   pathExistsInternal(cwd, 'Package.swift') ||
+                   pathExistsInternal(cwd, 'build.gradle') ||
+                   pathExistsInternal(cwd, 'build.gradle.kts') ||
+                   pathExistsInternal(cwd, 'pom.xml') ||
+                   pathExistsInternal(cwd, 'Gemfile') ||
+                   pathExistsInternal(cwd, 'composer.json') ||
+                   pathExistsInternal(cwd, 'pubspec.yaml') ||
+                   pathExistsInternal(cwd, 'CMakeLists.txt') ||
+                   pathExistsInternal(cwd, 'Makefile') ||
+                   pathExistsInternal(cwd, 'build.zig') ||
+                   pathExistsInternal(cwd, 'mix.exs') ||
+                   pathExistsInternal(cwd, 'project.clj');
 
   const result = {
     // Models
