@@ -14,9 +14,11 @@ Comprehensive documentation for the Get Shit Done (GSD) framework — a meta-pro
 | [Agent Reference](AGENTS.md) | Contributors, advanced users | All 15 specialized agents — roles, tools, spawn patterns |
 | [User Guide](USER-GUIDE.md) | All users | Workflow walkthroughs, troubleshooting, and recovery |
 | [Context Monitor](context-monitor.md) | All users | Context window monitoring hook architecture |
+| [Discuss Mode](workflow-discuss-mode.md) | All users | Assumptions vs interview mode for discuss-phase |
 
 ## Quick Links
 
+- **What's new in v1.28:** Forensics, milestone summary, workstreams, assumptions mode, UI auto-detect, manager dashboard
 - **Getting started:** [README](../README.md) → install → `/gsd:new-project`
 - **Full workflow walkthrough:** [User Guide](USER-GUIDE.md)
 - **All commands at a glance:** [Command Reference](COMMANDS.md)

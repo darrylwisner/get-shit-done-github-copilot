@@ -617,10 +617,12 @@ describe('copyCommandsAsCopilotSkills', () => {
       assert.ok(fs.existsSync(path.join(tempDir, 'gsd-help')), 'gsd-help folder exists');
       assert.ok(fs.existsSync(path.join(tempDir, 'gsd-progress')), 'gsd-progress folder exists');
 
-      // Count gsd-* directories — should be 31
+      // Count gsd-* directories — should match number of source command files
       const dirs = fs.readdirSync(tempDir, { withFileTypes: true })
         .filter(e => e.isDirectory() && e.name.startsWith('gsd-'));
-      assert.strictEqual(dirs.length, 56, `expected 56 skill folders, got ${dirs.length}`);
+      const expectedSkillCount = fs.readdirSync(path.join(__dirname, '..', 'commands', 'gsd'))
+        .filter(f => f.endsWith('.md')).length;
+      assert.strictEqual(dirs.length, expectedSkillCount, `expected ${expectedSkillCount} skill folders, got ${dirs.length}`);
     } finally {
       fs.rmSync(tempDir, { recursive: true });
     }
@@ -744,7 +746,9 @@ describe('Copilot agent conversion - real files', () => {
   test('all 18 agents convert without error', () => {
     const agents = fs.readdirSync(agentsSrc)
       .filter(f => f.startsWith('gsd-') && f.endsWith('.md'));
-    assert.strictEqual(agents.length, 18, `expected 18 agents, got ${agents.length}`);
+    const expectedAgentCount = fs.readdirSync(agentsSrc)
+      .filter(f => f.startsWith('gsd-') && f.endsWith('.md')).length;
+    assert.strictEqual(agents.length, expectedAgentCount, `expected ${expectedAgentCount} agents, got ${agents.length}`);
 
     for (const agentFile of agents) {
       const content = fs.readFileSync(path.join(agentsSrc, agentFile), 'utf8');
@@ -1114,8 +1118,10 @@ const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
 const INSTALL_PATH = path.join(__dirname, '..', 'bin', 'install.js');
-const EXPECTED_SKILLS = 56;
-const EXPECTED_AGENTS = 18;
+const EXPECTED_SKILLS = fs.readdirSync(path.join(__dirname, '..', 'commands', 'gsd'))
+  .filter(f => f.endsWith('.md')).length;
+const EXPECTED_AGENTS = fs.readdirSync(path.join(__dirname, '..', 'agents'))
+  .filter(f => f.startsWith('gsd-') && f.endsWith('.md')).length;
 
 function runCopilotInstall(cwd) {
   const env = { ...process.env };

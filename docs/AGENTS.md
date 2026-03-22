@@ -1,6 +1,6 @@
 # GSD Agent Reference
 
-> All 15 specialized agents — roles, tools, spawn patterns, and relationships. For architecture context, see [Architecture](ARCHITECTURE.md).
+> All 18 specialized agents — roles, tools, spawn patterns, and relationships. For architecture context, see [Architecture](ARCHITECTURE.md).
 
 ---
 
@@ -13,6 +13,7 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 | Category | Count | Agents |
 |----------|-------|--------|
 | Researchers | 3 | project-researcher, phase-researcher, ui-researcher |
+| Analyzers | 2 | assumptions-analyzer, advisor-researcher |
 | Synthesizers | 1 | research-synthesizer |
 | Planners | 1 | planner |
 | Roadmappers | 1 | roadmapper |
@@ -83,6 +84,51 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 - Offers shadcn initialization for React/Next.js/Vite projects
 - Asks only unanswered design contract questions
 - Enforces registry safety gate for third-party components
+
+---
+
+### gsd-assumptions-analyzer
+
+**Role:** Deeply analyzes codebase for a phase and returns structured assumptions with evidence, confidence levels, and consequences if wrong.
+
+| Property | Value |
+|----------|-------|
+| **Spawned by** | `discuss-phase-assumptions` workflow (when `workflow.discuss_mode = 'assumptions'`) |
+| **Parallelism** | Single instance |
+| **Tools** | Read, Bash, Grep, Glob |
+| **Model (balanced)** | Sonnet |
+| **Color** | Cyan |
+| **Produces** | Structured assumptions with decision statements, evidence file paths, confidence levels |
+
+**Key behaviors:**
+- Reads ROADMAP.md phase description and prior CONTEXT.md files
+- Searches codebase for files related to the phase (components, patterns, similar features)
+- Reads 5-15 most relevant source files to form evidence-based assumptions
+- Classifies confidence: Confident (clear from code), Likely (reasonable inference), Unclear (could go multiple ways)
+- Flags topics that need external research (library compatibility, ecosystem best practices)
+- Output calibrated by tier: full_maturity (3-5 areas), standard (3-4), minimal_decisive (2-3)
+
+---
+
+### gsd-advisor-researcher
+
+**Role:** Researches a single gray area decision during discuss-phase advisor mode and returns a structured comparison table.
+
+| Property | Value |
+|----------|-------|
+| **Spawned by** | `discuss-phase` workflow (when ADVISOR_MODE = true) |
+| **Parallelism** | Multiple instances (one per gray area) |
+| **Tools** | Read, Bash, Grep, Glob, WebSearch, WebFetch, mcp (context7) |
+| **Model (balanced)** | Sonnet |
+| **Color** | Cyan |
+| **Produces** | 5-column comparison table (Option / Pros / Cons / Complexity / Recommendation) with rationale paragraph |
+
+**Key behaviors:**
+- Researches a single assigned gray area using Claude's knowledge, Context7, and web search
+- Produces genuinely viable options — no padding with filler alternatives
+- Complexity column uses impact surface + risk (never time estimates)
+- Recommendations are conditional ("Rec if X", "Rec if Y") — never single-winner ranking
+- Output calibrated by tier: full_maturity (3-5 options with maturity signals), standard (2-4), minimal_decisive (2 options, decisive recommendation)
 
 ---
 
@@ -359,6 +405,8 @@ Communication style, decision patterns, debugging approach, UX preferences, vend
 | project-researcher | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | phase-researcher | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | ui-researcher | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| assumptions-analyzer | ✓ | | | ✓ | ✓ | ✓ | | | |
+| advisor-researcher | ✓ | | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | research-synthesizer | ✓ | ✓ | | ✓ | | | | | |
 | planner | ✓ | ✓ | | ✓ | ✓ | ✓ | | ✓ | ✓ |
 | roadmapper | ✓ | ✓ | | ✓ | ✓ | ✓ | | | |
