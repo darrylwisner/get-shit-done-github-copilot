@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { output, error } = require('./core.cjs');
+const { output, error, planningRoot } = require('./core.cjs');
 const {
   VALID_PROFILES,
   getAgentToModelMapForProfile,
@@ -155,8 +155,8 @@ function buildNewProjectConfig(userChoices) {
  * Idempotent: if config.json already exists, returns { created: false }.
  */
 function cmdConfigNewProject(cwd, choicesJson, raw) {
-  const configPath = path.join(cwd, '.planning', 'config.json');
-  const planningDir = path.join(cwd, '.planning');
+  const planningBase = planningRoot(cwd);
+  const configPath = path.join(planningBase, 'config.json');
 
   // Idempotent: don't overwrite existing config
   if (fs.existsSync(configPath)) {
@@ -176,8 +176,8 @@ function cmdConfigNewProject(cwd, choicesJson, raw) {
 
   // Ensure .planning directory exists
   try {
-    if (!fs.existsSync(planningDir)) {
-      fs.mkdirSync(planningDir, { recursive: true });
+    if (!fs.existsSync(planningBase)) {
+      fs.mkdirSync(planningBase, { recursive: true });
     }
   } catch (err) {
     error('Failed to create .planning directory: ' + err.message);
@@ -200,13 +200,13 @@ function cmdConfigNewProject(cwd, choicesJson, raw) {
  * the happy path. But note that `error()` will still `exit(1)` out of the process.
  */
 function ensureConfigFile(cwd) {
-  const configPath = path.join(cwd, '.planning', 'config.json');
-  const planningDir = path.join(cwd, '.planning');
+  const planningBase = planningRoot(cwd);
+  const configPath = path.join(planningBase, 'config.json');
 
   // Ensure .planning directory exists
   try {
-    if (!fs.existsSync(planningDir)) {
-      fs.mkdirSync(planningDir, { recursive: true });
+    if (!fs.existsSync(planningBase)) {
+      fs.mkdirSync(planningBase, { recursive: true });
     }
   } catch (err) {
     error('Failed to create .planning directory: ' + err.message);
@@ -250,7 +250,7 @@ function cmdConfigEnsureSection(cwd, raw) {
  * the happy path. But note that `error()` will still `exit(1)` out of the process.
  */
 function setConfigValue(cwd, keyPath, parsedValue) {
-  const configPath = path.join(cwd, '.planning', 'config.json');
+  const configPath = path.join(planningRoot(cwd), 'config.json');
 
   // Load existing config or start with empty object
   let config = {};
@@ -313,7 +313,7 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
 }
 
 function cmdConfigGet(cwd, keyPath, raw) {
-  const configPath = path.join(cwd, '.planning', 'config.json');
+  const configPath = path.join(planningRoot(cwd), 'config.json');
 
   if (!keyPath) {
     error('Usage: config-get <key.path>');

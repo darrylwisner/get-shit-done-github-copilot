@@ -53,6 +53,23 @@
   - [Developer Profiling](#38-developer-profiling)
   - [Execution Hardening](#39-execution-hardening)
   - [Verification Debt Tracking](#40-verification-debt-tracking)
+- [v1.27 Features](#v127-features)
+  - [Fast Mode](#41-fast-mode)
+  - [Cross-AI Peer Review](#42-cross-ai-peer-review)
+  - [Backlog Parking Lot](#43-backlog-parking-lot)
+  - [Persistent Context Threads](#44-persistent-context-threads)
+  - [PR Branch Filtering](#45-pr-branch-filtering)
+  - [Security Hardening](#46-security-hardening)
+  - [Multi-Repo Workspace Support](#47-multi-repo-workspace-support)
+  - [Discussion Audit Trail](#48-discussion-audit-trail)
+- [v1.28 Features](#v128-features)
+  - [Forensics](#49-forensics)
+  - [Milestone Summary](#50-milestone-summary)
+  - [Workstream Namespacing](#51-workstream-namespacing)
+  - [Manager Dashboard](#52-manager-dashboard)
+  - [Assumptions Discussion Mode](#53-assumptions-discussion-mode)
+  - [UI Phase Auto-Detection](#54-ui-phase-auto-detection)
+  - [Multi-Runtime Installer Selection](#55-multi-runtime-installer-selection)
 
 ---
 
@@ -973,3 +990,301 @@ When verification returns `human_needed`, items are persisted as a trackable HUM
 - REQ-DEBT-04: System MUST persist human_needed verification items as trackable UAT files
 - REQ-DEBT-05: System MUST warn (non-blocking) during phase completion and transition when verification debt exists
 - REQ-DEBT-06: `/gsd:audit-uat` MUST scan all phases, categorize items by testability, and produce a human test plan
+
+---
+
+## v1.27 Features
+
+### 41. Fast Mode
+
+**Command:** `/gsd:fast [task description]`
+
+**Purpose:** Execute trivial tasks inline without spawning subagents or generating PLAN.md files. For tasks too small to justify planning overhead: typo fixes, config changes, small refactors, forgotten commits, simple additions.
+
+**Requirements:**
+- REQ-FAST-01: System MUST execute the task directly in the current context without subagents
+- REQ-FAST-02: System MUST produce an atomic git commit for the change
+- REQ-FAST-03: System MUST track the task in `.planning/quick/` for state consistency
+- REQ-FAST-04: System MUST NOT be used for tasks requiring research, multi-step planning, or verification
+
+**When to use vs `/gsd:quick`:**
+- `/gsd:fast` — One-sentence tasks executable in under 2 minutes (typo, config change, small addition)
+- `/gsd:quick` — Anything needing research, multi-step planning, or verification
+
+---
+
+### 42. Cross-AI Peer Review
+
+**Command:** `/gsd:review --phase N [--gemini] [--claude] [--codex] [--all]`
+
+**Purpose:** Invoke external AI CLIs (Gemini, Claude, Codex) to independently review phase plans. Produces structured REVIEWS.md with per-reviewer feedback.
+
+**Requirements:**
+- REQ-REVIEW-01: System MUST detect available AI CLIs on the system
+- REQ-REVIEW-02: System MUST build a structured review prompt from phase plans
+- REQ-REVIEW-03: System MUST invoke each selected CLI independently
+- REQ-REVIEW-04: System MUST collect responses and produce `REVIEWS.md`
+- REQ-REVIEW-05: Reviews MUST be consumable by `/gsd:plan-phase --reviews`
+
+**Produces:** `{phase}-REVIEWS.md` — Per-reviewer structured feedback
+
+---
+
+### 43. Backlog Parking Lot
+
+**Commands:** `/gsd:add-backlog <description>`, `/gsd:review-backlog`, `/gsd:plant-seed <idea>`
+
+**Purpose:** Capture ideas that aren't ready for active planning. Backlog items use 999.x numbering to stay outside the active phase sequence. Seeds are forward-looking ideas with trigger conditions that surface automatically at the right milestone.
+
+**Requirements:**
+- REQ-BACKLOG-01: Backlog items MUST use 999.x numbering to stay outside active phase sequence
+- REQ-BACKLOG-02: Phase directories MUST be created immediately so `/gsd:discuss-phase` and `/gsd:plan-phase` work on them
+- REQ-BACKLOG-03: `/gsd:review-backlog` MUST support promote, keep, and remove actions per item
+- REQ-BACKLOG-04: Promoted items MUST be renumbered into the active milestone sequence
+- REQ-SEED-01: Seeds MUST capture the full WHY and WHEN to surface conditions
+- REQ-SEED-02: `/gsd:new-milestone` MUST scan seeds and present matches
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `.planning/phases/999.x-slug/` | Backlog item directory |
+| `.planning/seeds/SEED-NNN-slug.md` | Seed with trigger conditions |
+
+---
+
+### 44. Persistent Context Threads
+
+**Command:** `/gsd:thread [name | description]`
+
+**Purpose:** Lightweight cross-session knowledge stores for work that spans multiple sessions but doesn't belong to any specific phase. Lighter weight than `/gsd:pause-work` — no phase state, no plan context.
+
+**Requirements:**
+- REQ-THREAD-01: System MUST support create, list, and resume modes
+- REQ-THREAD-02: Threads MUST be stored in `.planning/threads/` as markdown files
+- REQ-THREAD-03: Thread files MUST include Goal, Context, References, and Next Steps sections
+- REQ-THREAD-04: Resuming a thread MUST load its full context into the current session
+- REQ-THREAD-05: Threads MUST be promotable to phases or backlog items
+
+**Produces:** `.planning/threads/{slug}.md` — Persistent context thread
+
+---
+
+### 45. PR Branch Filtering
+
+**Command:** `/gsd:pr-branch [target branch]`
+
+**Purpose:** Create a clean branch suitable for pull requests by filtering out `.planning/` commits. Reviewers see only code changes, not GSD planning artifacts.
+
+**Requirements:**
+- REQ-PRBRANCH-01: System MUST identify commits that only modify `.planning/` files
+- REQ-PRBRANCH-02: System MUST create a new branch with planning commits filtered out
+- REQ-PRBRANCH-03: Code changes MUST be preserved exactly as committed
+
+---
+
+### 46. Security Hardening
+
+**Purpose:** Defense-in-depth security for GSD's planning artifacts. Because GSD generates markdown files that become LLM system prompts, user-controlled text flowing into these files is a potential indirect prompt injection vector.
+
+**Components:**
+
+**1. Centralized Security Module** (`security.cjs`)
+- Path traversal prevention — validates file paths resolve within the project directory
+- Prompt injection detection — scans for known injection patterns in user-supplied text
+- Safe JSON parsing — catches malformed input before state corruption
+- Field name validation — prevents injection through config field names
+- Shell argument validation — sanitizes user text before shell interpolation
+
+**2. Prompt Injection Guard Hook** (`gsd-prompt-guard.js`)
+PreToolUse hook that scans Write/Edit calls targeting `.planning/` for injection patterns. Advisory-only — logs detection for awareness without blocking legitimate operations.
+
+**3. Workflow Guard Hook** (`gsd-workflow-guard.js`)
+PreToolUse hook that detects when Claude attempts file edits outside a GSD workflow context. Advises using `/gsd:quick` or `/gsd:fast` instead of direct edits. Configurable via `hooks.workflow_guard` (default: false).
+
+**4. CI-Ready Injection Scanner** (`prompt-injection-scan.test.cjs`)
+Test suite that scans all agent, workflow, and command files for embedded injection vectors.
+
+**Requirements:**
+- REQ-SEC-01: All user-supplied file paths MUST be validated against the project directory
+- REQ-SEC-02: Prompt injection patterns MUST be detected before text enters planning artifacts
+- REQ-SEC-03: Security hooks MUST be advisory-only (never block legitimate operations)
+- REQ-SEC-04: JSON parsing of user input MUST catch malformed data gracefully
+- REQ-SEC-05: macOS `/var` → `/private/var` symlink resolution MUST be handled in path validation
+
+---
+
+### 47. Multi-Repo Workspace Support
+
+**Purpose:** Auto-detection and project root resolution for monorepos and multi-repo setups. Supports workspaces where `.planning/` may need to resolve across repository boundaries.
+
+**Requirements:**
+- REQ-MULTIREPO-01: System MUST auto-detect multi-repo workspace configuration
+- REQ-MULTIREPO-02: System MUST resolve project root across repository boundaries
+- REQ-MULTIREPO-03: Executor MUST record per-repo commit hashes in multi-repo mode
+
+---
+
+### 48. Discussion Audit Trail
+
+**Purpose:** Auto-generate `DISCUSSION-LOG.md` during `/gsd:discuss-phase` for full audit trail of decisions made during discussion.
+
+**Requirements:**
+- REQ-DISCLOG-01: System MUST auto-generate DISCUSSION-LOG.md during discuss-phase
+- REQ-DISCLOG-02: Log MUST capture questions asked, options presented, and decisions made
+- REQ-DISCLOG-03: Decision IDs MUST enable traceability from discuss-phase to plan-phase
+
+---
+
+## v1.28 Features
+
+### 49. Forensics
+
+**Command:** `/gsd:forensics [description]`
+
+**Purpose:** Post-mortem investigation of failed or stuck GSD workflows.
+
+**Requirements:**
+- REQ-FORENSICS-01: System MUST analyze git history for anomalies (stuck loops, long gaps, repeated commits)
+- REQ-FORENSICS-02: System MUST check artifact integrity (completed phases have expected files)
+- REQ-FORENSICS-03: System MUST generate a markdown report saved to `.planning/forensics/`
+- REQ-FORENSICS-04: System MUST offer to create a GitHub issue with findings
+- REQ-FORENSICS-05: System MUST NOT modify project files (read-only investigation)
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `.planning/forensics/report-{timestamp}.md` | Post-mortem investigation report |
+
+**Process:**
+1. **Scan** — Analyze git history for anomalies: stuck loops, long gaps between commits, repeated identical commits
+2. **Integrity Check** — Verify completed phases have expected artifact files
+3. **Report** — Generate markdown report with findings, saved to `.planning/forensics/`
+4. **Issue** — Offer to create a GitHub issue with findings for team visibility
+
+---
+
+### 50. Milestone Summary
+
+**Command:** `/gsd:milestone-summary [version]`
+
+**Purpose:** Generate comprehensive project summary from milestone artifacts for team onboarding.
+
+**Requirements:**
+- REQ-SUMMARY-01: System MUST aggregate phase plans, summaries, and verification results
+- REQ-SUMMARY-02: System MUST work for both current and archived milestones
+- REQ-SUMMARY-03: System MUST produce a single navigable document
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `MILESTONE-SUMMARY.md` | Comprehensive navigable summary of milestone artifacts |
+
+**Process:**
+1. **Collect** — Aggregate phase plans, summaries, and verification results from the target milestone
+2. **Synthesize** — Combine artifacts into a single navigable document with cross-references
+3. **Output** — Write `MILESTONE-SUMMARY.md` suitable for team onboarding and stakeholder review
+
+---
+
+### 51. Workstream Namespacing
+
+**Command:** `/gsd:workstreams`
+
+**Purpose:** Parallel workstreams for concurrent work on different milestone areas.
+
+**Requirements:**
+- REQ-WS-01: System MUST isolate workstream state in separate `.planning/workstreams/{name}/` directories
+- REQ-WS-02: System MUST validate workstream names (alphanumeric + hyphens only, no path traversal)
+- REQ-WS-03: System MUST support list, create, switch, status, progress, complete, resume subcommands
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `.planning/workstreams/{name}/` | Isolated workstream directory structure |
+
+**Process:**
+1. **Create** — Initialize a named workstream with isolated `.planning/workstreams/{name}/` directory
+2. **Switch** — Change active workstream context for subsequent GSD commands
+3. **Manage** — List, check status, track progress, complete, or resume workstreams
+
+---
+
+### 52. Manager Dashboard
+
+**Command:** `/gsd:manager`
+
+**Purpose:** Interactive command center for managing multiple phases from one terminal.
+
+**Requirements:**
+- REQ-MGR-01: System MUST show overview of all phases with status
+- REQ-MGR-02: System MUST filter to current milestone scope
+- REQ-MGR-03: System MUST show phase dependencies and conflicts
+
+**Produces:** Interactive terminal output
+
+**Process:**
+1. **Scan** — Load all phases in the current milestone with their statuses
+2. **Display** — Render overview showing phase dependencies, conflicts, and progress
+3. **Interact** — Accept commands to navigate, inspect, or act on individual phases
+
+---
+
+### 53. Assumptions Discussion Mode
+
+**Command:** `/gsd:discuss-phase` with `workflow.discuss_mode: 'assumptions'`
+
+**Purpose:** Replace interview-style questioning with codebase-first assumption analysis.
+
+**Requirements:**
+- REQ-ASSUME-01: System MUST analyze codebase to generate structured assumptions before asking questions
+- REQ-ASSUME-02: System MUST classify assumptions by confidence level (Confident/Likely/Unclear)
+- REQ-ASSUME-03: System MUST produce identical CONTEXT.md format as default discuss mode
+- REQ-ASSUME-04: System MUST support confidence-based skip gate (all HIGH = no questions)
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `{phase}-CONTEXT.md` | Same format as default discuss mode |
+
+**Process:**
+1. **Analyze** — Scan codebase to generate structured assumptions about implementation approach
+2. **Classify** — Categorize assumptions by confidence level: Confident, Likely, Unclear
+3. **Gate** — If all assumptions are HIGH confidence, skip questioning entirely
+4. **Confirm** — Present unclear assumptions as targeted questions to the user
+5. **Output** — Produce `{phase}-CONTEXT.md` in identical format to default discuss mode
+
+---
+
+### 54. UI Phase Auto-Detection
+
+**Part of:** `/gsd:new-project` and `/gsd:progress`
+
+**Purpose:** Automatically detect UI-heavy projects and surface `/gsd:ui-phase` recommendation.
+
+**Requirements:**
+- REQ-UI-DETECT-01: System MUST detect UI signals in project description (keywords, framework references)
+- REQ-UI-DETECT-02: System MUST annotate ROADMAP.md phases with `ui_hint` when applicable
+- REQ-UI-DETECT-03: System MUST suggest `/gsd:ui-phase` in next steps for UI-heavy phases
+- REQ-UI-DETECT-04: System MUST NOT make `/gsd:ui-phase` mandatory
+
+**Process:**
+1. **Detect** — Scan project description and tech stack for UI signals (keywords, framework references)
+2. **Annotate** — Add `ui_hint` markers to applicable phases in ROADMAP.md
+3. **Surface** — Include `/gsd:ui-phase` recommendation in next steps for UI-heavy phases
+
+---
+
+### 55. Multi-Runtime Installer Selection
+
+**Part of:** `npx get-shit-done-cc`
+
+**Purpose:** Select multiple runtimes in a single interactive install session.
+
+**Requirements:**
+- REQ-MULTI-RT-01: Interactive prompt MUST support multi-select (e.g., Claude Code + Gemini)
+- REQ-MULTI-RT-02: CLI flags MUST continue to work for non-interactive installs
+
+**Process:**
+1. **Detect** — Identify available AI CLI runtimes on the system
+2. **Prompt** — Present multi-select interface for runtime selection
+3. **Install** — Configure GSD for all selected runtimes in a single session
