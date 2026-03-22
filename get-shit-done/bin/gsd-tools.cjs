@@ -6,7 +6,7 @@
  * Replaces repetitive inline bash patterns across ~50 GSD command/workflow/agent files.
  * Centralizes: config parsing, model resolution, phase lookup, git commits, summary verification.
  *
- * Usage: node gsd-tools.cjs <command> [args] [--raw]
+ * Usage: node gsd-tools.cjs <command> [args] [--raw] [--pick <field>]
  *
  * Atomic Commands:
  *   state load                         Load project config + state
@@ -189,10 +189,21 @@ async function main() {
   const raw = rawIndex !== -1;
   if (rawIndex !== -1) args.splice(rawIndex, 1);
 
+  // --pick <name>: extract a single field from JSON output (replaces jq dependency).
+  // Supports dot-notation (e.g., --pick workflow.research) and bracket notation
+  // for arrays (e.g., --pick directories[-1]).
+  const pickIdx = args.indexOf('--pick');
+  let pickField = null;
+  if (pickIdx !== -1) {
+    pickField = args[pickIdx + 1];
+    if (!pickField || pickField.startsWith('--')) error('Missing value for --pick');
+    args.splice(pickIdx, 2);
+  }
+
   const command = args[0];
 
   if (!command) {
-    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, config-new-project, init');
+    error('Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, config-new-project, init');
   }
 
   // Multi-repo guard: resolve project root for commands that read/write .planning/.
@@ -206,6 +217,67 @@ async function main() {
     cwd = findProjectRoot(cwd);
   }
 
+  // When --pick is active, intercept stdout to extract the requested field.
+  if (pickField) {
+    const origWriteSync = fs.writeSync;
+    const chunks = [];
+    fs.writeSync = function (fd, data, ...rest) {
+      if (fd === 1) { chunks.push(String(data)); return; }
+      return origWriteSync.call(fs, fd, data, ...rest);
+    };
+    const cleanup = () => {
+      fs.writeSync = origWriteSync;
+      const captured = chunks.join('');
+      let jsonStr = captured;
+      if (jsonStr.startsWith('@file:')) {
+        jsonStr = fs.readFileSync(jsonStr.slice(6), 'utf-8');
+      }
+      try {
+        const obj = JSON.parse(jsonStr);
+        const value = extractField(obj, pickField);
+        const result = value === null || value === undefined ? '' : String(value);
+        origWriteSync.call(fs, 1, result);
+      } catch {
+        origWriteSync.call(fs, 1, captured);
+      }
+    };
+    try {
+      await runCommand(command, args, cwd, raw);
+      cleanup();
+    } catch (e) {
+      fs.writeSync = origWriteSync;
+      throw e;
+    }
+    return;
+  }
+
+  await runCommand(command, args, cwd, raw);
+}
+
+/**
+ * Extract a field from an object using dot-notation and bracket syntax.
+ * Supports: 'field', 'parent.child', 'arr[-1]', 'arr[0]'
+ */
+function extractField(obj, fieldPath) {
+  const parts = fieldPath.split('.');
+  let current = obj;
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    const bracketMatch = part.match(/^(.+?)\[(-?\d+)]$/);
+    if (bracketMatch) {
+      const key = bracketMatch[1];
+      const index = parseInt(bracketMatch[2], 10);
+      current = current[key];
+      if (!Array.isArray(current)) return undefined;
+      current = index < 0 ? current[current.length + index] : current[index];
+    } else {
+      current = current[part];
+    }
+  }
+  return current;
+}
+
+async function runCommand(command, args, cwd, raw) {
   switch (command) {
     case 'state': {
       const subcommand = args[1];
