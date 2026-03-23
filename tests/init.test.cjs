@@ -951,16 +951,15 @@ describe('cmdInitMapCodebase', () => {
     assert.strictEqual(output.codebase_dir_exists, true);
   });
 
-  test('map-codebase workflow lists OpenCode as having Task tool support (#1316)', () => {
+  test('map-codebase workflow does not list OpenCode under runtimes without Task tool (#1316)', () => {
     const workflow = fs.readFileSync(
       path.join(__dirname, '..', 'get-shit-done', 'workflows', 'map-codebase.md'), 'utf8'
     );
-    // OpenCode must appear in the "with Task tool" line, not the "WITHOUT" line
-    const withLine = workflow.split('\n').find(l => l.includes('Runtimes with Task tool'));
-    const withoutLine = workflow.split('\n').find(l => l.includes('WITHOUT Task tool'));
-    assert.ok(withLine, 'workflow should have a "Runtimes with Task tool" line');
-    assert.ok(withoutLine, 'workflow should have a "WITHOUT Task tool" line');
-    assert.ok(withLine.includes('OpenCode'), 'OpenCode must be listed under runtimes WITH Task tool');
+    // OpenCode must NOT appear in the "WITHOUT Task tool" / "NOT available" condition
+    const withoutLine = workflow.split('\n').find(l =>
+      l.includes('NOT available') || l.includes('WITHOUT Task tool')
+    );
+    assert.ok(withoutLine, 'workflow should have a line about Task tool NOT being available');
     assert.ok(!withoutLine.includes('OpenCode'), 'OpenCode must NOT be listed under runtimes WITHOUT Task tool');
   });
 });

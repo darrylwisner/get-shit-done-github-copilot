@@ -14,6 +14,7 @@ const {
   requireSafePath,
   scanForInjection,
   sanitizeForPrompt,
+  sanitizeForDisplay,
   safeJsonParse,
   validatePhaseNumber,
   validateFieldName,
@@ -241,6 +242,19 @@ describe('sanitizeForPrompt', () => {
     assert.equal(sanitizeForPrompt(null), null);
     assert.equal(sanitizeForPrompt(undefined), undefined);
     assert.equal(sanitizeForPrompt(''), '');
+  });
+});
+
+describe('sanitizeForDisplay', () => {
+  test('removes protocol leak lines', () => {
+    const input = 'Visible line\nuser to=all:final code something bad\nAnother line';
+    const result = sanitizeForDisplay(input);
+    assert.equal(result, 'Visible line\nAnother line');
+  });
+
+  test('keeps normal user-facing copy intact', () => {
+    const input = 'Type `pass` or describe what\\\'s wrong.';
+    assert.equal(sanitizeForDisplay(input), input);
   });
 });
 

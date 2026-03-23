@@ -2,6 +2,8 @@
  * GSD Tools Tests - UAT Audit
  */
 
+'use strict';
+
 const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -322,5 +324,85 @@ All checks passed.
     const output = JSON.parse(result.output);
     assert.strictEqual(output.summary.total_items, 0);
     assert.strictEqual(output.summary.total_files, 0);
+  });
+});
+
+describe('uat render-checkpoint', () => {
+  let tmpDir;
+  let uatPath;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-test-phase');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    uatPath = path.join(phaseDir, '01-UAT.md');
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('renders the current checkpoint as raw output', () => {
+    fs.writeFileSync(uatPath, `---
+status: testing
+phase: 01-test-phase
+---
+
+## Current Test
+
+number: 2
+name: Submit form validation
+expected: |
+  Empty submit keeps controls visible.
+  Validation error copy is shown.
+awaiting: user response
+`);
+
+    const result = runGsdTools(['uat', 'render-checkpoint', '--file', '.planning/phases/01-test-phase/01-UAT.md', '--raw'], tmpDir);
+    assert.strictEqual(result.success, true, `render-checkpoint failed: ${result.error}`);
+    assert.ok(result.output.includes('**Test 2: Submit form validation**'));
+    assert.ok(result.output.includes('Empty submit keeps controls visible.'));
+    assert.ok(result.output.includes("Type `pass` or describe what's wrong."));
+  });
+
+  test('strips protocol leak lines from current test copy', () => {
+    fs.writeFileSync(uatPath, `---
+status: testing
+phase: 01-test-phase
+---
+
+## Current Test
+
+number: 6
+name: Locale copy
+expected: |
+  English strings render correctly.
+  user to=all:final code 彩票平台招商 pass
+  Chinese strings render correctly.
+awaiting: user response
+`);
+
+    const result = runGsdTools(['uat', 'render-checkpoint', '--file', '.planning/phases/01-test-phase/01-UAT.md', '--raw'], tmpDir);
+    assert.strictEqual(result.success, true, `render-checkpoint failed: ${result.error}`);
+    assert.ok(!result.output.includes('user to=all:final code'));
+    assert.ok(!result.output.includes('彩票平台'));
+    assert.ok(result.output.includes('English strings render correctly.'));
+    assert.ok(result.output.includes('Chinese strings render correctly.'));
+  });
+
+  test('fails when testing is already complete', () => {
+    fs.writeFileSync(uatPath, `---
+status: complete
+phase: 01-test-phase
+---
+
+## Current Test
+
+[testing complete]
+`);
+
+    const result = runGsdTools(['uat', 'render-checkpoint', '--file', '.planning/phases/01-test-phase/01-UAT.md'], tmpDir);
+    assert.strictEqual(result.success, false, 'Should fail when no current test exists');
+    assert.ok(result.error.includes('already complete'));
   });
 });
