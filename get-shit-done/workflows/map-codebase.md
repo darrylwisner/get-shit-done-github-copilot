@@ -85,10 +85,7 @@ Continue to spawn_agents.
 <step name="detect_runtime_capabilities">
 Before spawning agents, detect whether the current runtime supports the `Task` tool for subagent delegation.
 
-**Runtimes with Task tool:** Claude Code, Cursor, OpenCode (native subagent support via `Task` or `task`)
-**Runtimes WITHOUT Task tool:** Antigravity, Gemini CLI, Codex, and others
-
-**How to detect:** Check if you have access to a `Task` or `task` tool (either casing counts). If you do NOT have a Task/task tool (or only have tools like `browser_subagent` which is for web browsing, NOT code analysis):
+**How to detect:** Check if you have access to a `Task` tool (may be capitalized as `Task` or lowercase as `task` depending on runtime). If you do NOT have a `Task`/`task` tool (or only have tools like `browser_subagent` which is for web browsing, NOT code analysis):
 
 → **Skip `spawn_agents` and `collect_confirmations`** — go directly to `sequential_mapping` instead.
 
@@ -218,7 +215,7 @@ If any agent failed, note the failure and continue with successful documents.
 Continue to verify_output.
 </step>
 
-<step name="sequential_mapping" condition="Task/task tool is NOT available (e.g. Antigravity, Gemini CLI, Codex)">
+<step name="sequential_mapping" condition="Task tool is NOT available (e.g. Antigravity, Gemini CLI, Codex)">
 When the `Task` tool is unavailable, perform codebase mapping sequentially in the current context. This replaces `spawn_agents` and `collect_confirmations`.
 
 **IMPORTANT:** Do NOT use `browser_subagent`, `Explore`, or any browser-based tool. Use only file system tools (Read, Bash, Write, Grep, Glob, list_dir, view_file, grep_search, or equivalent tools available in your runtime).

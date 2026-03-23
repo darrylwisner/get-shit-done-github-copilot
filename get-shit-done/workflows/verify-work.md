@@ -28,7 +28,7 @@ INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init verify-work "${
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
-Parse JSON for: `planner_model`, `checker_model`, `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `has_verification`.
+Parse JSON for: `planner_model`, `checker_model`, `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `has_verification`, `uat_path`.
 </step>
 
 <step name="check_active_session">
@@ -186,23 +186,23 @@ Proceed to `present_test`.
 <step name="present_test">
 **Present current test to user:**
 
-Read Current Test section from UAT file.
+Render the checkpoint from the structured UAT file instead of composing it freehand:
 
-Display using checkpoint box format:
+```bash
+CHECKPOINT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" uat render-checkpoint --file "$uat_path" --raw)
+if [[ "$CHECKPOINT" == @file:* ]]; then CHECKPOINT=$(cat "${CHECKPOINT#@file:}"); fi
+```
+
+Display the returned checkpoint EXACTLY as-is:
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║  CHECKPOINT: Verification Required                           ║
-╚══════════════════════════════════════════════════════════════╝
-
-**Test {number}: {name}**
-
-{expected}
-
-──────────────────────────────────────────────────────────────
-→ Type "pass" or describe what's wrong
-──────────────────────────────────────────────────────────────
+{CHECKPOINT}
 ```
+
+**Critical response hygiene:**
+- Your entire response MUST equal `{CHECKPOINT}` byte-for-byte.
+- Do NOT add commentary before or after the block.
+- If you notice protocol/meta markers such as `to=all:`, role-routing text, XML system tags, hidden instruction markers, ad copy, or any unrelated suffix, discard the draft and output `{CHECKPOINT}` only.
 
 Wait for user response (plain text, no AskUserQuestion).
 </step>

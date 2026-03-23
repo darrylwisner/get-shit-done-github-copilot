@@ -67,6 +67,7 @@
  *
  * UAT Audit:
  *   audit-uat                           Scan all phases for unresolved UAT/verification items
+ *   uat render-checkpoint --file <path> Render the current UAT checkpoint block
  *
  * Scaffolding:
  *   scaffold context --phase <N>       Create CONTEXT.md template
@@ -657,6 +658,18 @@ async function runCommand(command, args, cwd, raw) {
     case 'audit-uat': {
       const uat = require('./lib/uat.cjs');
       uat.cmdAuditUat(cwd, raw);
+      break;
+    }
+
+    case 'uat': {
+      const subcommand = args[1];
+      const uat = require('./lib/uat.cjs');
+      if (subcommand === 'render-checkpoint') {
+        const options = parseNamedArgs(args, ['file']);
+        uat.cmdRenderCheckpoint(cwd, options, raw);
+      } else {
+        error('Unknown uat subcommand. Available: render-checkpoint');
+      }
       break;
     }
 
