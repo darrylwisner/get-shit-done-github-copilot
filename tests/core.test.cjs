@@ -1477,6 +1477,38 @@ describe('findProjectRoot', () => {
 
     assert.strictEqual(findProjectRoot(backendDir), backendDir);
   });
+
+  test('walks up from subdirectory when .git is at same level as .planning/ (single-repo)', () => {
+    // Common single-repo layout: .git and .planning are siblings at project root
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.git'), { recursive: true });
+
+    // User cwd is a subdirectory (e.g., src/)
+    const srcDir = path.join(projectRoot, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    // Should detect that parent has .planning/ and .git is at that same level
+    assert.strictEqual(findProjectRoot(srcDir), projectRoot);
+  });
+
+  test('walks up from deep subdirectory when .git is at same level as .planning/', () => {
+    // Single-repo: .git and .planning at root, cwd deep inside
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.git'), { recursive: true });
+
+    const deepDir = path.join(projectRoot, 'src', 'lib', 'utils');
+    fs.mkdirSync(deepDir, { recursive: true });
+
+    assert.strictEqual(findProjectRoot(deepDir), projectRoot);
+  });
+
+  test('returns startDir when .planning exists at same level (cwd is project root)', () => {
+    // User is already at project root — no parent to walk up to
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.git'), { recursive: true });
+
+    assert.strictEqual(findProjectRoot(projectRoot), projectRoot);
+  });
 });
 
 // ─── reapStaleTempFiles ─────────────────────────────────────────────────────

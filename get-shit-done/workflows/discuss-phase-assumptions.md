@@ -89,7 +89,7 @@ Exit workflow.
 Check if CONTEXT.md already exists using `has_context` from init.
 
 ```bash
-ls ${phase_dir}/*-CONTEXT.md 2>/dev/null
+ls ${phase_dir}/*-CONTEXT.md 2>/dev/null || true
 ```
 
 **If exists:**
@@ -134,9 +134,9 @@ Read project-level and prior phase context to avoid re-asking decided questions.
 
 **Step 1: Read project-level files**
 ```bash
-cat .planning/PROJECT.md 2>/dev/null
-cat .planning/REQUIREMENTS.md 2>/dev/null
-cat .planning/STATE.md 2>/dev/null
+cat .planning/PROJECT.md 2>/dev/null || true
+cat .planning/REQUIREMENTS.md 2>/dev/null || true
+cat .planning/STATE.md 2>/dev/null || true
 ```
 
 Extract from these:
@@ -146,7 +146,7 @@ Extract from these:
 
 **Step 2: Read all prior CONTEXT.md files**
 ```bash
-find .planning/phases -name "*-CONTEXT.md" 2>/dev/null | sort
+(find .planning/phases -name "*-CONTEXT.md" 2>/dev/null || true) | sort
 ```
 
 For each CONTEXT.md where phase number < current phase:
@@ -185,7 +185,7 @@ Lightweight scan of existing code to inform assumption generation.
 
 **Step 1: Check for existing codebase maps**
 ```bash
-ls .planning/codebase/*.md 2>/dev/null
+ls .planning/codebase/*.md 2>/dev/null || true
 ```
 
 **If codebase maps exist:** Read relevant ones (CONVENTIONS.md, STRUCTURE.md, STACK.md). Extract reusable components, patterns, integration points. Skip to Step 3.
