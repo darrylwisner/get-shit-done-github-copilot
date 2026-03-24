@@ -58,6 +58,13 @@ function findProjectRoot(startDir) {
   const root = path.parse(resolved).root;
   const homedir = require('os').homedir();
 
+  // If startDir already contains .planning/, it IS the project root.
+  // Do not walk up to a parent workspace that also has .planning/ (#1362).
+  const ownPlanning = path.join(resolved, '.planning');
+  if (fs.existsSync(ownPlanning) && fs.statSync(ownPlanning).isDirectory()) {
+    return startDir;
+  }
+
   // Check if startDir or any of its ancestors (up to AND including the
   // candidate project root) contains a .git directory. This handles both
   // `backend/` (direct sub-repo) and `backend/src/modules/` (nested inside),

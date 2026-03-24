@@ -6,6 +6,11 @@ Audit Nyquist validation gaps for a completed phase. Generate missing tests. Upd
 @~/.claude/get-shit-done/references/ui-brand.md
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-nyquist-auditor — Validates verification coverage
+</available_agent_types>
+
 <process>
 
 ## 0. Initialize

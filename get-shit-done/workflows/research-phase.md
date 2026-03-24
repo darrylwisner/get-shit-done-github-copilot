@@ -4,6 +4,11 @@ Research how to implement a phase. Spawns gsd-phase-researcher with phase contex
 Standalone research command. For most workflows, use `/gsd:plan-phase` which integrates research automatically.
 </purpose>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-phase-researcher — Researches technical approaches for a phase
+</available_agent_types>
+
 <process>
 
 ## Step 0: Resolve Model Profile

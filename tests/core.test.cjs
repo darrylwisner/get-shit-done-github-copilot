@@ -1017,25 +1017,24 @@ describe('stale hook path', () => {
 
 describe('resolveWorktreeRoot', () => {
   const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
 
   test('returns cwd when not in a git repo', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-test-'));
-    try {
-      assert.strictEqual(resolveWorktreeRoot(tmpDir), tmpDir);
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    assert.strictEqual(resolveWorktreeRoot(tmpDir), tmpDir);
   });
 
   test('returns cwd in a normal git repo (not a worktree)', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-test-'));
-    try {
-      const { execSync } = require('child_process');
-      execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
-      assert.strictEqual(resolveWorktreeRoot(tmpDir), tmpDir);
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    const { execSync: execSyncLocal } = require('child_process');
+    execSyncLocal('git init', { cwd: tmpDir, stdio: 'pipe' });
+    assert.strictEqual(resolveWorktreeRoot(tmpDir), tmpDir);
   });
 });
 
@@ -1043,78 +1042,70 @@ describe('resolveWorktreeRoot', () => {
 
 describe('resolveWorktreeRoot with linked worktree .planning/', () => {
   const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
-  const { execSync } = require('child_process');
+  const { execSync: execSyncLocal } = require('child_process');
   // On Windows CI, os.tmpdir() may return 8.3 short paths (RUNNER~1) while
   // git returns long paths (runneradmin). realpathSync.native resolves both.
   const normalizePath = (p) => {
     try { return fs.realpathSync.native(p); } catch { return fs.realpathSync(p); }
   };
 
-  test('returns linked worktree cwd when it has its own .planning/', () => {
-    const mainDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-main-')));
-    let worktreeDir;
-    try {
-      // Set up main repo with a commit
-      execSync('git init', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git config user.email "test@test.com"', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git config user.name "Test"', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git config commit.gpgsign false', { cwd: mainDir, stdio: 'pipe' });
-      fs.mkdirSync(path.join(mainDir, '.planning'), { recursive: true });
-      fs.writeFileSync(path.join(mainDir, 'README.md'), '# Main');
-      execSync('git add -A', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git commit -m "initial"', { cwd: mainDir, stdio: 'pipe' });
+  let mainDir;
+  let worktreeDir;
 
-      // Create a linked worktree
-      worktreeDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-linked-')));
-      fs.rmSync(worktreeDir, { recursive: true, force: true });
-      execSync(`git worktree add "${worktreeDir}" -b test-linked`, { cwd: mainDir, stdio: 'pipe' });
+  function initBareGitRepo() {
+    const dir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-main-')));
+    execSyncLocal('git init', { cwd: dir, stdio: 'pipe' });
+    execSyncLocal('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
+    execSyncLocal('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+    execSyncLocal('git config commit.gpgsign false', { cwd: dir, stdio: 'pipe' });
+    fs.writeFileSync(path.join(dir, 'README.md'), '# Main');
+    execSyncLocal('git add -A', { cwd: dir, stdio: 'pipe' });
+    execSyncLocal('git commit -m "initial"', { cwd: dir, stdio: 'pipe' });
+    return dir;
+  }
 
-      // Give the linked worktree its own .planning/
-      fs.mkdirSync(path.join(worktreeDir, '.planning'), { recursive: true });
+  beforeEach(() => {
+    mainDir = initBareGitRepo();
+    worktreeDir = null;
+  });
 
-      // resolveWorktreeRoot should return the linked worktree dir, not the main repo
-      const result = normalizePath(resolveWorktreeRoot(worktreeDir));
-      assert.strictEqual(result, worktreeDir,
-        'linked worktree with .planning/ should resolve to itself, not the main repo');
-    } finally {
-      if (worktreeDir) {
-        try { execSync(`git worktree remove "${worktreeDir}" --force`, { cwd: mainDir, stdio: 'pipe' }); } catch { /* ok */ }
-        try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch { /* ok */ }
-      }
-      fs.rmSync(mainDir, { recursive: true, force: true });
+  afterEach(() => {
+    if (worktreeDir) {
+      try { execSyncLocal(`git worktree remove "${worktreeDir}" --force`, { cwd: mainDir, stdio: 'pipe' }); } catch { /* ok */ }
+      try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch { /* ok */ }
     }
+    cleanup(mainDir);
+  });
+
+  test('returns linked worktree cwd when it has its own .planning/', () => {
+    // Add .planning/ to main repo
+    fs.mkdirSync(path.join(mainDir, '.planning'), { recursive: true });
+
+    // Create a linked worktree
+    worktreeDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-linked-')));
+    fs.rmSync(worktreeDir, { recursive: true, force: true });
+    execSyncLocal(`git worktree add "${worktreeDir}" -b test-linked`, { cwd: mainDir, stdio: 'pipe' });
+
+    // Give the linked worktree its own .planning/
+    fs.mkdirSync(path.join(worktreeDir, '.planning'), { recursive: true });
+
+    // resolveWorktreeRoot should return the linked worktree dir, not the main repo
+    const result = normalizePath(resolveWorktreeRoot(worktreeDir));
+    assert.strictEqual(result, worktreeDir,
+      'linked worktree with .planning/ should resolve to itself, not the main repo');
   });
 
   test('returns main repo root when linked worktree has no .planning/', () => {
-    const mainDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-main-')));
-    let worktreeDir;
-    try {
-      // Set up main repo with a commit
-      execSync('git init', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git config user.email "test@test.com"', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git config user.name "Test"', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git config commit.gpgsign false', { cwd: mainDir, stdio: 'pipe' });
-      fs.writeFileSync(path.join(mainDir, 'README.md'), '# Main');
-      execSync('git add -A', { cwd: mainDir, stdio: 'pipe' });
-      execSync('git commit -m "initial"', { cwd: mainDir, stdio: 'pipe' });
+    // Create a linked worktree (no .planning/ in main or worktree)
+    worktreeDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-linked-')));
+    fs.rmSync(worktreeDir, { recursive: true, force: true });
+    execSyncLocal(`git worktree add "${worktreeDir}" -b test-linked-no-plan`, { cwd: mainDir, stdio: 'pipe' });
 
-      // Create a linked worktree (no .planning/)
-      worktreeDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-linked-')));
-      fs.rmSync(worktreeDir, { recursive: true, force: true });
-      execSync(`git worktree add "${worktreeDir}" -b test-linked-no-plan`, { cwd: mainDir, stdio: 'pipe' });
-
-      // resolveWorktreeRoot should return the main repo root
-      const result = normalizePath(resolveWorktreeRoot(worktreeDir));
-      const expected = normalizePath(mainDir);
-      assert.strictEqual(result, expected,
-        'linked worktree without .planning/ should resolve to main repo root');
-    } finally {
-      if (worktreeDir) {
-        try { execSync(`git worktree remove "${worktreeDir}" --force`, { cwd: mainDir, stdio: 'pipe' }); } catch { /* ok */ }
-        try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch { /* ok */ }
-      }
-      fs.rmSync(mainDir, { recursive: true, force: true });
-    }
+    // resolveWorktreeRoot should return the main repo root
+    const result = normalizePath(resolveWorktreeRoot(worktreeDir));
+    const expected = normalizePath(mainDir);
+    assert.strictEqual(result, expected,
+      'linked worktree without .planning/ should resolve to main repo root');
   });
 });
 
@@ -1122,37 +1113,36 @@ describe('resolveWorktreeRoot with linked worktree .planning/', () => {
 
 describe('monorepo worktree CWD preservation', () => {
   const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-monorepo-wt-'));
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
 
   test('CWD with .planning/ skips worktree resolution (monorepo subdirectory)', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-monorepo-wt-'));
     const subDir = path.join(tmpDir, 'service-alpha');
     fs.mkdirSync(path.join(subDir, '.planning'), { recursive: true });
-    try {
-      let cwd = subDir;
-      if (!fs.existsSync(path.join(cwd, '.planning'))) {
-        const worktreeRoot = resolveWorktreeRoot(cwd);
-        if (worktreeRoot !== cwd) cwd = worktreeRoot;
-      }
-      assert.strictEqual(cwd, subDir, 'CWD with .planning/ must not be overridden by worktree resolution');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+    let cwd = subDir;
+    if (!fs.existsSync(path.join(cwd, '.planning'))) {
+      const worktreeRoot = resolveWorktreeRoot(cwd);
+      if (worktreeRoot !== cwd) cwd = worktreeRoot;
     }
+    assert.strictEqual(cwd, subDir, 'CWD with .planning/ must not be overridden by worktree resolution');
   });
 
   test('CWD without .planning/ still goes through worktree resolution', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-monorepo-wt-'));
-    try {
-      let cwd = tmpDir;
-      let worktreeResolutionCalled = false;
-      if (!fs.existsSync(path.join(cwd, '.planning'))) {
-        worktreeResolutionCalled = true;
-        const worktreeRoot = resolveWorktreeRoot(cwd);
-        if (worktreeRoot !== cwd) cwd = worktreeRoot;
-      }
-      assert.ok(worktreeResolutionCalled, 'worktree resolution must be called when .planning/ is absent');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+    let cwd = tmpDir;
+    let worktreeResolutionCalled = false;
+    if (!fs.existsSync(path.join(cwd, '.planning'))) {
+      worktreeResolutionCalled = true;
+      const worktreeRoot = resolveWorktreeRoot(cwd);
+      if (worktreeRoot !== cwd) cwd = worktreeRoot;
     }
+    assert.ok(worktreeResolutionCalled, 'worktree resolution must be called when .planning/ is absent');
   });
 });
 
@@ -1160,50 +1150,40 @@ describe('monorepo worktree CWD preservation', () => {
 
 describe('withPlanningLock', () => {
   const { withPlanningLock, planningDir } = require('../get-shit-done/bin/lib/core.cjs');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
 
   test('executes function and returns result', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-lock-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
-    try {
-      const result = withPlanningLock(tmpDir, () => 42);
-      assert.strictEqual(result, 42);
-      // Lock file should be cleaned up
-      assert.ok(!fs.existsSync(path.join(planningDir(tmpDir), '.lock')));
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    const result = withPlanningLock(tmpDir, () => 42);
+    assert.strictEqual(result, 42);
+    // Lock file should be cleaned up
+    assert.ok(!fs.existsSync(path.join(planningDir(tmpDir), '.lock')));
   });
 
   test('cleans up lock file even on error', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-lock-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
-    try {
-      assert.throws(() => {
-        withPlanningLock(tmpDir, () => { throw new Error('test'); });
-      }, /test/);
-      assert.ok(!fs.existsSync(path.join(planningDir(tmpDir), '.lock')));
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    assert.throws(() => {
+      withPlanningLock(tmpDir, () => { throw new Error('test'); });
+    }, /test/);
+    assert.ok(!fs.existsSync(path.join(planningDir(tmpDir), '.lock')));
   });
 
   test('recovers from stale lock (>30s old)', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-lock-test-'));
-    const planDir = path.join(tmpDir, '.planning');
-    fs.mkdirSync(planDir, { recursive: true });
-    const lockPath = path.join(planDir, '.lock');
-    try {
-      // Create a stale lock
-      fs.writeFileSync(lockPath, '{"pid":99999}');
-      // Backdate the lock file by 31 seconds
-      const staleTime = new Date(Date.now() - 31000);
-      fs.utimesSync(lockPath, staleTime, staleTime);
+    const lockPath = path.join(tmpDir, '.planning', '.lock');
+    // Create a stale lock
+    fs.writeFileSync(lockPath, '{"pid":99999}');
+    // Backdate the lock file by 31 seconds
+    const staleTime = new Date(Date.now() - 31000);
+    fs.utimesSync(lockPath, staleTime, staleTime);
 
-      const result = withPlanningLock(tmpDir, () => 'recovered');
-      assert.strictEqual(result, 'recovered');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    const result = withPlanningLock(tmpDir, () => 'recovered');
+    assert.strictEqual(result, 'recovered');
   });
 });
 
@@ -1508,6 +1488,33 @@ describe('findProjectRoot', () => {
     fs.mkdirSync(path.join(projectRoot, '.git'), { recursive: true });
 
     assert.strictEqual(findProjectRoot(projectRoot), projectRoot);
+  });
+
+  test('does not walk past child with own .planning/ to workspace parent (#1362)', () => {
+    // Workspace layout: parent has .planning/, child git repo also has .planning/
+    // findProjectRoot should return the child (startDir), not the parent
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+
+    const childRepo = path.join(projectRoot, 'authenticator');
+    fs.mkdirSync(path.join(childRepo, '.planning'), { recursive: true });
+    fs.mkdirSync(path.join(childRepo, '.git'), { recursive: true });
+
+    assert.strictEqual(findProjectRoot(childRepo), childRepo);
+  });
+
+  test('does not walk past nested dir whose git root has .planning/ (#1362)', () => {
+    // Workspace layout: parent has .planning/, child git repo also has .planning/
+    // cwd is deep inside child — should resolve to child root, not workspace root
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+
+    const childRepo = path.join(projectRoot, 'authenticator');
+    fs.mkdirSync(path.join(childRepo, '.planning'), { recursive: true });
+    fs.mkdirSync(path.join(childRepo, '.git'), { recursive: true });
+
+    const deepDir = path.join(childRepo, 'src', 'lib');
+    fs.mkdirSync(deepDir, { recursive: true });
+
+    assert.strictEqual(findProjectRoot(deepDir), childRepo);
   });
 });
 

@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
-const { runGsdTools, cleanup } = require('./helpers.cjs');
+const { runGsdTools, createTempDir, cleanup } = require('./helpers.cjs');
 const { detectChildRepos } = require('../get-shit-done/bin/lib/init.cjs');
 
 // ─── detectChildRepos ────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ describe('detectChildRepos', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-ws-test-'));
+    tmpDir = createTempDir('gsd-ws-test-');
   });
 
   afterEach(() => {
@@ -81,7 +81,7 @@ describe('init new-workspace', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-ws-test-'));
+    tmpDir = createTempDir('gsd-ws-test-');
   });
 
   afterEach(() => {
@@ -125,7 +125,7 @@ describe('init list-workspaces', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-ws-test-'));
+    tmpDir = createTempDir('gsd-ws-test-');
   });
 
   afterEach(() => {
@@ -172,7 +172,7 @@ describe('init remove-workspace', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-ws-test-'));
+    tmpDir = createTempDir('gsd-ws-test-');
   });
 
   afterEach(() => {
@@ -224,7 +224,7 @@ describe('workspace worktree integration', () => {
   let sourceRepo;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-ws-integ-'));
+    tmpDir = createTempDir('gsd-ws-integ-');
     // Create a source git repo with a commit
     sourceRepo = path.join(tmpDir, 'source-repo');
     fs.mkdirSync(sourceRepo);

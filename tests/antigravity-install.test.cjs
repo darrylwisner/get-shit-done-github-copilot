@@ -12,6 +12,7 @@ const assert = require('node:assert');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const { createTempDir, cleanup } = require('./helpers.cjs');
 
 const {
   getDirName,
@@ -287,7 +288,7 @@ describe('copyCommandsAsAntigravitySkills', () => {
   let skillsDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-ag-test-'));
+    tmpDir = createTempDir('gsd-ag-test-');
     srcDir = path.join(tmpDir, 'commands', 'gsd');
     skillsDir = path.join(tmpDir, 'skills');
     fs.mkdirSync(srcDir, { recursive: true });
@@ -381,7 +382,7 @@ describe('writeManifest (Antigravity)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-manifest-ag-'));
+    tmpDir = createTempDir('gsd-manifest-ag-');
     // Create minimal structure
     const skillsDir = path.join(tmpDir, 'skills', 'gsd-help');
     fs.mkdirSync(skillsDir, { recursive: true });

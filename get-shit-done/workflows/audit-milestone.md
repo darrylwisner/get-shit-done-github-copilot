@@ -6,6 +6,11 @@ Verify milestone achieved its definition of done by aggregating phase verificati
 Read all files referenced by the invoking prompt's execution_context before starting.
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-integration-checker — Checks cross-phase integration
+</available_agent_types>
+
 <process>
 
 ## 0. Initialize Milestone Context

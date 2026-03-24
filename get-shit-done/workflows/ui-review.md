@@ -6,6 +6,11 @@ Retroactive 6-pillar visual audit of implemented frontend code. Standalone comma
 @~/.claude/get-shit-done/references/ui-brand.md
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-ui-auditor — Audits UI against design requirements
+</available_agent_types>
+
 <process>
 
 ## 0. Initialize

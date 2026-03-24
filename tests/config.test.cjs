@@ -256,8 +256,8 @@ describe('config-get command', () => {
 
   beforeEach(() => {
     tmpDir = createTempProject();
-    // Create config with known values
-    runGsdTools('config-ensure-section', tmpDir);
+    // Create config with known values — sandbox HOME to avoid global defaults
+    runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
   });
 
   afterEach(() => {
@@ -265,7 +265,7 @@ describe('config-get command', () => {
   });
 
   test('gets a top-level value', () => {
-    const result = runGsdTools('config-get model_profile', tmpDir);
+    const result = runGsdTools('config-get model_profile', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const output = JSON.parse(result.output);
@@ -298,18 +298,25 @@ describe('config-get command', () => {
     );
   });
 
-  test('errors when config.json does not exist', () => {
-    const emptyTmpDir = createTempProject();
-    try {
+  describe('when config.json does not exist', () => {
+    let emptyTmpDir;
+
+    beforeEach(() => {
+      emptyTmpDir = createTempProject();
+    });
+
+    afterEach(() => {
+      cleanup(emptyTmpDir);
+    });
+
+    test('errors when config.json does not exist', () => {
       const result = runGsdTools('config-get model_profile', emptyTmpDir);
       assert.strictEqual(result.success, false);
       assert.ok(
         result.error.includes('No config.json'),
         `Expected "No config.json" in error: ${result.error}`
       );
-    } finally {
-      cleanup(emptyTmpDir);
-    }
+    });
   });
 
   test('errors when no key path provided', () => {
@@ -484,7 +491,7 @@ describe('config-set research_before_questions and discuss_mode', () => {
 
   beforeEach(() => {
     tmpDir = createTempProject();
-    runGsdTools('config-ensure-section', tmpDir);
+    runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
   });
 
   afterEach(() => {
@@ -599,7 +606,7 @@ describe('config-set-model-profile command', () => {
 
   beforeEach(() => {
     tmpDir = createTempProject();
-    runGsdTools('config-ensure-section', tmpDir);
+    runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
   });
 
   afterEach(() => {
@@ -620,7 +627,7 @@ describe('config-set-model-profile command', () => {
   });
 
   test('reports previous profile in output', () => {
-    const result = runGsdTools('config-set-model-profile budget', tmpDir);
+    const result = runGsdTools('config-set-model-profile budget', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const out = JSON.parse(result.output);
@@ -661,17 +668,24 @@ describe('config-set-model-profile command', () => {
     assert.strictEqual(result.success, false);
   });
 
-  test('creates config if missing before setting profile', () => {
-    const emptyDir = createTempProject();
-    try {
+  describe('when config is missing', () => {
+    let emptyDir;
+
+    beforeEach(() => {
+      emptyDir = createTempProject();
+    });
+
+    afterEach(() => {
+      cleanup(emptyDir);
+    });
+
+    test('creates config if missing before setting profile', () => {
       const result = runGsdTools('config-set-model-profile budget', emptyDir);
       assert.ok(result.success, `Command failed: ${result.error}`);
 
       const config = readConfig(emptyDir);
       assert.strictEqual(config.model_profile, 'budget');
-    } finally {
-      cleanup(emptyDir);
-    }
+    });
   });
 });
 
@@ -711,22 +725,26 @@ describe('config-set workflow.skip_discuss', () => {
     assert.strictEqual(config.workflow.skip_discuss, false);
   });
 
-  test('skip_discuss is present in config-new-project output', () => {
-    const emptyDir = createTempProject();
-    try {
+  describe('skip_discuss in config-new-project', () => {
+    let emptyDir;
+
+    beforeEach(() => {
+      emptyDir = createTempProject();
+    });
+
+    afterEach(() => {
+      cleanup(emptyDir);
+    });
+
+    test('skip_discuss is present in config-new-project output', () => {
       const result = runGsdTools(['config-new-project', '{}'], emptyDir, { HOME: emptyDir, USERPROFILE: emptyDir });
       assert.ok(result.success, `Command failed: ${result.error}`);
 
       const config = readConfig(emptyDir);
       assert.strictEqual(config.workflow.skip_discuss, false, 'skip_discuss should default to false');
-    } finally {
-      cleanup(emptyDir);
-    }
-  });
+    });
 
-  test('skip_discuss can be set via config-new-project choices', () => {
-    const emptyDir = createTempProject();
-    try {
+    test('skip_discuss can be set via config-new-project choices', () => {
       const choices = JSON.stringify({
         workflow: { skip_discuss: true },
       });
@@ -735,9 +753,7 @@ describe('config-set workflow.skip_discuss', () => {
 
       const config = readConfig(emptyDir);
       assert.strictEqual(config.workflow.skip_discuss, true);
-    } finally {
-      cleanup(emptyDir);
-    }
+    });
   });
 
   test('config-get workflow.skip_discuss returns the set value', () => {

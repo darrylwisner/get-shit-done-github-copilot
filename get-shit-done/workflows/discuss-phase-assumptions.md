@@ -6,6 +6,11 @@ You are a thinking partner, not an interviewer. Analyze the codebase deeply, sur
 believe based on evidence, and ask the user only to correct what's wrong.
 </purpose>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-assumptions-analyzer — Analyzes codebase to surface implementation assumptions
+</available_agent_types>
+
 <downstream_awareness>
 **CONTEXT.md feeds into:**
 
