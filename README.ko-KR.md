@@ -41,7 +41,7 @@ npx get-shit-done-cc@latest
 
 **Amazon, Google, Shopify, Webflow 엔지니어들이 신뢰합니다.**
 
-[왜 만들었나](#왜-만들었나) · [작동 방식](#작동-방식) · [명령어](#명령어) · [왜 효과적인가](#왜-효과적인가) · [사용자 가이드](docs/USER-GUIDE.md)
+[왜 만들었나](#왜-만들었나) · [작동 방식](#작동-방식) · [명령어](#명령어) · [왜 효과적인가](#왜-효과적인가) · [사용자 가이드](docs/ko-KR/USER-GUIDE.md)
 
 </div>
 
@@ -252,7 +252,7 @@ claude --dangerously-skip-permissions
 
 **생성 파일:** `{phase_num}-CONTEXT.md`
 
-> **가정 모드:** 질문보다 코드베이스 분석을 선호하나요? `/gsd:settings`에서 `workflow.discuss_mode`를 `assumptions`로 설정하세요. 시스템이 코드를 읽고 하려는 것과 이유를 제시한 다음 틀린 부분만 수정을 요청합니다. [논의 모드](docs/workflow-discuss-mode.md) 참조.
+> **가정 모드:** 질문보다 코드베이스 분석을 선호하나요? `/gsd:settings`에서 `workflow.discuss_mode`를 `assumptions`로 설정하세요. 시스템이 코드를 읽고 하려는 것과 이유를 제시한 다음 틀린 부분만 수정을 요청합니다. [논의 모드](docs/ko-KR/workflow-discuss-mode.md) 참조.
 
 ---
 
@@ -613,7 +613,7 @@ lmn012o feat(08-02): create registration endpoint
 
 ## 설정
 
-GSD는 프로젝트 설정을 `.planning/config.json`에 저장합니다. `/gsd:new-project` 중에 설정하거나 나중에 `/gsd:settings`로 업데이트할 수 있습니다. 전체 config 스키마, 워크플로우 토글, git 브랜칭 옵션, 에이전트별 모델 분석은 [사용자 가이드](docs/USER-GUIDE.md#configuration-reference)를 참조하세요.
+GSD는 프로젝트 설정을 `.planning/config.json`에 저장합니다. `/gsd:new-project` 중에 설정하거나 나중에 `/gsd:settings`로 업데이트할 수 있습니다. 전체 config 스키마, 워크플로우 토글, git 브랜칭 옵션, 에이전트별 모델 분석은 [사용자 가이드](docs/ko-KR/USER-GUIDE.md#configuration-reference)를 참조하세요.
 
 ### 핵심 설정
 
