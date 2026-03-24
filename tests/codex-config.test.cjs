@@ -277,12 +277,19 @@ describe('generateCodexConfigBlock', () => {
     assert.ok(!result.includes('max_depth'), 'no max_depth');
   });
 
-  test('includes per-agent sections', () => {
+  test('includes per-agent sections with relative paths (no targetDir)', () => {
     const result = generateCodexConfigBlock(agents);
     assert.ok(result.includes('[agents.gsd-executor]'), 'has executor section');
     assert.ok(result.includes('[agents.gsd-planner]'), 'has planner section');
-    assert.ok(result.includes('config_file = "agents/gsd-executor.toml"'), 'has executor config_file');
+    assert.ok(result.includes('config_file = "agents/gsd-executor.toml"'), 'relative config_file without targetDir');
     assert.ok(result.includes('"Executes plans"'), 'has executor description');
+  });
+
+  test('uses absolute config_file paths when targetDir is provided', () => {
+    const result = generateCodexConfigBlock(agents, '/home/user/.codex');
+    assert.ok(result.includes('config_file = "/home/user/.codex/agents/gsd-executor.toml"'), 'absolute executor path');
+    assert.ok(result.includes('config_file = "/home/user/.codex/agents/gsd-planner.toml"'), 'absolute planner path');
+    assert.ok(!result.includes('config_file = "agents/'), 'no relative paths when targetDir given');
   });
 });
 
@@ -739,6 +746,20 @@ describe('Codex install hook configuration (e2e)', () => {
     assertUsesOnlyEol(content, '\n');
   });
 
+  test('config_file paths are absolute using CODEX_HOME', () => {
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+    const agentsDir = path.join(codexHome, 'agents').replace(/\\/g, '/');
+    // All config_file values should use absolute paths
+    const configFileLines = content.split('\n').filter(l => l.startsWith('config_file = '));
+    assert.ok(configFileLines.length > 0, 'has config_file entries');
+    for (const line of configFileLines) {
+      assert.ok(line.includes(agentsDir), `absolute path in: ${line}`);
+    }
+    assert.ok(!content.includes('config_file = "agents/'), 'no relative config_file paths');
+  });
+
   test('existing LF config without [features] gets one features block and preserves user content', () => {
     writeCodexConfig(codexHome, [
       '# user comment',
@@ -763,6 +784,43 @@ describe('Codex install hook configuration (e2e)', () => {
     assertNoDraftRootKeys(content);
   });
 
+  test('bare top-level keys are NOT trapped under [features] (#1202)', () => {
+    // Real-world config: model= and model_reasoning_effort= at root level,
+    // followed by [projects] section. GSD must not prepend [features] before
+    // these keys, which would make Codex reject them as "expected a boolean".
+    writeCodexConfig(codexHome, [
+      'model = "gpt-5.4"',
+      'model_reasoning_effort = "high"',
+      '',
+      '[projects."/home/user/myproject"]',
+      'trust_level = "trusted"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+
+    // [features] must come AFTER bare top-level keys
+    const featuresIndex = content.indexOf('[features]');
+    const modelIndex = content.indexOf('model = "gpt-5.4"');
+    const reasoningIndex = content.indexOf('model_reasoning_effort = "high"');
+    assert.ok(modelIndex < featuresIndex, 'model= stays before [features]');
+    assert.ok(reasoningIndex < featuresIndex, 'model_reasoning_effort= stays before [features]');
+
+    // [features] should only contain boolean keys
+    const featuresMatch = content.match(/\[features\]\n([\s\S]*?)(?=\n\[|$)/);
+    assert.ok(featuresMatch, 'features section found');
+    const featuresBody = featuresMatch[1];
+    const nonBooleanKeys = featuresBody.split('\n')
+      .filter(line => line.match(/^\s*\w+\s*=/) && !line.match(/=\s*(true|false)\s*(#.*)?$/));
+    assert.strictEqual(nonBooleanKeys.length, 0, 'no non-boolean keys under [features]');
+
+    // User content preserved
+    assert.ok(content.includes('[projects."/home/user/myproject"]'), 'preserves project section');
+    assert.ok(content.includes('trust_level = "trusted"'), 'preserves project trust level');
+  });
+
   test('existing CRLF config without [features] preserves CRLF and adds codex_hooks', () => {
     writeCodexConfig(codexHome, '# user comment\r\n[model]\r\nname = "o3"\r\n');
 
@@ -771,7 +829,12 @@ describe('Codex install hook configuration (e2e)', () => {
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'creates one [features] section');
     assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'creates one codex_hooks key');
-    assert.ok(content.includes('# user comment\r\n[model]\r\nname = "o3"\r\n'), 'preserves existing CRLF content');
+    assert.ok(content.includes('# user comment'), 'preserves user comment');
+    assert.ok(content.includes('[model]\r\nname = "o3"'), 'preserves model section');
+    // [features] should be inserted between top-level lines and [model], not prepended
+    const featuresIndex = content.indexOf('[features]');
+    const modelIndex = content.indexOf('[model]');
+    assert.ok(featuresIndex < modelIndex, '[features] comes before [model]');
     assertUsesOnlyEol(content, '\r\n');
     assertNoDraftRootKeys(content);
   });
@@ -1239,7 +1302,8 @@ describe('Codex install hook configuration (e2e)', () => {
     runCodexInstall(codexHome);
 
     const content = readCodexConfig(codexHome);
-    assert.ok(content.includes('[features]\ncodex_hooks = true\n\n# first line wins\n'), 'prepends the features block using the first newline style');
+    // [features] is inserted after top-level lines, before [model] — not prepended
+    assert.ok(content.includes('# first line wins\n\n[features]\ncodex_hooks = true\n'), 'inserts features after top-level lines using first newline style');
     assert.ok(content.includes(`# GSD Agent Configuration — managed by get-shit-done installer\n`), 'writes the managed agent block using the first newline style');
     assert.ok(content.includes('# GSD Hooks\n[[hooks]]\nevent = "SessionStart"\n'), 'writes the GSD hook block using the first newline style');
     assert.ok(content.includes('[model]\r\nname = "o3"'), 'preserves the existing CRLF model lines');

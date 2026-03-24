@@ -135,7 +135,8 @@ function parseCurrentTest(content) {
 
   const numberMatch = section.match(/^number:\s*(\d+)\s*$/m);
   const nameMatch = section.match(/^name:\s*(.+)\s*$/m);
-  const expectedBlockMatch = section.match(/^expected:\s*\|\n([\s\S]*?)(?=^\w[\w-]*:\s|\Z)/m);
+  const expectedBlockMatch = section.match(/^expected:\s*\|\n([\s\S]*?)(?=^\w[\w-]*:\s)/m)
+    || section.match(/^expected:\s*\|\n([\s\S]+)/m);
   const expectedInlineMatch = section.match(/^expected:\s*(.+)\s*$/m);
 
   if (!numberMatch || !nameMatch || (!expectedBlockMatch && !expectedInlineMatch)) {

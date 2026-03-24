@@ -237,7 +237,6 @@ function sanitizeForDisplay(text) {
 
   const protocolLeakPatterns = [
     /^\s*(?:assistant|user|system)\s+to=[^:\s]+:[^\n]+$/i,
-    /^\s*(?:assistant|user|system)\s+to=all:[^\n]+$/i,
     /^\s*<\|(?:assistant|user|system)[^|]*\|>\s*$/i,
   ];
 

@@ -390,6 +390,51 @@ awaiting: user response
     assert.ok(result.output.includes('Chinese strings render correctly.'));
   });
 
+  test('does not truncate expected text containing the letter Z', () => {
+    fs.writeFileSync(uatPath, `---
+status: testing
+phase: 01-test-phase
+---
+
+## Current Test
+
+number: 3
+name: Timezone display
+expected: |
+  Timezone abbreviation shows CET.
+  Zero-offset zones display correctly.
+awaiting: user response
+`);
+
+    const result = runGsdTools(['uat', 'render-checkpoint', '--file', '.planning/phases/01-test-phase/01-UAT.md', '--raw'], tmpDir);
+    assert.strictEqual(result.success, true, `render-checkpoint failed: ${result.error}`);
+    assert.ok(result.output.includes('Timezone abbreviation shows CET.'),
+      'Expected text before Z-containing word should be present');
+    assert.ok(result.output.includes('Zero-offset zones display correctly.'),
+      'Expected text starting with Z should not be truncated by \\Z regex bug');
+  });
+
+  test('parses expected block when it is the last field in the section', () => {
+    fs.writeFileSync(uatPath, `---
+status: testing
+phase: 01-test-phase
+---
+
+## Current Test
+
+number: 4
+name: Final field test
+expected: |
+  This block has no trailing YAML key.
+  It ends at the section boundary.
+`);
+
+    const result = runGsdTools(['uat', 'render-checkpoint', '--file', '.planning/phases/01-test-phase/01-UAT.md', '--raw'], tmpDir);
+    assert.strictEqual(result.success, true, `render-checkpoint failed: ${result.error}`);
+    assert.ok(result.output.includes('This block has no trailing YAML key.'));
+    assert.ok(result.output.includes('It ends at the section boundary.'));
+  });
+
   test('fails when testing is already complete', () => {
     fs.writeFileSync(uatPath, `---
 status: complete
