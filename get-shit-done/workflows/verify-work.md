@@ -4,6 +4,12 @@ Validate built features through conversational testing with persistent state. Cr
 User tests, Claude records. One test at a time. Plain text responses.
 </purpose>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-planner — Creates detailed plans from phase scope
+- gsd-plan-checker — Reviews plan quality before execution
+</available_agent_types>
+
 <philosophy>
 **Show expected, ask if reality matches.**
 

@@ -14,6 +14,15 @@ Flags are composable: `--discuss --research --full` gives discussion + research 
 Read all files referenced by the invoking prompt's execution_context before starting.
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-phase-researcher — Researches technical approaches for a phase
+- gsd-planner — Creates detailed plans from phase scope
+- gsd-plan-checker — Reviews plan quality before execution
+- gsd-executor — Executes plan tasks, commits, creates SUMMARY.md
+- gsd-verifier — Verifies phase completion, checks quality gates
+</available_agent_types>
+
 <process>
 **Step 1: Parse arguments and get task description**
 

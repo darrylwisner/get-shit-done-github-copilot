@@ -47,16 +47,21 @@ function runGsdTools(args, cwd = process.cwd(), env = {}) {
   }
 }
 
+// Create a bare temp directory (no .planning/ structure)
+function createTempDir(prefix = 'gsd-test-') {
+  return fs.mkdtempSync(path.join(require('os').tmpdir(), prefix));
+}
+
 // Create temp directory structure
-function createTempProject() {
-  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gsd-test-'));
+function createTempProject(prefix = 'gsd-test-') {
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), prefix));
   fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
   return tmpDir;
 }
 
 // Create temp directory with initialized git repo and at least one commit
-function createTempGitProject() {
-  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gsd-test-'));
+function createTempGitProject(prefix = 'gsd-test-') {
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), prefix));
   fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
 
   execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
@@ -79,4 +84,4 @@ function cleanup(tmpDir) {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
-module.exports = { runGsdTools, createTempProject, createTempGitProject, cleanup, TOOLS_PATH };
+module.exports = { runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, TOOLS_PATH };

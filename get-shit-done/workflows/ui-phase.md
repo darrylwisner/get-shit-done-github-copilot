@@ -8,6 +8,12 @@ UI-SPEC.md locks spacing, typography, color, copywriting, and design system deci
 @~/.claude/get-shit-done/references/ui-brand.md
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-ui-researcher — Researches UI/UX approaches
+- gsd-ui-checker — Reviews UI implementation quality
+</available_agent_types>
+
 <process>
 
 ## 1. Initialize

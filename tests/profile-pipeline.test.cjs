@@ -10,7 +10,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
+const { runGsdTools, createTempDir, createTempProject, cleanup } = require('./helpers.cjs');
 
 // ─── scan-sessions ────────────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ describe('scan-sessions command', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-profile-test-'));
+    tmpDir = createTempDir('gsd-profile-test-');
   });
 
   afterEach(() => {
@@ -79,7 +79,7 @@ describe('extract-messages command', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-profile-test-'));
+    tmpDir = createTempDir('gsd-profile-test-');
   });
 
   afterEach(() => {

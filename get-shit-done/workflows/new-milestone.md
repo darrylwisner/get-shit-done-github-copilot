@@ -10,6 +10,13 @@ Read all files referenced by the invoking prompt's execution_context before star
 
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-project-researcher — Researches project-level technical decisions
+- gsd-research-synthesizer — Synthesizes findings from parallel research agents
+- gsd-roadmapper — Creates phased execution roadmaps
+</available_agent_types>
+
 <process>
 
 ## 1. Load Context

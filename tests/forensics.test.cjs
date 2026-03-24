@@ -5,7 +5,7 @@
  * follow expected patterns, and cover all anomaly detection types.
  */
 
-const { test, describe } = require('node:test');
+const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
@@ -188,71 +188,56 @@ describe('forensics report structure', () => {
 describe('forensics fixture-based tests', () => {
   let tmpDir;
 
-  function setup() {
+  beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-forensics-test-'));
-  }
+  });
 
-  function teardown() {
+  afterEach(() => {
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
+  });
 
   test('detects missing artifacts in phase structure', () => {
-    setup();
-    try {
-      // Phase 1: complete
-      const phase1 = path.join(tmpDir, '.planning', 'phases', '01-setup');
-      fs.mkdirSync(phase1, { recursive: true });
-      fs.writeFileSync(path.join(phase1, '01-PLAN-A.md'), 'plan');
-      fs.writeFileSync(path.join(phase1, '01-SUMMARY.md'), 'summary');
-      fs.writeFileSync(path.join(phase1, '01-VERIFICATION.md'), 'verification');
+    // Phase 1: complete
+    const phase1 = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(phase1, { recursive: true });
+    fs.writeFileSync(path.join(phase1, '01-PLAN-A.md'), 'plan');
+    fs.writeFileSync(path.join(phase1, '01-SUMMARY.md'), 'summary');
+    fs.writeFileSync(path.join(phase1, '01-VERIFICATION.md'), 'verification');
 
-      // Phase 2: missing SUMMARY and VERIFICATION (anomaly)
-      const phase2 = path.join(tmpDir, '.planning', 'phases', '02-core');
-      fs.mkdirSync(phase2, { recursive: true });
-      fs.writeFileSync(path.join(phase2, '02-PLAN-A.md'), 'plan');
+    // Phase 2: missing SUMMARY and VERIFICATION (anomaly)
+    const phase2 = path.join(tmpDir, '.planning', 'phases', '02-core');
+    fs.mkdirSync(phase2, { recursive: true });
+    fs.writeFileSync(path.join(phase2, '02-PLAN-A.md'), 'plan');
 
-      // Verify detection
-      const p1Files = fs.readdirSync(phase1);
-      const p2Files = fs.readdirSync(phase2);
+    // Verify detection
+    const p1Files = fs.readdirSync(phase1);
+    const p2Files = fs.readdirSync(phase2);
 
-      assert.ok(p1Files.some(f => f.includes('SUMMARY')), 'phase 1 has SUMMARY');
-      assert.ok(p1Files.some(f => f.includes('VERIFICATION')), 'phase 1 has VERIFICATION');
-      assert.ok(!p2Files.some(f => f.includes('SUMMARY')), 'phase 2 missing SUMMARY (anomaly)');
-      assert.ok(!p2Files.some(f => f.includes('VERIFICATION')), 'phase 2 missing VERIFICATION (anomaly)');
-    } finally {
-      teardown();
-    }
+    assert.ok(p1Files.some(f => f.includes('SUMMARY')), 'phase 1 has SUMMARY');
+    assert.ok(p1Files.some(f => f.includes('VERIFICATION')), 'phase 1 has VERIFICATION');
+    assert.ok(!p2Files.some(f => f.includes('SUMMARY')), 'phase 2 missing SUMMARY (anomaly)');
+    assert.ok(!p2Files.some(f => f.includes('VERIFICATION')), 'phase 2 missing VERIFICATION (anomaly)');
   });
 
   test('forensics report directory can be created', () => {
-    setup();
-    try {
-      const forensicsDir = path.join(tmpDir, '.planning', 'forensics');
-      fs.mkdirSync(forensicsDir, { recursive: true });
-      const reportPath = path.join(forensicsDir, 'report-20260321-150000.md');
-      fs.writeFileSync(reportPath, '# Forensic Report\n');
+    const forensicsDir = path.join(tmpDir, '.planning', 'forensics');
+    fs.mkdirSync(forensicsDir, { recursive: true });
+    const reportPath = path.join(forensicsDir, 'report-20260321-150000.md');
+    fs.writeFileSync(reportPath, '# Forensic Report\n');
 
-      assert.ok(fs.existsSync(reportPath), 'report file should be created');
-      const content = fs.readFileSync(reportPath, 'utf-8');
-      assert.ok(content.includes('Forensic Report'), 'report should have header');
-    } finally {
-      teardown();
-    }
+    assert.ok(fs.existsSync(reportPath), 'report file should be created');
+    const content = fs.readFileSync(reportPath, 'utf-8');
+    assert.ok(content.includes('Forensic Report'), 'report should have header');
   });
 
   test('handles project with no .planning directory', () => {
-    setup();
-    try {
-      // No .planning/ at all
-      const planningExists = fs.existsSync(path.join(tmpDir, '.planning'));
-      assert.strictEqual(planningExists, false, 'no .planning/ should exist');
+    // No .planning/ at all
+    const planningExists = fs.existsSync(path.join(tmpDir, '.planning'));
+    assert.strictEqual(planningExists, false, 'no .planning/ should exist');
 
-      // Forensics should still work with git data
-      const forensicsDir = path.join(tmpDir, '.planning', 'forensics');
-      fs.mkdirSync(forensicsDir, { recursive: true });
-      assert.ok(fs.existsSync(forensicsDir), 'forensics dir created on demand');
-    } finally {
-      teardown();
-    }
+    // Forensics should still work with git data
+    const forensicsDir = path.join(tmpDir, '.planning', 'forensics');
+    fs.mkdirSync(forensicsDir, { recursive: true });
+    assert.ok(fs.existsSync(forensicsDir), 'forensics dir created on demand');
   });
 });

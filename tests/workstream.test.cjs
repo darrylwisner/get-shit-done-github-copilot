@@ -2,7 +2,7 @@
  * Workstream Tests — CRUD, env-var routing, collision detection
  */
 
-const { describe, test, before, after } = require('node:test');
+const { describe, test, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -162,16 +162,23 @@ describe('workstream list', () => {
     assert.deepStrictEqual(names, ['alpha', 'beta']);
   });
 
-  test('reports flat mode when no workstreams exist', () => {
-    const flatDir = createTempProject();
-    try {
+  describe('flat mode', () => {
+    let flatDir;
+
+    beforeEach(() => {
+      flatDir = createTempProject();
+    });
+
+    afterEach(() => {
+      cleanup(flatDir);
+    });
+
+    test('reports flat mode when no workstreams exist', () => {
       const result = runGsdTools(['workstream', 'list', '--raw'], flatDir);
       assert.ok(result.success);
       const data = JSON.parse(result.output);
       assert.strictEqual(data.mode, 'flat');
-    } finally {
-      cleanup(flatDir);
-    }
+    });
   });
 });
 

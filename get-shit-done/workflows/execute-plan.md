@@ -9,6 +9,11 @@ Read config.json for planning behavior settings.
 @~/.claude/get-shit-done/references/git-integration.md
 </required_reading>
 
+<available_agent_types>
+Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
+- gsd-executor — Executes plan tasks, commits, creates SUMMARY.md
+</available_agent_types>
+
 <process>
 
 <step name="init_context" priority="first">
