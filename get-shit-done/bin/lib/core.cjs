@@ -58,13 +58,15 @@ function findProjectRoot(startDir) {
   const root = path.parse(resolved).root;
   const homedir = require('os').homedir();
 
-  // Check if startDir or any of its ancestors (up to but not including a
+  // Check if startDir or any of its ancestors (up to AND including the
   // candidate project root) contains a .git directory. This handles both
-  // `backend/` (direct sub-repo) and `backend/src/modules/` (nested inside).
+  // `backend/` (direct sub-repo) and `backend/src/modules/` (nested inside),
+  // as well as the common case where .git lives at the same level as .planning/.
   function isInsideGitRepo(candidateParent) {
     let d = resolved;
-    while (d !== candidateParent && d !== root) {
+    while (d !== root) {
       if (fs.existsSync(path.join(d, '.git'))) return true;
+      if (d === candidateParent) break;
       d = path.dirname(d);
     }
     return false;

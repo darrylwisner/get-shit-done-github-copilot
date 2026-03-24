@@ -29,6 +29,7 @@ Bootstrap via milestone-level init:
 
 ```bash
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init milestone-op)
+if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
 Parse JSON for: `milestone_version`, `milestone_name`, `phase_count`, `completed_phases`, `roadmap_exists`, `state_exists`, `commit_docs`.
@@ -351,9 +352,9 @@ Read project-level and prior phase context to avoid re-asking decided questions.
 **Read project files:**
 
 ```bash
-cat .planning/PROJECT.md 2>/dev/null
-cat .planning/REQUIREMENTS.md 2>/dev/null
-cat .planning/STATE.md 2>/dev/null
+cat .planning/PROJECT.md 2>/dev/null || true
+cat .planning/REQUIREMENTS.md 2>/dev/null || true
+cat .planning/STATE.md 2>/dev/null || true
 ```
 
 Extract from these:
@@ -364,7 +365,7 @@ Extract from these:
 **Read all prior CONTEXT.md files:**
 
 ```bash
-find .planning/phases -name "*-CONTEXT.md" 2>/dev/null | sort
+(find .planning/phases -name "*-CONTEXT.md" 2>/dev/null || true) | sort
 ```
 
 For each CONTEXT.md where phase number < current phase:
@@ -398,7 +399,7 @@ Lightweight codebase scan to inform grey area identification and proposals. Keep
 **Check for existing codebase maps:**
 
 ```bash
-ls .planning/codebase/*.md 2>/dev/null
+ls .planning/codebase/*.md 2>/dev/null || true
 ```
 
 **If codebase maps exist:** Read the most relevant ones (CONVENTIONS.md, STRUCTURE.md, STACK.md based on phase type). Extract reusable components, established patterns, integration points. Skip to building context below.
@@ -408,8 +409,8 @@ ls .planning/codebase/*.md 2>/dev/null
 Extract key terms from the phase goal. Search for related files:
 
 ```bash
-grep -rl "{term1}\|{term2}" src/ app/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null | head -10
-ls src/components/ src/hooks/ src/lib/ src/utils/ 2>/dev/null
+grep -rl "{term1}\|{term2}" src/ app/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null | head -10 || true
+ls src/components/ src/hooks/ src/lib/ src/utils/ 2>/dev/null || true
 ```
 
 Read the 3-5 most relevant files to understand existing patterns.
@@ -721,7 +722,7 @@ Skill(skill="gsd:complete-milestone", args="${milestone_version}")
 After complete-milestone returns, verify it produced output:
 
 ```bash
-ls .planning/milestones/v${milestone_version}-ROADMAP.md 2>/dev/null
+ls .planning/milestones/v${milestone_version}-ROADMAP.md 2>/dev/null || true
 ```
 
 If the archive file does not exist, go to handle_blocker: "Complete milestone did not produce expected archive files."

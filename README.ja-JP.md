@@ -2,13 +2,13 @@
 
 # GET SHIT DONE
 
-[English](README.md) · [简体中文](README.zh-CN.md) · **日本語**
+[English](README.md) · [Português](README.pt-BR.md) · [简体中文](README.zh-CN.md) · **日本語**
 
 **Claude Code、OpenCode、Gemini CLI、Codex、Copilot、Antigravity向けの軽量かつ強力なメタプロンプティング、コンテキストエンジニアリング、仕様駆動開発システム。**
 
 **コンテキストロット（Claudeがコンテキストウィンドウを消費するにつれ品質が劣化する現象）を解決します。**
 
-[**English**](README.md) | [**简体中文**](docs/zh-CN/README.md) | [**日本語**](docs/ja-JP/README.md)
+[**English**](README.md) | [**Português**](README.pt-BR.md) | [**简体中文**](docs/zh-CN/README.md) | [**日本語**](docs/ja-JP/README.md)
 
 [![npm version](https://img.shields.io/npm/v/get-shit-done-cc?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/get-shit-done-cc)
 [![npm downloads](https://img.shields.io/npm/dm/get-shit-done-cc?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/get-shit-done-cc)

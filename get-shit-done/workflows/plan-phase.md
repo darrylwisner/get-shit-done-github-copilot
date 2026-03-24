@@ -339,7 +339,7 @@ If `research_enabled` is false and `nyquist_validation_enabled` is true: warn "N
 In that case: **skip validation-strategy creation entirely**. Do **not** expect `RESEARCH.md` or `VALIDATION.md` for this run, and continue to Step 6.
 
 ```bash
-grep -l "## Validation Architecture" "${PHASE_DIR}"/*-RESEARCH.md 2>/dev/null
+grep -l "## Validation Architecture" "${PHASE_DIR}"/*-RESEARCH.md 2>/dev/null || true
 ```
 
 **If found:**
@@ -409,7 +409,7 @@ Otherwise use AskUserQuestion:
 ## 6. Check Existing Plans
 
 ```bash
-ls "${PHASE_DIR}"/*-PLAN.md 2>/dev/null
+ls "${PHASE_DIR}"/*-PLAN.md 2>/dev/null || true
 ```
 
 **If exists AND `--reviews` flag:** Skip prompt — go straight to replanning (the purpose of `--reviews` is to replan with review feedback).
