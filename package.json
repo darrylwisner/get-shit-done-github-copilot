@@ -29,11 +29,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/glittercowboy/get-shit-done.git"
+    "url": "git+https://github.com/gsd-build/get-shit-done.git"
   },
-  "homepage": "https://github.com/glittercowboy/get-shit-done",
+  "homepage": "https://github.com/gsd-build/get-shit-done",
   "bugs": {
-    "url": "https://github.com/glittercowboy/get-shit-done/issues"
+    "url": "https://github.com/gsd-build/get-shit-done/issues"
   },
   "engines": {
     "node": ">=20.0.0"

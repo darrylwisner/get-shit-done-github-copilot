@@ -33,6 +33,7 @@ Load codebase mapping context:
 ```bash
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init map-codebase)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
+AGENT_SKILLS_MAPPER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-codebase-mapper 2>/dev/null)
 ```
 
 Extract from init JSON: `mapper_model`, `commit_docs`, `codebase_dir`, `existing_maps`, `has_maps`, `codebase_dir_exists`.
@@ -120,7 +121,8 @@ Write these documents to .planning/codebase/:
 - STACK.md - Languages, runtime, frameworks, dependencies, configuration
 - INTEGRATIONS.md - External APIs, databases, auth providers, webhooks
 
-Explore thoroughly. Write documents directly using templates. Return confirmation only."
+Explore thoroughly. Write documents directly using templates. Return confirmation only.
+${AGENT_SKILLS_MAPPER}"
 )
 ```
 
@@ -140,7 +142,8 @@ Write these documents to .planning/codebase/:
 - ARCHITECTURE.md - Pattern, layers, data flow, abstractions, entry points
 - STRUCTURE.md - Directory layout, key locations, naming conventions
 
-Explore thoroughly. Write documents directly using templates. Return confirmation only."
+Explore thoroughly. Write documents directly using templates. Return confirmation only.
+${AGENT_SKILLS_MAPPER}"
 )
 ```
 
@@ -160,7 +163,8 @@ Write these documents to .planning/codebase/:
 - CONVENTIONS.md - Code style, naming, patterns, error handling
 - TESTING.md - Framework, structure, mocking, coverage
 
-Explore thoroughly. Write documents directly using templates. Return confirmation only."
+Explore thoroughly. Write documents directly using templates. Return confirmation only.
+${AGENT_SKILLS_MAPPER}"
 )
 ```
 
@@ -179,7 +183,8 @@ Analyze this codebase for technical debt, known issues, and areas of concern.
 Write this document to .planning/codebase/:
 - CONCERNS.md - Tech debt, bugs, security, performance, fragile areas
 
-Explore thoroughly. Write document directly using template. Return confirmation only."
+Explore thoroughly. Write document directly using template. Return confirmation only.
+${AGENT_SKILLS_MAPPER}"
 )
 ```
 

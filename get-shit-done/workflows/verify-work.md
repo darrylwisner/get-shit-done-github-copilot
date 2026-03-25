@@ -32,6 +32,8 @@ If $ARGUMENTS contains a phase number, load context:
 ```bash
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init verify-work "${PHASE_ARG}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
+AGENT_SKILLS_PLANNER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-planner 2>/dev/null)
+AGENT_SKILLS_CHECKER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-checker 2>/dev/null)
 ```
 
 Parse JSON for: `planner_model`, `checker_model`, `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `has_verification`, `uat_path`.
@@ -431,6 +433,8 @@ Task(
 - .planning/ROADMAP.md (Roadmap)
 </files_to_read>
 
+${AGENT_SKILLS_PLANNER}
+
 </planning_context>
 
 <downstream_consumer>
@@ -477,6 +481,8 @@ Task(
 - {phase_dir}/*-PLAN.md (Plans to verify)
 </files_to_read>
 
+${AGENT_SKILLS_CHECKER}
+
 </verification_context>
 
 <expected_output>
@@ -516,6 +522,8 @@ Task(
 <files_to_read>
 - {phase_dir}/*-PLAN.md (Existing plans)
 </files_to_read>
+
+${AGENT_SKILLS_PLANNER}
 
 **Checker issues:**
 {structured_issues_from_checker}

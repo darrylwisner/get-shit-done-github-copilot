@@ -146,6 +146,9 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: start milesto
 ```bash
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init new-milestone)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
+AGENT_SKILLS_RESEARCHER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-project-researcher 2>/dev/null)
+AGENT_SKILLS_SYNTHESIZER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-synthesizer 2>/dev/null)
+AGENT_SKILLS_ROADMAPPER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-roadmapper 2>/dev/null)
 ```
 
 Extract from init JSON: `researcher_model`, `synthesizer_model`, `roadmapper_model`, `commit_docs`, `research_enabled`, `current_milestone`, `project_exists`, `roadmap_exists`, `latest_completed_milestone`, `phase_dir_count`, `phase_archive_path`.
@@ -222,6 +225,8 @@ Focus ONLY on what's needed for the NEW features.
 - .planning/PROJECT.md (Project context)
 </files_to_read>
 
+${AGENT_SKILLS_RESEARCHER}
+
 <downstream_consumer>{CONSUMER}</downstream_consumer>
 
 <quality_gate>{GATES}</quality_gate>
@@ -255,6 +260,8 @@ Synthesize research outputs into SUMMARY.md.
 - .planning/research/ARCHITECTURE.md
 - .planning/research/PITFALLS.md
 </files_to_read>
+
+${AGENT_SKILLS_SYNTHESIZER}
 
 Write to: .planning/research/SUMMARY.md
 Use template: ~/.claude/get-shit-done/templates/research-project/SUMMARY.md
@@ -370,6 +377,9 @@ Task(prompt="
 - .planning/config.json
 - .planning/MILESTONES.md
 </files_to_read>
+
+${AGENT_SKILLS_ROADMAPPER}
+
 </planning_context>
 
 <instructions>
