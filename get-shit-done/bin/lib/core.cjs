@@ -309,6 +309,7 @@ function loadConfig(cwd) {
       context_window: get('context_window') ?? defaults.context_window,
       phase_naming: get('phase_naming') ?? defaults.phase_naming,
       model_overrides: parsed.model_overrides || null,
+      agent_skills: parsed.agent_skills || {},
     };
   } catch {
     return defaults;

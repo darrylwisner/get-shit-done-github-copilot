@@ -42,6 +42,7 @@ If exists: Offer update/view/skip options.
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op "${PHASE}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 # Extract: phase_dir, padded_phase, phase_number, state_path, requirements_path, context_path
+AGENT_SKILLS_RESEARCHER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-researcher 2>/dev/null)
 ```
 
 ## Step 4: Spawn Researcher
@@ -57,6 +58,8 @@ Research implementation approach for Phase {phase}: {name}
 - {requirements_path} (Project requirements)
 - {state_path} (Project decisions and history)
 </files_to_read>
+
+${AGENT_SKILLS_RESEARCHER}
 
 <additional_context>
 Phase description: {description}

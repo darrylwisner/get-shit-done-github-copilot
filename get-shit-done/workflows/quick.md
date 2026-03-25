@@ -118,6 +118,10 @@ If `$FULL_MODE` only:
 ```bash
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init quick "$DESCRIPTION")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
+AGENT_SKILLS_PLANNER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-planner 2>/dev/null)
+AGENT_SKILLS_EXECUTOR=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-executor 2>/dev/null)
+AGENT_SKILLS_CHECKER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-checker 2>/dev/null)
+AGENT_SKILLS_VERIFIER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-verifier 2>/dev/null)
 ```
 
 Parse JSON for: `planner_model`, `executor_model`, `checker_model`, `verifier_model`, `commit_docs`, `branch_name`, `quick_id`, `slug`, `date`, `timestamp`, `quick_dir`, `task_dir`, `roadmap_exists`, `planning_exists`.
@@ -327,6 +331,8 @@ Task(
 ${DISCUSS_MODE ? '- ' + QUICK_DIR + '/' + quick_id + '-CONTEXT.md (User decisions — research should align with these)' : ''}
 </files_to_read>
 
+${AGENT_SKILLS_PLANNER}
+
 </research_context>
 
 <focus>
@@ -380,6 +386,8 @@ Task(
 ${DISCUSS_MODE ? '- ' + QUICK_DIR + '/' + quick_id + '-CONTEXT.md (User decisions — locked, do not revisit)' : ''}
 ${RESEARCH_MODE ? '- ' + QUICK_DIR + '/' + quick_id + '-RESEARCH.md (Research findings — use to inform implementation choices)' : ''}
 </files_to_read>
+
+${AGENT_SKILLS_PLANNER}
 
 **Project skills:** Check .claude/skills/ or .agents/skills/ directory (if either exists) — read SKILL.md files, plans should account for project skill rules
 
@@ -438,6 +446,8 @@ Checker prompt:
 - ${QUICK_DIR}/${quick_id}-PLAN.md (Plan to verify)
 </files_to_read>
 
+${AGENT_SKILLS_CHECKER}
+
 **Scope:** This is a quick task, not a full phase. Skip checks that require a ROADMAP phase goal.
 </verification_context>
 
@@ -490,6 +500,8 @@ Revision prompt:
 - ${QUICK_DIR}/${quick_id}-PLAN.md (Existing plan)
 </files_to_read>
 
+${AGENT_SKILLS_PLANNER}
+
 **Checker issues:** ${structured_issues_from_checker}
 
 </revision_context>
@@ -535,6 +547,8 @@ Execute quick task ${quick_id}.
 - ./CLAUDE.md (Project instructions, if exists)
 - .claude/skills/ or .agents/skills/ (Project skills, if either exists — list skills, read SKILL.md for each, follow relevant rules during implementation)
 </files_to_read>
+
+${AGENT_SKILLS_EXECUTOR}
 
 <constraints>
 - Execute all tasks in the plan
@@ -585,6 +599,8 @@ Task goal: ${DESCRIPTION}
 <files_to_read>
 - ${QUICK_DIR}/${quick_id}-PLAN.md (Plan)
 </files_to_read>
+
+${AGENT_SKILLS_VERIFIER}
 
 Check must_haves against actual codebase. Create VERIFICATION.md at ${QUICK_DIR}/${quick_id}-VERIFICATION.md.",
   subagent_type="gsd-verifier",

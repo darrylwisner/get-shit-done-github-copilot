@@ -59,6 +59,9 @@ The document should describe what you want to build.
 ```bash
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init new-project)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
+AGENT_SKILLS_RESEARCHER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-project-researcher 2>/dev/null)
+AGENT_SKILLS_SYNTHESIZER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-synthesizer 2>/dev/null)
+AGENT_SKILLS_ROADMAPPER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-roadmapper 2>/dev/null)
 ```
 
 Parse JSON for: `researcher_model`, `synthesizer_model`, `roadmapper_model`, `commit_docs`, `project_exists`, `has_codebase_map`, `planning_exists`, `has_existing_code`, `has_package_file`, `is_brownfield`, `needs_codebase_map`, `has_git`, `project_path`.
@@ -630,6 +633,8 @@ What's the standard 2025 stack for [domain]?
 - {project_path} (Project context and goals)
 </files_to_read>
 
+${AGENT_SKILLS_RESEARCHER}
+
 <downstream_consumer>
 Your STACK.md feeds into roadmap creation. Be prescriptive:
 - Specific libraries with versions
@@ -667,6 +672,8 @@ What features do [domain] products have? What's table stakes vs differentiating?
 <files_to_read>
 - {project_path} (Project context)
 </files_to_read>
+
+${AGENT_SKILLS_RESEARCHER}
 
 <downstream_consumer>
 Your FEATURES.md feeds into requirements definition. Categorize clearly:
@@ -706,6 +713,8 @@ How are [domain] systems typically structured? What are major components?
 - {project_path} (Project context)
 </files_to_read>
 
+${AGENT_SKILLS_RESEARCHER}
+
 <downstream_consumer>
 Your ARCHITECTURE.md informs phase structure in roadmap. Include:
 - Component boundaries (what talks to what)
@@ -744,6 +753,8 @@ What do [domain] projects commonly get wrong? Critical mistakes?
 - {project_path} (Project context)
 </files_to_read>
 
+${AGENT_SKILLS_RESEARCHER}
+
 <downstream_consumer>
 Your PITFALLS.md prevents mistakes in roadmap/planning. For each pitfall:
 - Warning signs (how to detect early)
@@ -778,6 +789,8 @@ Synthesize research outputs into SUMMARY.md.
 - .planning/research/ARCHITECTURE.md
 - .planning/research/PITFALLS.md
 </files_to_read>
+
+${AGENT_SKILLS_SYNTHESIZER}
 
 <output>
 Write to: .planning/research/SUMMARY.md
@@ -984,6 +997,8 @@ Task(prompt="
 - .planning/config.json (Granularity and mode settings)
 </files_to_read>
 
+${AGENT_SKILLS_ROADMAPPER}
+
 </planning_context>
 
 <instructions>
@@ -1077,6 +1092,8 @@ Use AskUserQuestion:
   <files_to_read>
   - .planning/ROADMAP.md (Current roadmap to revise)
   </files_to_read>
+
+  ${AGENT_SKILLS_ROADMAPPER}
 
   Update the roadmap based on feedback. Edit files in place.
   Return ROADMAP REVISED with changes made.

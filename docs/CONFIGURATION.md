@@ -63,7 +63,8 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd:new
   "safety": {
     "always_confirm_destructive": true,
     "always_confirm_external_services": true
-  }
+  },
+  "agent_skills": {}
 }
 ```
 
@@ -137,6 +138,72 @@ To keep planning artifacts out of git:
 1. Set `planning.commit_docs: false` and `planning.search_gitignored: true`
 2. Add `.planning/` to `.gitignore`
 3. If previously tracked: `git rm -r --cached .planning/ && git commit -m "chore: stop tracking planning docs"`
+
+---
+
+## Agent Skills Injection
+
+Inject custom skill files into GSD subagent prompts. Skills are read by agents at spawn time, giving them project-specific instructions beyond what CLAUDE.md provides.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `agent_skills` | object | `{}` | Map of agent types to skill directory paths |
+
+### Configuration
+
+Add an `agent_skills` section to `.planning/config.json` mapping agent types to arrays of skill directory paths (relative to project root):
+
+```json
+{
+  "agent_skills": {
+    "gsd-executor": ["skills/testing-standards", "skills/api-conventions"],
+    "gsd-planner": ["skills/architecture-rules"],
+    "gsd-verifier": ["skills/acceptance-criteria"]
+  }
+}
+```
+
+Each path must be a directory containing a `SKILL.md` file. Paths are validated for safety (no traversal outside project root).
+
+### Supported Agent Types
+
+Any GSD agent type can receive skills. Common types:
+
+- `gsd-executor` -- executes implementation plans
+- `gsd-planner` -- creates phase plans
+- `gsd-checker` -- verifies plan quality
+- `gsd-verifier` -- post-execution verification
+- `gsd-researcher` -- phase research
+- `gsd-project-researcher` -- new-project research
+- `gsd-debugger` -- diagnostic agents
+- `gsd-codebase-mapper` -- codebase analysis
+- `gsd-advisor` -- discuss-phase advisors
+- `gsd-ui-researcher` -- UI design contract creation
+- `gsd-ui-checker` -- UI spec verification
+- `gsd-roadmapper` -- roadmap creation
+- `gsd-synthesizer` -- research synthesis
+
+### How It Works
+
+At spawn time, workflows call `node gsd-tools.cjs agent-skills <type>` to load configured skills. If skills exist for the agent type, they are injected as an `<agent_skills>` block in the Task() prompt:
+
+```xml
+<agent_skills>
+Read these user-configured skills:
+- @skills/testing-standards/SKILL.md
+- @skills/api-conventions/SKILL.md
+</agent_skills>
+```
+
+If no skills are configured, the block is omitted (zero overhead).
+
+### CLI
+
+Set skills via the CLI:
+
+```bash
+node gsd-tools.cjs config-set agent_skills.gsd-executor '["skills/my-skill"]'
+```
 
 ---
 

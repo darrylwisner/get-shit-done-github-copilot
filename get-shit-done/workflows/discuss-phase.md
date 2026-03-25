@@ -134,6 +134,7 @@ Phase number from argument (required).
 ```bash
 INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op "${PHASE}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
+AGENT_SKILLS_ADVISOR=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-advisor 2>/dev/null)
 ```
 
 Parse JSON for: `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded_phase`, `has_research`, `has_context`, `has_plans`, `has_verification`, `plan_count`, `roadmap_exists`, `planning_exists`.
@@ -498,7 +499,8 @@ After user selects gray areas in present_gray_areas, spawn parallel research age
      <project_context>{project name and brief description from PROJECT.md}</project_context>
      <calibration_tier>{resolved calibration tier: full_maturity | standard | minimal_decisive}</calibration_tier>
 
-     Research this gray area and return a structured comparison table with rationale.",
+     Research this gray area and return a structured comparison table with rationale.
+     ${AGENT_SKILLS_ADVISOR}",
      subagent_type="general-purpose",
      model="{ADVISOR_MODEL}",
      description="Research: {area_name}"
