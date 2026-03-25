@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, planningPaths, planningDir, planningRoot, toPosixPath, output, error } = require('./core.cjs');
+const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, planningPaths, planningDir, planningRoot, toPosixPath, output, error, checkAgentsInstalled } = require('./core.cjs');
 
 function getLatestCompletedMilestone(cwd) {
   const milestonesPath = path.join(planningRoot(cwd), 'MILESTONES.md');
@@ -31,6 +31,12 @@ function getLatestCompletedMilestone(cwd) {
  */
 function withProjectRoot(cwd, result) {
   result.project_root = cwd;
+  // Inject agent installation status into all init outputs (#1371).
+  // Workflows that spawn named subagents use this to detect when agents
+  // are missing and would silently fall back to general-purpose.
+  const agentStatus = checkAgentsInstalled();
+  result.agents_installed = agentStatus.agents_installed;
+  result.missing_agents = agentStatus.missing_agents;
   return result;
 }
 

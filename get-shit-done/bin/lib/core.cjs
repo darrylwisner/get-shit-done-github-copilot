@@ -932,6 +932,58 @@ function getRoadmapPhaseInternal(cwd, phaseNum) {
   }
 }
 
+// ─── Agent installation validation (#1371) ───────────────────────────────────
+
+/**
+ * Resolve the agents directory from the GSD install location.
+ * gsd-tools.cjs lives at <configDir>/get-shit-done/bin/gsd-tools.cjs,
+ * so agents/ is at <configDir>/agents/.
+ *
+ * @returns {string} Absolute path to the agents directory
+ */
+function getAgentsDir() {
+  // __dirname is get-shit-done/bin/lib/ → go up 3 levels to configDir
+  return path.join(__dirname, '..', '..', '..', 'agents');
+}
+
+/**
+ * Check which GSD agents are installed on disk.
+ * Returns an object with installation status and details.
+ *
+ * @returns {{ agents_installed: boolean, missing_agents: string[], installed_agents: string[], agents_dir: string }}
+ */
+function checkAgentsInstalled() {
+  const agentsDir = getAgentsDir();
+  const expectedAgents = Object.keys(MODEL_PROFILES);
+  const installed = [];
+  const missing = [];
+
+  if (!fs.existsSync(agentsDir)) {
+    return {
+      agents_installed: false,
+      missing_agents: expectedAgents,
+      installed_agents: [],
+      agents_dir: agentsDir,
+    };
+  }
+
+  for (const agent of expectedAgents) {
+    const agentFile = path.join(agentsDir, `${agent}.md`);
+    if (fs.existsSync(agentFile)) {
+      installed.push(agent);
+    } else {
+      missing.push(agent);
+    }
+  }
+
+  return {
+    agents_installed: installed.length > 0 && missing.length === 0,
+    missing_agents: missing,
+    installed_agents: installed,
+    agents_dir: agentsDir,
+  };
+}
+
 // ─── Model alias resolution ───────────────────────────────────────────────────
 
 /**
@@ -1173,4 +1225,6 @@ module.exports = {
   filterSummaryFiles,
   getPhaseFileStats,
   readSubdirectories,
+  getAgentsDir,
+  checkAgentsInstalled,
 };

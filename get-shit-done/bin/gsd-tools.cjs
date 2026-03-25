@@ -58,6 +58,7 @@
  * Validation:
  *   validate consistency               Check phase numbering, disk/roadmap sync
  *   validate health [--repair]         Check .planning/ integrity, optionally repair
+ *   validate agents                    Check GSD agent installation status
  *
  * Progress:
  *   progress [json|table|bar]          Render progress in various formats
@@ -648,8 +649,10 @@ async function runCommand(command, args, cwd, raw) {
       } else if (subcommand === 'health') {
         const repairFlag = args.includes('--repair');
         verify.cmdValidateHealth(cwd, { repair: repairFlag }, raw);
+      } else if (subcommand === 'agents') {
+        verify.cmdValidateAgents(cwd, raw);
       } else {
-        error('Unknown validate subcommand. Available: consistency, health');
+        error('Unknown validate subcommand. Available: consistency, health, agents');
       }
       break;
     }
