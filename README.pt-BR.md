@@ -395,6 +395,7 @@ CLAUDE_CONFIG_DIR=/home/youruser/.claude npx get-shit-done-cc --global
 ### Desinstalar
 
 ```bash
+# Instalações globais
 npx get-shit-done-cc --claude --global --uninstall
 npx get-shit-done-cc --opencode --global --uninstall
 npx get-shit-done-cc --gemini --global --uninstall
@@ -402,6 +403,15 @@ npx get-shit-done-cc --codex --global --uninstall
 npx get-shit-done-cc --copilot --global --uninstall
 npx get-shit-done-cc --cursor --global --uninstall
 npx get-shit-done-cc --antigravity --global --uninstall
+
+# Instalações locais (projeto atual)
+npx get-shit-done-cc --claude --local --uninstall
+npx get-shit-done-cc --opencode --local --uninstall
+npx get-shit-done-cc --gemini --local --uninstall
+npx get-shit-done-cc --codex --local --uninstall
+npx get-shit-done-cc --copilot --local --uninstall
+npx get-shit-done-cc --cursor --local --uninstall
+npx get-shit-done-cc --antigravity --local --uninstall
 ```
 
 ---

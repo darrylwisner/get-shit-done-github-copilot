@@ -760,6 +760,49 @@ describe('Codex install hook configuration (e2e)', () => {
     assert.ok(!content.includes('config_file = "agents/'), 'no relative config_file paths');
   });
 
+  test('re-install repairs non-boolean keys trapped under [features] by previous install (#1379)', () => {
+    // Bug: a pre-#1346 install prepended [features] before bare top-level keys,
+    // trapping model= under [features]. Re-installing with the fix must detect
+    // and relocate those keys back to the top level so Codex can parse them.
+    writeCodexConfig(codexHome, [
+      '[features]',
+      'codex_hooks = true',
+      '',
+      'model = "gpt-5.3-codex"',
+      'model_reasoning_effort = "high"',
+      '',
+      '[projects."/Users/oltmannk/myproject"]',
+      'trust_level = "trusted"',
+      '',
+    ].join('\n'));
+
+    runCodexInstall(codexHome);
+
+    const content = readCodexConfig(codexHome);
+
+    // model= and model_reasoning_effort= must NOT be under [features]
+    const featuresIndex = content.indexOf('[features]');
+    const modelIndex = content.indexOf('model = "gpt-5.3-codex"');
+    const reasoningIndex = content.indexOf('model_reasoning_effort = "high"');
+    assert.ok(modelIndex !== -1, 'model key is present');
+    assert.ok(reasoningIndex !== -1, 'model_reasoning_effort key is present');
+    assert.ok(modelIndex < featuresIndex, 'model= relocated before [features]');
+    assert.ok(reasoningIndex < featuresIndex, 'model_reasoning_effort= relocated before [features]');
+
+    // [features] should only contain boolean keys
+    const featuresMatch = content.match(/\[features\]\n([\s\S]*?)(?=\n\[|$)/);
+    assert.ok(featuresMatch, 'features section found');
+    const featuresBody = featuresMatch[1];
+    const nonBooleanKeys = featuresBody.split('\n')
+      .filter(line => line.match(/^\s*\w+\s*=/) && !line.match(/=\s*(true|false)\s*(#.*)?$/));
+    assert.strictEqual(nonBooleanKeys.length, 0, 'no non-boolean keys under [features]');
+
+    // User content preserved
+    assert.ok(content.includes('[projects."/Users/oltmannk/myproject"]'), 'preserves project section');
+    assert.ok(content.includes('trust_level = "trusted"'), 'preserves project trust level');
+    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'one codex_hooks key');
+  });
+
   test('existing LF config without [features] gets one features block and preserves user content', () => {
     writeCodexConfig(codexHome, [
       '# user comment',
