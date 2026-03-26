@@ -318,6 +318,32 @@ Archive milestone, tag release.
 
 ---
 
+### `/gsd:milestone-summary`
+
+Generate comprehensive project summary from milestone artifacts for team onboarding and review.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `version` | No | Milestone version (defaults to current/latest milestone) |
+
+**Prerequisites:** At least one completed or in-progress milestone
+**Produces:** `.planning/reports/MILESTONE_SUMMARY-v{version}.md`
+
+**Summary includes:**
+- Overview, architecture decisions, phase-by-phase breakdown
+- Key decisions and trade-offs
+- Requirements coverage
+- Tech debt and deferred items
+- Getting started guide for new team members
+- Interactive Q&A offered after generation
+
+```bash
+/gsd:milestone-summary                # Summarize current milestone
+/gsd:milestone-summary v1.0           # Summarize specific milestone
+```
+
+---
+
 ### `/gsd:new-milestone`
 
 Start next version cycle.
@@ -443,6 +469,23 @@ Save context handoff when stopping mid-phase.
 ```bash
 /gsd:pause-work                     # Creates continue-here.md
 ```
+
+### `/gsd:manager`
+
+Interactive command center for managing multiple phases from one terminal.
+
+**Prerequisites:** `.planning/ROADMAP.md` exists
+**Behavior:**
+- Dashboard of all phases with visual status indicators
+- Recommends optimal next actions based on dependencies and progress
+- Dispatches work: discuss runs inline, plan/execute run as background agents
+- Designed for power users parallelizing work across phases from one terminal
+
+```bash
+/gsd:manager                        # Open command center dashboard
+```
+
+---
 
 ### `/gsd:help`
 
@@ -607,6 +650,67 @@ Archive accumulated phase directories from completed milestones.
 
 ```bash
 /gsd:cleanup
+```
+
+---
+
+## Diagnostics Commands
+
+### `/gsd:forensics`
+
+Post-mortem investigation of failed or stuck GSD workflows.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `description` | No | Problem description (prompted if omitted) |
+
+**Prerequisites:** `.planning/` directory exists
+**Produces:** `.planning/forensics/report-{timestamp}.md`
+
+**Investigation covers:**
+- Git history analysis (recent commits, stuck patterns, time gaps)
+- Artifact integrity (expected files for completed phases)
+- STATE.md anomalies and session history
+- Uncommitted work, conflicts, abandoned changes
+- At least 4 anomaly types checked (stuck loop, missing artifacts, abandoned work, crash/interruption)
+- GitHub issue creation offered if actionable findings exist
+
+```bash
+/gsd:forensics                              # Interactive — prompted for problem
+/gsd:forensics "Phase 3 execution stalled"  # With problem description
+```
+
+---
+
+## Workstream Management
+
+### `/gsd:workstreams`
+
+Manage parallel workstreams for concurrent work on different milestone areas.
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List all workstreams with status (default if no subcommand) |
+| `create <name>` | Create a new workstream |
+| `status <name>` | Detailed status for one workstream |
+| `switch <name>` | Set active workstream |
+| `progress` | Progress summary across all workstreams |
+| `complete <name>` | Archive a completed workstream |
+| `resume <name>` | Resume work in a workstream |
+
+**Prerequisites:** Active GSD project
+**Produces:** Workstream directories under `.planning/`, state tracking per workstream
+
+```bash
+/gsd:workstreams                    # List all workstreams
+/gsd:workstreams create backend-api # Create new workstream
+/gsd:workstreams switch backend-api # Set active workstream
+/gsd:workstreams status backend-api # Detailed status
+/gsd:workstreams progress           # Cross-workstream progress overview
+/gsd:workstreams complete backend-api  # Archive completed workstream
+/gsd:workstreams resume backend-api    # Resume work in workstream
 ```
 
 ---

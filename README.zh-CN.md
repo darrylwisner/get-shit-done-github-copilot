@@ -499,7 +499,7 @@ lmn012o feat(08-02): create registration endpoint
 |------|------|
 | `/gsd:new-project [--auto]` | 完整初始化：提问 → 研究 → 需求 → 路线图 |
 | `/gsd:discuss-phase [N] [--auto] [--analyze]` | 在规划前收集实现决策（`--analyze` 增加权衡分析） |
-| `/gsd:plan-phase [N] [--auto]` | 为某个阶段执行研究 + 规划 + 验证 |
+| `/gsd:plan-phase [N] [--auto] [--reviews]` | 为某个阶段执行研究 + 规划 + 验证（`--reviews` 加载代码库审查结果） |
 | `/gsd:execute-phase <N>` | 以并行 wave 执行全部计划，完成后验证 |
 | `/gsd:verify-work [N]` | 人工用户验收测试 ¹ |
 | `/gsd:ship [N] [--draft]` | 从已验证的阶段工作创建 PR，自动生成 PR 描述 |
@@ -508,6 +508,25 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd:audit-milestone` | 验证里程碑是否达到完成定义 |
 | `/gsd:complete-milestone` | 归档里程碑并打 release tag |
 | `/gsd:new-milestone [name]` | 开始下一个版本：提问 → 研究 → 需求 → 路线图 |
+| `/gsd:milestone-summary` | 从已完成的里程碑产物生成项目概览，用于团队上手 |
+| `/gsd:forensics` | 对失败或卡住的工作流进行事后调查 |
+
+### 工作流（Workstreams）
+
+| 命令 | 作用 |
+|------|------|
+| `/gsd:workstreams list` | 显示所有工作流及其状态 |
+| `/gsd:workstreams create <name>` | 创建命名空间工作流，用于并行里程碑工作 |
+| `/gsd:workstreams switch <name>` | 切换当前活跃工作流 |
+| `/gsd:workstreams complete <name>` | 完成并合并工作流 |
+
+### 多项目工作区
+
+| 命令 | 作用 |
+|------|------|
+| `/gsd:new-workspace` | 创建隔离工作区，包含仓库副本（worktree 或 clone） |
+| `/gsd:list-workspaces` | 显示所有 GSD 工作区及其状态 |
+| `/gsd:remove-workspace` | 移除工作区并清理 worktree |
 
 ### UI 设计
 
@@ -626,6 +645,8 @@ GSD 将项目设置保存在 `.planning/config.json`。你可以在 `/gsd:new-pr
 | `workflow.verifier` | `true` | 执行后确认“必须交付项”是否已经落地 |
 | `workflow.auto_advance` | `false` | 自动串联 discuss → plan → execute，不中途停下 |
 | `workflow.research_before_questions` | `false` | 在讨论提问前先运行研究，而非之后 |
+| `workflow.skip_discuss` | `false` | 在自主模式下完全跳过讨论阶段 |
+| `workflow.discuss_mode` | `null` | 控制讨论阶段行为（`assumptions` 使用推断默认值） |
 
 可以用 `/gsd:settings` 开关这些项，也可以在单次命令里覆盖：
 - `/gsd:plan-phase --skip-research`

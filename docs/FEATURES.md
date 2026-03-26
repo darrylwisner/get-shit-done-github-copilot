@@ -62,6 +62,14 @@
   - [Security Hardening](#46-security-hardening)
   - [Multi-Repo Workspace Support](#47-multi-repo-workspace-support)
   - [Discussion Audit Trail](#48-discussion-audit-trail)
+- [v1.28 Features](#v128-features)
+  - [Forensics](#49-forensics)
+  - [Milestone Summary](#50-milestone-summary)
+  - [Workstream Namespacing](#51-workstream-namespacing)
+  - [Manager Dashboard](#52-manager-dashboard)
+  - [Assumptions Discussion Mode](#53-assumptions-discussion-mode)
+  - [UI Phase Auto-Detection](#54-ui-phase-auto-detection)
+  - [Multi-Runtime Installer Selection](#55-multi-runtime-installer-selection)
 
 ---
 
@@ -1124,3 +1132,159 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 - REQ-DISCLOG-01: System MUST auto-generate DISCUSSION-LOG.md during discuss-phase
 - REQ-DISCLOG-02: Log MUST capture questions asked, options presented, and decisions made
 - REQ-DISCLOG-03: Decision IDs MUST enable traceability from discuss-phase to plan-phase
+
+---
+
+## v1.28 Features
+
+### 49. Forensics
+
+**Command:** `/gsd:forensics [description]`
+
+**Purpose:** Post-mortem investigation of failed or stuck GSD workflows.
+
+**Requirements:**
+- REQ-FORENSICS-01: System MUST analyze git history for anomalies (stuck loops, long gaps, repeated commits)
+- REQ-FORENSICS-02: System MUST check artifact integrity (completed phases have expected files)
+- REQ-FORENSICS-03: System MUST generate a markdown report saved to `.planning/forensics/`
+- REQ-FORENSICS-04: System MUST offer to create a GitHub issue with findings
+- REQ-FORENSICS-05: System MUST NOT modify project files (read-only investigation)
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `.planning/forensics/report-{timestamp}.md` | Post-mortem investigation report |
+
+**Process:**
+1. **Scan** — Analyze git history for anomalies: stuck loops, long gaps between commits, repeated identical commits
+2. **Integrity Check** — Verify completed phases have expected artifact files
+3. **Report** — Generate markdown report with findings, saved to `.planning/forensics/`
+4. **Issue** — Offer to create a GitHub issue with findings for team visibility
+
+---
+
+### 50. Milestone Summary
+
+**Command:** `/gsd:milestone-summary [version]`
+
+**Purpose:** Generate comprehensive project summary from milestone artifacts for team onboarding.
+
+**Requirements:**
+- REQ-SUMMARY-01: System MUST aggregate phase plans, summaries, and verification results
+- REQ-SUMMARY-02: System MUST work for both current and archived milestones
+- REQ-SUMMARY-03: System MUST produce a single navigable document
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `MILESTONE-SUMMARY.md` | Comprehensive navigable summary of milestone artifacts |
+
+**Process:**
+1. **Collect** — Aggregate phase plans, summaries, and verification results from the target milestone
+2. **Synthesize** — Combine artifacts into a single navigable document with cross-references
+3. **Output** — Write `MILESTONE-SUMMARY.md` suitable for team onboarding and stakeholder review
+
+---
+
+### 51. Workstream Namespacing
+
+**Command:** `/gsd:workstreams`
+
+**Purpose:** Parallel workstreams for concurrent work on different milestone areas.
+
+**Requirements:**
+- REQ-WS-01: System MUST isolate workstream state in separate `.planning/workstreams/{name}/` directories
+- REQ-WS-02: System MUST validate workstream names (alphanumeric + hyphens only, no path traversal)
+- REQ-WS-03: System MUST support list, create, switch, status, progress, complete, resume subcommands
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `.planning/workstreams/{name}/` | Isolated workstream directory structure |
+
+**Process:**
+1. **Create** — Initialize a named workstream with isolated `.planning/workstreams/{name}/` directory
+2. **Switch** — Change active workstream context for subsequent GSD commands
+3. **Manage** — List, check status, track progress, complete, or resume workstreams
+
+---
+
+### 52. Manager Dashboard
+
+**Command:** `/gsd:manager`
+
+**Purpose:** Interactive command center for managing multiple phases from one terminal.
+
+**Requirements:**
+- REQ-MGR-01: System MUST show overview of all phases with status
+- REQ-MGR-02: System MUST filter to current milestone scope
+- REQ-MGR-03: System MUST show phase dependencies and conflicts
+
+**Produces:** Interactive terminal output
+
+**Process:**
+1. **Scan** — Load all phases in the current milestone with their statuses
+2. **Display** — Render overview showing phase dependencies, conflicts, and progress
+3. **Interact** — Accept commands to navigate, inspect, or act on individual phases
+
+---
+
+### 53. Assumptions Discussion Mode
+
+**Command:** `/gsd:discuss-phase` with `workflow.discuss_mode: 'assumptions'`
+
+**Purpose:** Replace interview-style questioning with codebase-first assumption analysis.
+
+**Requirements:**
+- REQ-ASSUME-01: System MUST analyze codebase to generate structured assumptions before asking questions
+- REQ-ASSUME-02: System MUST classify assumptions by confidence level (Confident/Likely/Unclear)
+- REQ-ASSUME-03: System MUST produce identical CONTEXT.md format as default discuss mode
+- REQ-ASSUME-04: System MUST support confidence-based skip gate (all HIGH = no questions)
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `{phase}-CONTEXT.md` | Same format as default discuss mode |
+
+**Process:**
+1. **Analyze** — Scan codebase to generate structured assumptions about implementation approach
+2. **Classify** — Categorize assumptions by confidence level: Confident, Likely, Unclear
+3. **Gate** — If all assumptions are HIGH confidence, skip questioning entirely
+4. **Confirm** — Present unclear assumptions as targeted questions to the user
+5. **Output** — Produce `{phase}-CONTEXT.md` in identical format to default discuss mode
+
+---
+
+### 54. UI Phase Auto-Detection
+
+**Part of:** `/gsd:new-project` and `/gsd:progress`
+
+**Purpose:** Automatically detect UI-heavy projects and surface `/gsd:ui-phase` recommendation.
+
+**Requirements:**
+- REQ-UI-DETECT-01: System MUST detect UI signals in project description (keywords, framework references)
+- REQ-UI-DETECT-02: System MUST annotate ROADMAP.md phases with `ui_hint` when applicable
+- REQ-UI-DETECT-03: System MUST suggest `/gsd:ui-phase` in next steps for UI-heavy phases
+- REQ-UI-DETECT-04: System MUST NOT make `/gsd:ui-phase` mandatory
+
+**Process:**
+1. **Detect** — Scan project description and tech stack for UI signals (keywords, framework references)
+2. **Annotate** — Add `ui_hint` markers to applicable phases in ROADMAP.md
+3. **Surface** — Include `/gsd:ui-phase` recommendation in next steps for UI-heavy phases
+
+---
+
+### 55. Multi-Runtime Installer Selection
+
+**Part of:** `npx get-shit-done-cc`
+
+**Purpose:** Select multiple runtimes in a single interactive install session.
+
+**Requirements:**
+- REQ-MULTI-RT-01: Interactive prompt MUST support multi-select (e.g., Claude Code + Gemini)
+- REQ-MULTI-RT-02: CLI flags MUST continue to work for non-interactive installs
+
+**Process:**
+1. **Detect** — Identify available AI CLI runtimes on the system
+2. **Prompt** — Present multi-select interface for runtime selection
+3. **Install** — Configure GSD for all selected runtimes in a single session
