@@ -6,6 +6,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-03-25
+
+### Added
+- **Windsurf runtime support** — Full installation and command conversion for Windsurf (Codeium)
+- **Agent skill injection** — Inject project-specific skills into subagents via `agent_skills` config section
+- **UI-phase and UI-review steps** in autonomous workflow
+- **Security scanning CI** — Prompt injection, base64, and secret scanning workflows
+- **Portuguese (pt-BR) documentation**
+- **Korean (ko-KR) documentation**
+- **Japanese (ja-JP) documentation**
+
+### Changed
+- Repository references updated from `glittercowboy` to `gsd-build`
+- Korean translations refined from formal -십시오 to natural -세요 style
+
+### Fixed
+- Frontmatter `must_haves` parser handles any YAML indentation width
+- `findProjectRoot` returns startDir when it already contains `.planning/`
+- Agent workflows include `<available_agent_types>` for named agent spawning
+- Begin-phase preserves Status/LastActivity/Progress in Current Position
+- Missing GSD agents detected with warning when `subagent_type` falls back to general-purpose
+- Codex re-install repairs trapped non-boolean keys under `[features]`
+- Invalid `\Z` regex anchor replaced and redundant pattern removed
+- Hook field validation prevents silent `settings.json` rejection
+- Codex preserves top-level config keys and uses absolute agent paths (≥0.116)
+- Windows shell robustness, `project_root` detection, and hook stdin safety
+- Brownfield project detection expanded to Android, Kotlin, Gradle, and 15+ ecosystems
+- Verify-work checkpoint rendering hardened
+- Worktree agents get `permissionMode: acceptEdits`
+- Security scan self-detection and Windows test compatibility
+
 ## [1.28.0] - 2026-03-22
 
 ### Added
@@ -1665,8 +1696,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/glittercowboy/get-shit-done/compare/v1.28.0...HEAD
-[1.28.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.28.0
+[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.29.0...HEAD
+[1.29.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.29.0
+[1.28.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.28.0
 [1.27.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.27.0
 [1.26.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.26.0
 [1.25.0]: https://github.com/glittercowboy/get-shit-done/releases/tag/v1.25.0
