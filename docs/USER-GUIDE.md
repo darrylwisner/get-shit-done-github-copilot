@@ -9,6 +9,7 @@ A detailed reference for workflows, troubleshooting, and configuration. For quic
 - [Workflow Diagrams](#workflow-diagrams)
 - [UI Design Contract](#ui-design-contract)
 - [Backlog & Threads](#backlog--threads)
+- [Workstreams](#workstreams)
 - [Security](#security)
 - [Command Reference](#command-reference)
 - [Configuration Reference](#configuration-reference)
@@ -157,6 +158,25 @@ escalation for you to address.
 **When to use:** After executing phases that were planned before Nyquist was
 enabled, or after `/gsd:audit-milestone` surfaces Nyquist compliance gaps.
 
+### Assumptions Discussion Mode
+
+By default, `/gsd:discuss-phase` asks open-ended questions about your implementation preferences. Assumptions mode inverts this: GSD reads your codebase first, surfaces structured assumptions about how it would build the phase, and asks only for corrections.
+
+**Enable:** Set `workflow.discuss_mode` to `'assumptions'` via `/gsd:settings`.
+
+**How it works:**
+1. Reads PROJECT.md, codebase mapping, and existing conventions
+2. Generates a structured list of assumptions (tech choices, patterns, file locations)
+3. Presents assumptions for you to confirm, correct, or expand
+4. Writes CONTEXT.md from confirmed assumptions
+
+**When to use:**
+- Experienced developers who already know their codebase well
+- Rapid iteration where open-ended questions slow you down
+- Projects where patterns are well-established and predictable
+
+See [docs/workflow-discuss-mode.md](workflow-discuss-mode.md) for the full discuss-mode reference.
+
 ---
 
 ## UI Design Contract
@@ -284,6 +304,29 @@ Threads can be promoted to phases (`/gsd:add-phase`) or backlog items (`/gsd:add
 
 ---
 
+## Workstreams
+
+Workstreams let you work on multiple milestone areas concurrently without state collisions. Each workstream gets its own isolated `.planning/` state, so switching between them doesn't clobber progress.
+
+**When to use:** You're working on milestone features that span different concern areas (e.g., backend API and frontend dashboard) and want to plan, execute, or discuss them independently without context bleed.
+
+### Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/gsd:workstreams create <name>` | Create a new workstream with isolated planning state |
+| `/gsd:workstreams switch <name>` | Switch active context to a different workstream |
+| `/gsd:workstreams list` | Show all workstreams and which is active |
+| `/gsd:workstreams complete <name>` | Mark a workstream as done and archive its state |
+
+### How It Works
+
+Each workstream maintains its own `.planning/` directory subtree. When you switch workstreams, GSD swaps the active planning context so that `/gsd:progress`, `/gsd:discuss-phase`, `/gsd:plan-phase`, and other commands operate on that workstream's state.
+
+This is lighter weight than `/gsd:new-workspace` (which creates separate repo worktrees). Workstreams share the same codebase and git history but isolate planning artifacts.
+
+---
+
 ## Security
 
 ### Defense-in-Depth (v1.27)
@@ -394,6 +437,7 @@ The `security.cjs` module scans for known injection patterns (role overrides, in
 | `/gsd:map-codebase` | Analyze existing codebase | Before `/gsd:new-project` on existing code |
 | `/gsd:quick` | Ad-hoc task with GSD guarantees | Bug fixes, small features, config changes |
 | `/gsd:debug [desc]` | Systematic debugging with persistent state | When something breaks |
+| `/gsd:forensics` | Diagnostic report for workflow failures | When state, artifacts, or git history seem corrupted |
 | `/gsd:add-todo [desc]` | Capture an idea for later | Think of something during a session |
 | `/gsd:check-todos` | List pending todos | Review captured ideas |
 | `/gsd:settings` | Configure workflow toggles and model profile | Change model, toggle agents |
@@ -441,8 +485,11 @@ GSD stores project settings in `.planning/config.json`. Configure during `/gsd:n
     "nyquist_validation": true,
     "ui_phase": true,
     "ui_safety_gate": true,
-    "research_before_questions": false
+    "research_before_questions": false,
+    "discuss_mode": "standard",
+    "skip_discuss": false
   },
+  "resolve_model_ids": "anthropic",
   "hooks": {
     "context_warnings": true,
     "workflow_guard": false
@@ -484,6 +531,8 @@ GSD stores project settings in `.planning/config.json`. Configure during `/gsd:n
 | `workflow.ui_phase` | `true`, `false` | `true` | Generate UI design contracts for frontend phases |
 | `workflow.ui_safety_gate` | `true`, `false` | `true` | plan-phase prompts to run /gsd:ui-phase for frontend phases |
 | `workflow.research_before_questions` | `true`, `false` | `false` | Run research before discussion questions instead of after |
+| `workflow.discuss_mode` | `standard`, `assumptions` | `standard` | Discussion style: open-ended questions vs. codebase-driven assumptions |
+| `workflow.skip_discuss` | `true`, `false` | `false` | Skip discuss-phase entirely in autonomous mode; writes minimal CONTEXT.md from ROADMAP phase goal |
 
 ### Hook Settings
 
@@ -615,6 +664,8 @@ claude --dangerously-skip-permissions
 | Normal dev | `interactive` | `standard` | `balanced` | on | on | on |
 | Production | `interactive` | `fine` | `quality` | on | on | on |
 
+**Skipping discuss-phase in autonomous mode:** When running in `yolo` mode with well-established preferences already captured in PROJECT.md, set `workflow.skip_discuss: true` via `/gsd:settings`. This bypasses the discuss-phase entirely and writes a minimal CONTEXT.md derived from the ROADMAP phase goal. Useful when your PROJECT.md and conventions are comprehensive enough that discussion adds no new information.
+
 ### Mid-Milestone Scope Changes
 
 ```bash
@@ -684,12 +735,13 @@ Switch to budget profile: `/gsd:set-profile budget`. Disable research and plan-c
 
 ### Using Non-Claude Runtimes (Codex, OpenCode, Gemini CLI)
 
-If you installed GSD for a non-Claude runtime, the installer already configured model resolution so all agents use the runtime's default model. No manual setup is needed.
+If you installed GSD for a non-Claude runtime, the installer already configured model resolution so all agents use the runtime's default model. No manual setup is needed. Specifically, the installer sets `resolve_model_ids: "omit"` in your config, which tells GSD to skip Anthropic model ID resolution and let the runtime choose its own default model.
 
-To assign different models to different agents on a non-Claude runtime, add `model_overrides` to `.planning/config.json` with model IDs your runtime recognizes:
+To assign different models to different agents on a non-Claude runtime, add `model_overrides` to `.planning/config.json` with fully-qualified model IDs that your runtime recognizes:
 
 ```json
 {
+  "resolve_model_ids": "omit",
   "model_overrides": {
     "gsd-planner": "o3",
     "gsd-executor": "o4-mini",
@@ -697,6 +749,8 @@ To assign different models to different agents on a non-Claude runtime, add `mod
   }
 }
 ```
+
+The installer auto-configures `resolve_model_ids: "omit"` for Gemini CLI, OpenCode, and Codex. If you're manually setting up a non-Claude runtime, add it to `.planning/config.json` yourself.
 
 See the [Configuration Reference](CONFIGURATION.md#non-claude-runtimes-codex-opencode-gemini-cli) for the full explanation.
 
@@ -711,6 +765,17 @@ Set `commit_docs: false` during `/gsd:new-project` or via `/gsd:settings`. Add `
 ### GSD Update Overwrote My Local Changes
 
 Since v1.17, the installer backs up locally modified files to `gsd-local-patches/`. Run `/gsd:reapply-patches` to merge your changes back.
+
+### Workflow Diagnostics (`/gsd:forensics`)
+
+When a workflow fails in a way that isn't obvious -- plans reference nonexistent files, execution produces unexpected results, or state seems corrupted -- run `/gsd:forensics` to generate a diagnostic report.
+
+**What it checks:**
+- Git history anomalies (orphaned commits, unexpected branch state, rebase artifacts)
+- Artifact integrity (missing or malformed planning files, broken cross-references)
+- State inconsistencies (ROADMAP status vs. actual file presence, config drift)
+
+**Output:** A diagnostic report written to `.planning/forensics/` with findings and suggested remediation steps.
 
 ### Subagent Appears to Fail but Work Was Done
 
@@ -742,6 +807,7 @@ If the installer crashes with `EPERM: operation not permitted, scandir` on Windo
 | Need to change scope | `/gsd:add-phase`, `/gsd:insert-phase`, or `/gsd:remove-phase` |
 | Milestone audit found gaps | `/gsd:plan-milestone-gaps` |
 | Something broke | `/gsd:debug "description"` |
+| Workflow state seems corrupted | `/gsd:forensics` |
 | Quick targeted fix | `/gsd:quick` |
 | Plan doesn't match your vision | `/gsd:discuss-phase [N]` then re-plan |
 | Costs running high | `/gsd:set-profile budget` and `/gsd:settings` to toggle agents off |
