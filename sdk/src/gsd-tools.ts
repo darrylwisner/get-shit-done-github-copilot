@@ -51,10 +51,11 @@ export class GSDTools {
 
   /**
    * Execute a gsd-tools command and return parsed JSON output.
+   * Appends `--raw` to get machine-readable JSON output.
    * Handles the `@file:` prefix pattern for large results.
    */
   async exec(command: string, args: string[] = []): Promise<unknown> {
-    const fullArgs = [this.gsdToolsPath, command, ...args];
+    const fullArgs = [this.gsdToolsPath, command, ...args, '--raw'];
 
     return new Promise<unknown>((resolve, reject) => {
       const child = execFile(
