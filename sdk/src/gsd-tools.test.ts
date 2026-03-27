@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { GSDTools, GSDToolsError } from './gsd-tools.js';
+import { GSDTools, GSDToolsError, resolveGsdToolsPath } from './gsd-tools.js';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 
 describe('GSDTools', () => {
   let tmpDir: string;
@@ -315,6 +315,42 @@ describe('GSDTools', () => {
       const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
 
       await expect(tools.initNewProject()).rejects.toThrow(GSDToolsError);
+    });
+  });
+
+  // ─── resolveGsdToolsPath() tests ────────────────────────────────────────
+
+  describe('resolveGsdToolsPath()', () => {
+    it('returns repo-local path when it exists', async () => {
+      const localBinDir = join(tmpDir, '.claude', 'get-shit-done', 'bin');
+      await mkdir(localBinDir, { recursive: true });
+      await writeFile(join(localBinDir, 'gsd-tools.cjs'), '// stub');
+
+      const result = resolveGsdToolsPath(tmpDir);
+      expect(result).toBe(join(localBinDir, 'gsd-tools.cjs'));
+    });
+
+    it('falls back to global path when repo-local does not exist', () => {
+      const result = resolveGsdToolsPath(tmpDir);
+      expect(result).toBe(
+        join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs'),
+      );
+    });
+
+    it('constructor uses repo-local path when available', async () => {
+      const localBinDir = join(tmpDir, '.claude', 'get-shit-done', 'bin');
+      await mkdir(localBinDir, { recursive: true });
+      const scriptPath = join(localBinDir, 'gsd-tools.cjs');
+      await writeFile(
+        scriptPath,
+        `process.stdout.write(JSON.stringify({ source: "local" }));`,
+        { mode: 0o755 },
+      );
+
+      // No explicit gsdToolsPath — should auto-resolve to local
+      const tools = new GSDTools({ projectDir: tmpDir });
+      const result = await tools.exec('test', []);
+      expect(result).toEqual({ source: 'local' });
     });
   });
 

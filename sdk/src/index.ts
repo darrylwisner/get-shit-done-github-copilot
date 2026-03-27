@@ -27,7 +27,7 @@ import type { GSDOptions, PlanResult, SessionOptions, GSDEvent, TransportHandler
 import { GSDEventType } from './types.js';
 import { parsePlan, parsePlanFile } from './plan-parser.js';
 import { loadConfig } from './config.js';
-import { GSDTools } from './gsd-tools.js';
+import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
 import { runPlanSession } from './session-runner.js';
 import { buildExecutorPrompt, parseAgentTools } from './prompt-builder.js';
 import { GSDEventStream } from './event-stream.js';
@@ -49,8 +49,7 @@ export class GSD {
   constructor(options: GSDOptions) {
     this.projectDir = resolve(options.projectDir);
     this.gsdToolsPath =
-      options.gsdToolsPath ??
-      join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+      options.gsdToolsPath ?? resolveGsdToolsPath(this.projectDir);
     this.defaultModel = options.model;
     this.defaultMaxBudgetUsd = options.maxBudgetUsd ?? 5.0;
     this.defaultMaxTurns = options.maxTurns ?? 50;
@@ -261,6 +260,11 @@ export class GSD {
    */
   private async loadAgentDefinition(): Promise<string | undefined> {
     const paths = [
+      // Repo-local GSD installation
+      join(this.projectDir, '.claude', 'get-shit-done', 'agents', 'gsd-executor.md'),
+      // Repo-local agents directory
+      join(this.projectDir, '.claude', 'agents', 'gsd-executor.md'),
+      // Global home directory
       join(homedir(), '.claude', 'agents', 'gsd-executor.md'),
       join(this.projectDir, 'agents', 'gsd-executor.md'),
     ];
@@ -282,7 +286,7 @@ export class GSD {
 export { parsePlan, parsePlanFile } from './plan-parser.js';
 export { loadConfig } from './config.js';
 export type { GSDConfig } from './config.js';
-export { GSDTools, GSDToolsError } from './gsd-tools.js';
+export { GSDTools, GSDToolsError, resolveGsdToolsPath } from './gsd-tools.js';
 export { runPlanSession, runPhaseStepSession } from './session-runner.js';
 export { buildExecutorPrompt, parseAgentTools } from './prompt-builder.js';
 export * from './types.js';
