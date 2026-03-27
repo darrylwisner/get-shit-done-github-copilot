@@ -71,6 +71,7 @@ vi.mock('./gsd-tools.js', () => ({
   GSDToolsError: class extends Error {
     name = 'GSDToolsError';
   },
+  resolveGsdToolsPath: vi.fn().mockReturnValue('/mock/gsd-tools.cjs'),
 }));
 
 import { GSD } from './index.js';
