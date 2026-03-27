@@ -287,7 +287,7 @@ describe('GSDTools', () => {
         'init-new-project.cjs',
         `
         const args = process.argv.slice(2);
-        if (args[0] === 'init' && args[1] === 'new-project') {
+        if (args[0] === 'init' && args[1] === 'new-project' && args.includes('--raw')) {
           process.stdout.write(JSON.stringify(${JSON.stringify(mockResult)}));
         } else {
           process.stderr.write('unexpected args: ' + args.join(' '));

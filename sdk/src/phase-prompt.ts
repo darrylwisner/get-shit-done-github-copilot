@@ -8,14 +8,12 @@
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
 import type { ContextFiles, ParsedPlan } from './types.js';
 import { PhaseType } from './types.js';
 import { buildExecutorPrompt, parseAgentRole } from './prompt-builder.js';
 import { PHASE_AGENT_MAP } from './tool-scoping.js';
-import { sanitizePrompt } from './prompt-sanitizer.js';
 
 // ─── Workflow file mapping ───────────────────────────────────────────────────
 
@@ -67,22 +65,16 @@ export class PromptFactory {
   private readonly workflowsDir: string;
   private readonly agentsDir: string;
   private readonly projectAgentsDir?: string;
-  private readonly sdkPromptsDir: string;
 
   constructor(options?: {
     gsdInstallDir?: string;
     agentsDir?: string;
     projectAgentsDir?: string;
-    sdkPromptsDir?: string;
   }) {
     const gsdInstallDir = options?.gsdInstallDir ?? join(homedir(), '.claude', 'get-shit-done');
     this.workflowsDir = join(gsdInstallDir, 'workflows');
     this.agentsDir = options?.agentsDir ?? join(homedir(), '.claude', 'agents');
     this.projectAgentsDir = options?.projectAgentsDir;
-    // SDK prompts dir: explicit override → package-relative default via import.meta.url
-    this.sdkPromptsDir =
-      options?.sdkPromptsDir ??
-      join(fileURLToPath(new URL('.', import.meta.url)), '..', 'prompts');
   }
 
   /**
@@ -99,7 +91,7 @@ export class PromptFactory {
     // Execute phase with a plan: delegate to existing buildExecutorPrompt
     if (phaseType === PhaseType.Execute && plan) {
       const agentDef = await this.loadAgentDef(phaseType);
-      return sanitizePrompt(buildExecutorPrompt(plan, agentDef));
+      return buildExecutorPrompt(plan, agentDef);
     }
 
     const sections: string[] = [];
@@ -143,28 +135,17 @@ export class PromptFactory {
       sections.push(`## Phase Instructions\n\n${phaseInstructions}`);
     }
 
-    return sanitizePrompt(sections.join('\n\n'));
+    return sections.join('\n\n');
   }
 
   /**
    * Load the workflow file for a phase type.
-   * Tries sdk/prompts/workflows/ first (headless versions), then
-   * falls back to GSD-1 originals in workflowsDir.
    * Returns the raw content, or undefined if not found.
    */
   async loadWorkflowFile(phaseType: PhaseType): Promise<string | undefined> {
     const filename = PHASE_WORKFLOW_MAP[phaseType];
-
-    // Try SDK prompts dir first (headless versions)
-    const sdkPath = join(this.sdkPromptsDir, 'workflows', filename);
-    try {
-      return await readFile(sdkPath, 'utf-8');
-    } catch {
-      // Not in sdk/prompts/, fall through to GSD-1 originals
-    }
-
-    // Fall back to GSD-1 originals
     const filePath = join(this.workflowsDir, filename);
+
     try {
       return await readFile(filePath, 'utf-8');
     } catch {
@@ -174,19 +155,15 @@ export class PromptFactory {
 
   /**
    * Load the agent definition for a phase type.
-   * Tries sdk/prompts/agents/ first (headless versions), then
-   * user-level agents dir, then project-level.
+   * Tries user-level agents dir first, then project-level.
    * Returns undefined if no agent is mapped or file not found.
    */
   async loadAgentDef(phaseType: PhaseType): Promise<string | undefined> {
     const agentFilename = PHASE_AGENT_MAP[phaseType];
     if (!agentFilename) return undefined;
 
-    // Try SDK prompts dir first (headless versions)
-    const paths = [
-      join(this.sdkPromptsDir, 'agents', agentFilename),
-      join(this.agentsDir, agentFilename),
-    ];
+    // Try user-level agents dir first
+    const paths = [join(this.agentsDir, agentFilename)];
 
     // Then project-level if configured
     if (this.projectAgentsDir) {
