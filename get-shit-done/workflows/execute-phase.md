@@ -436,6 +436,27 @@ After all waves:
 ### Issues Encountered
 [Aggregate from SUMMARYs, or "None"]
 ```
+
+**Security gate check:**
+```bash
+SECURITY_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.security_enforcement --raw 2>/dev/null || echo "true")
+SECURITY_FILE=$(ls "${PHASE_DIR}"/*-SECURITY.md 2>/dev/null | head -1)
+```
+
+If `SECURITY_CFG` is `false`: skip.
+
+If `SECURITY_CFG` is `true` AND `SECURITY_FILE` is empty (no SECURITY.md yet):
+Include in the next-steps routing output:
+```
+⚠ Security enforcement enabled — run before advancing:
+  /gsd:secure-phase {PHASE} ${GSD_WS}
+```
+
+If `SECURITY_CFG` is `true` AND SECURITY.md exists: check frontmatter `threats_open`. If > 0:
+```
+⚠ Security gate: {threats_open} threats open
+  /gsd:secure-phase {PHASE} — resolve before advancing
+```
 </step>
 
 <step name="handle_partial_wave_execution">

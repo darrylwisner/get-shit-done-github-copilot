@@ -1250,6 +1250,41 @@ describe('commit command', () => {
     const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: tmpDir, encoding: 'utf-8' }).trim();
     assert.strictEqual(branch, 'gsd/phase-01-setup', 'should be on phase branch');
   });
+
+  test('decimal phase numbers are captured correctly in branching strategy', () => {
+    // Configure phase branching strategy
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({
+        commit_docs: true,
+        branching_strategy: 'phase',
+        phase_branch_template: 'gsd/phase-{phase}-{slug}',
+      })
+    );
+    // Create ROADMAP.md with a decimal phase
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '45.14-golden-capture'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap\n\n## Phase 45.14: Golden Capture\nGoal: Capture golden standard\n'
+    );
+
+    // Create a context file for phase 45.14
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'phases', '45.14-golden-capture', '45.14-CONTEXT.md'), '# Context\n');
+
+    const result = runGsdTools(
+      'commit "docs(45.14): add context" --files .planning/phases/45.14-golden-capture/45.14-CONTEXT.md',
+      tmpDir
+    );
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.committed, true, 'should have committed');
+
+    // Verify we're on the correct branch (45.14, not 14)
+    const { execFileSync } = require('child_process');
+    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: tmpDir, encoding: 'utf-8' }).trim();
+    assert.strictEqual(branch, 'gsd/phase-45.14-golden-capture', 'should be on decimal phase branch, not integer-only');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

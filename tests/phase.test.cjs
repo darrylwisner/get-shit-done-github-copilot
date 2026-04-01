@@ -658,6 +658,92 @@ describe('phase add command', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// phase add with project_code prefix
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+describe('phase add with project_code', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('prefixes phase directory with project_code', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ project_code: 'CK' })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap v1.0\n\n### Phase 1: Foundation\n**Goal:** Setup\n\n---\n'
+    );
+
+    const result = runGsdTools('phase add User Dashboard', tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_number, 2, 'should be phase 2');
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'phases', 'CK-02-user-dashboard')),
+      'directory should have CK- prefix'
+    );
+  });
+
+  test('no prefix when project_code is null', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ project_code: null })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# Roadmap v1.0\n\n### Phase 1: Foundation\n**Goal:** Setup\n\n---\n'
+    );
+
+    const result = runGsdTools('phase add User Dashboard', tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'phases', '02-user-dashboard')),
+      'directory should have no prefix'
+    );
+  });
+
+  test('find-phase resolves prefixed directories', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', 'CK-01-foundation');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan');
+
+    const result = runGsdTools('find-phase 01', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.found, true, 'should find prefixed phase');
+    assert.strictEqual(output.phase_number, '01', 'should extract numeric phase number');
+  });
+
+  test('phases list sorts prefixed directories correctly', () => {
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', 'CK-02-api'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', 'CK-01-foundation'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', 'CK-03-ui'), { recursive: true });
+
+    const result = runGsdTools('phases list', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.deepStrictEqual(
+      output.directories,
+      ['CK-01-foundation', 'CK-02-api', 'CK-03-ui'],
+      'prefixed phases should sort numerically'
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // phase insert command
 // ─────────────────────────────────────────────────────────────────────────────
 

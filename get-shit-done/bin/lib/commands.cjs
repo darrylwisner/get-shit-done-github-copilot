@@ -16,7 +16,8 @@ function cmdGenerateSlug(text, raw) {
   const slug = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 60);
 
   const result = { slug };
   output(result, raw, slug);
@@ -254,7 +255,7 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
     let branchName = null;
     if (config.branching_strategy === 'phase') {
       // Determine which phase we're committing for from the file paths
-      const phaseMatch = (files || []).join(' ').match(/(\d+)-/);
+      const phaseMatch = (files || []).join(' ').match(/(\d+(?:\.\d+)*)-/);
       if (phaseMatch) {
         const phaseNum = phaseMatch[1];
         const phaseInfo = findPhaseInternal(cwd, phaseNum);

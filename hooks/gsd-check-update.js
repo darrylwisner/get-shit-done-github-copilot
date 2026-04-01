@@ -29,7 +29,10 @@ function detectConfigDir(baseDir) {
 
 const globalConfigDir = detectConfigDir(homeDir);
 const projectConfigDir = detectConfigDir(cwd);
-const cacheDir = path.join(globalConfigDir, 'cache');
+// Use a shared, tool-agnostic cache directory to avoid multi-runtime
+// resolution mismatches where check-update writes to one runtime's cache
+// but statusline reads from another (#1421).
+const cacheDir = path.join(homeDir, '.cache', 'gsd');
 const cacheFile = path.join(cacheDir, 'gsd-update-check.json');
 
 // VERSION file locations (check project first, then global)
@@ -65,10 +68,10 @@ const child = spawn(process.execPath, ['-e', `
   } catch (e) {}
 
   // Check for stale hooks — compare hook version headers against installed VERSION
-  // Hooks live inside get-shit-done/hooks/, not configDir/hooks/
+  // Hooks are installed at configDir/hooks/ (e.g. ~/.claude/hooks/) (#1421)
   let staleHooks = [];
   if (configDir) {
-    const hooksDir = path.join(configDir, 'get-shit-done', 'hooks');
+    const hooksDir = path.join(configDir, 'hooks');
     try {
       if (fs.existsSync(hooksDir)) {
         const hookFiles = fs.readdirSync(hooksDir).filter(f => f.startsWith('gsd-') && f.endsWith('.js'));

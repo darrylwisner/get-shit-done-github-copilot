@@ -105,10 +105,11 @@ describe('convertClaudeToWindsurfMarkdown', () => {
     assert.ok(!result.includes('Claude Code'), 'original brand removed');
   });
 
-  test('replaces CLAUDE.md with .windsurf/rules/', () => {
+  test('replaces CLAUDE.md with .windsurf/rules (no trailing slash)', () => {
     const input = 'See `CLAUDE.md` for configuration. Also check ./CLAUDE.md file.';
     const result = convertClaudeToWindsurfMarkdown(input);
-    assert.ok(result.includes('.windsurf/rules/'), 'CLAUDE.md replaced');
+    assert.ok(result.includes('.windsurf/rules'), 'CLAUDE.md replaced');
+    assert.ok(!result.includes('.windsurf/rules/'), 'no trailing slash (Node v25 compat)');
   });
 
   test('replaces .claude/skills/ with .windsurf/skills/', () => {

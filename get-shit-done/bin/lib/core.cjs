@@ -217,6 +217,7 @@ function loadConfig(cwd) {
     resolve_model_ids: false, // false: return alias as-is | true: map to full Claude model ID | "omit": return '' (runtime uses its default)
     context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
     phase_naming: 'sequential', // 'sequential' (default, auto-increment) or 'custom' (arbitrary string IDs)
+    project_code: null, // optional short prefix for phase dirs (e.g., 'CK' → 'CK-01-foundation')
   };
 
   try {
@@ -308,6 +309,7 @@ function loadConfig(cwd) {
       resolve_model_ids: get('resolve_model_ids') ?? defaults.resolve_model_ids,
       context_window: get('context_window') ?? defaults.context_window,
       phase_naming: get('phase_naming') ?? defaults.phase_naming,
+      project_code: get('project_code') ?? defaults.project_code,
       model_overrides: parsed.model_overrides || null,
       agent_skills: parsed.agent_skills || {},
     };
@@ -619,8 +621,10 @@ function escapeRegex(value) {
 
 function normalizePhaseName(phase) {
   const str = String(phase);
+  // Strip optional project_code prefix (e.g., 'CK-01' → '01')
+  const stripped = str.replace(/^[A-Z]{1,6}-(?=\d)/, '');
   // Standard numeric phases: 1, 01, 12A, 12.1
-  const match = str.match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
+  const match = stripped.match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
   if (match) {
     const padded = match[1].padStart(2, '0');
     const letter = match[2] ? match[2].toUpperCase() : '';
@@ -632,8 +636,11 @@ function normalizePhaseName(phase) {
 }
 
 function comparePhaseNum(a, b) {
-  const pa = String(a).match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
-  const pb = String(b).match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
+  // Strip optional project_code prefix before comparing (e.g., 'CK-01-name' → '01-name')
+  const sa = String(a).replace(/^[A-Z]{1,6}-/, '');
+  const sb = String(b).replace(/^[A-Z]{1,6}-/, '');
+  const pa = sa.match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
+  const pb = sb.match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
   // If either is non-numeric (custom ID), fall back to string comparison
   if (!pa || !pb) return String(a).localeCompare(String(b));
   const intDiff = parseInt(pa[1], 10) - parseInt(pb[1], 10);
@@ -668,12 +675,17 @@ function searchPhaseInDir(baseDir, relBase, normalized) {
       if (d.startsWith(normalized)) return true;
       // For custom IDs like PROJ-42, match case-insensitively
       if (d.toUpperCase().startsWith(normalized.toUpperCase())) return true;
+      // Strip optional project_code prefix (e.g., 'CK-01-name' → '01-name') and retry
+      const stripped = d.replace(/^[A-Z]{1,6}-/, '');
+      if (stripped.startsWith(normalized)) return true;
+      if (stripped.toUpperCase().startsWith(normalized.toUpperCase())) return true;
       return false;
     });
     if (!match) return null;
 
-    // Extract phase number and name — supports both numeric (01-name) and custom (PROJ-42-name)
-    const dirMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
+    // Extract phase number and name — supports numeric (01-name), project-code-prefixed (CK-01-name), and custom (PROJ-42-name)
+    const dirMatch = match.match(/^(?:[A-Z]{1,6}-)(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
+      || match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
       || match.match(/^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*)-(.+)/i)
       || [null, match, null];
     const phaseNumber = dirMatch ? dirMatch[1] : normalized;
@@ -1061,7 +1073,7 @@ function pathExistsInternal(cwd, targetPath) {
 
 function generateSlugInternal(text) {
   if (!text) return null;
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 60);
 }
 
 function getMilestoneInfo(cwd) {
