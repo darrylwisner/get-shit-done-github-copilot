@@ -25,6 +25,7 @@ const VALID_CONFIG_KEYS = new Set([
   'git.branching_strategy', 'git.phase_branch_template', 'git.milestone_branch_template', 'git.quick_branch_template',
   'planning.commit_docs', 'planning.search_gitignored',
   'hooks.context_warnings',
+  'project_code', 'phase_naming',
 ]);
 
 /**
@@ -132,6 +133,8 @@ function buildNewProjectConfig(userChoices) {
     hooks: {
       context_warnings: true,
     },
+    project_code: null,
+    phase_naming: 'sequential',
     agent_skills: {},
   };
 

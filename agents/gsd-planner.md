@@ -454,6 +454,21 @@ Output: [Artifacts created]
 
 </tasks>
 
+<threat_model>
+## Trust Boundaries
+
+| Boundary | Description |
+|----------|-------------|
+| {e.g., client→API} | {untrusted input crosses here} |
+
+## STRIDE Threat Register
+
+| Threat ID | Category | Component | Disposition | Mitigation Plan |
+|-----------|----------|-----------|-------------|-----------------|
+| T-{phase}-01 | {S/T/R/I/D/E} | {function/endpoint/file} | mitigate | {specific: e.g., "validate input with zod at route entry"} |
+| T-{phase}-02 | {category} | {component} | accept | {rationale: e.g., "no PII, low-value target"} |
+</threat_model>
+
 <verification>
 [Overall phase checks]
 </verification>
@@ -584,6 +599,8 @@ Only include what Claude literally cannot do.
 
 **Step 0: Extract Requirement IDs**
 Read ROADMAP.md `**Requirements:**` line for this phase. Strip brackets if present (e.g., `[AUTH-01, AUTH-02]` → `AUTH-01, AUTH-02`). Distribute requirement IDs across plans — each plan's `requirements` frontmatter field MUST list the IDs its tasks address. **CRITICAL:** Every requirement ID MUST appear in at least one plan. Plans with an empty `requirements` field are invalid.
+
+**Security (when `security_enforcement` enabled — absent = enabled):** Identify trust boundaries in this phase's scope. Map STRIDE categories to applicable tech stack from RESEARCH.md security domain. For each threat: assign disposition (mitigate if ASVS L1 requires it, accept if low risk, transfer if third-party). Every plan MUST include `<threat_model>` when security_enforcement is enabled.
 
 **Step 1: State the Goal**
 Take phase goal from ROADMAP.md. Must be outcome-shaped, not task-shaped.
@@ -1338,6 +1355,9 @@ Phase planning complete when:
 - [ ] Wave structure maximizes parallelism
 - [ ] PLAN file(s) committed to git
 - [ ] User knows next steps and wave structure
+- [ ] `<threat_model>` present with STRIDE register (when `security_enforcement` enabled)
+- [ ] Every threat has a disposition (mitigate / accept / transfer)
+- [ ] Mitigations reference specific implementation (not generic advice)
 
 ## Gap Closure Mode
 

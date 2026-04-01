@@ -366,6 +366,17 @@ describe('generateSlugInternal', () => {
   test('returns null for empty string', () => {
     assert.strictEqual(generateSlugInternal(''), null);
   });
+
+  test('strips newlines and control characters', () => {
+    assert.strictEqual(generateSlugInternal('hello\nworld'), 'hello-world');
+    assert.strictEqual(generateSlugInternal('tab\there'), 'tab-here');
+  });
+
+  test('truncates to 60 characters', () => {
+    const long = 'a'.repeat(100);
+    const result = generateSlugInternal(long);
+    assert.ok(result.length <= 60, `slug should be <=60 chars, got ${result.length}`);
+  });
 });
 
 // ─── normalizePhaseName / comparePhaseNum ──────────────────────────────────────
@@ -996,19 +1007,54 @@ describe('stale hook filter', () => {
 // ─── stale hook path regression (#1249) ──────────────────────────────────────
 
 describe('stale hook path', () => {
-  test('gsd-check-update.js checks get-shit-done/hooks/ not configDir/hooks/', () => {
+  test('gsd-check-update.js checks configDir/hooks/ where hooks are actually installed (#1421)', () => {
     const content = fs.readFileSync(
       path.join(__dirname, '..', 'hooks', 'gsd-check-update.js'), 'utf-8'
     );
+    // Hooks are installed at configDir/hooks/ (e.g. ~/.claude/hooks/),
+    // not configDir/get-shit-done/hooks/ which doesn't exist (#1421)
     assert.ok(
-      content.includes("path.join(configDir, 'get-shit-done', 'hooks')"),
-      'stale hook check must look in configDir/get-shit-done/hooks/, not configDir/hooks/'
+      content.includes("path.join(configDir, 'hooks')"),
+      'stale hook check must look in configDir/hooks/ where hooks are actually installed'
     );
+  });
+});
+
+// ─── shared cache directory regression (#1421) ─────────────────────────────────
+
+describe('shared cache directory (#1421)', () => {
+  test('gsd-check-update.js writes cache to shared ~/.cache/gsd/ directory', () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, '..', 'hooks', 'gsd-check-update.js'), 'utf-8'
+    );
+    // Cache must use a tool-agnostic path so statusline can find it
+    // regardless of which runtime (Claude, Gemini, OpenCode) ran the check
     assert.ok(
-      !content.includes("path.join(configDir, 'hooks')") ||
-      content.indexOf("path.join(configDir, 'get-shit-done', 'hooks')") <
-      content.indexOf("path.join(configDir, 'hooks')") + 100, // allow the old pattern only if corrected version exists first
-      'should not use the wrong hooks path'
+      content.includes("path.join(homeDir, '.cache', 'gsd')"),
+      'check-update must write cache to ~/.cache/gsd/ (shared, tool-agnostic)'
+    );
+  });
+
+  test('gsd-statusline.js checks shared cache first, falls back to legacy (#1421)', () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, '..', 'hooks', 'gsd-statusline.js'), 'utf-8'
+    );
+    // Statusline must check the shared cache path first
+    assert.ok(
+      content.includes("path.join(homeDir, '.cache', 'gsd', 'gsd-update-check.json')"),
+      'statusline must check shared cache at ~/.cache/gsd/gsd-update-check.json'
+    );
+    // Must fall back to legacy runtime-specific cache for backward compat
+    assert.ok(
+      content.includes("path.join(claudeDir, 'cache', 'gsd-update-check.json')"),
+      'statusline must fall back to legacy cache at claudeDir/cache/gsd-update-check.json'
+    );
+    // Shared cache must be checked before legacy (existsSync order matters)
+    const sharedIdx = content.indexOf('sharedCacheFile');
+    const legacyIdx = content.indexOf('legacyCacheFile');
+    assert.ok(
+      sharedIdx < legacyIdx,
+      'shared cache must be defined and checked before legacy cache'
     );
   });
 });

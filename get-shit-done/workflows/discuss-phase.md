@@ -182,6 +182,26 @@ If "Skip": Exit workflow
 
 **If doesn't exist:**
 
+**Check for interrupted discussion checkpoint:**
+
+```bash
+ls ${phase_dir}/*-DISCUSS-CHECKPOINT.json 2>/dev/null || true
+```
+
+If a checkpoint file exists (previous session was interrupted before CONTEXT.md was written):
+
+**If `--auto`:** Auto-select "Resume" — load checkpoint and continue from last completed area.
+
+**Otherwise:** Use AskUserQuestion:
+- header: "Resume"
+- question: "Found interrupted discussion checkpoint ({N} areas completed out of {M}). Resume from where you left off?"
+- options:
+  - "Resume" — Load checkpoint, skip completed areas, continue discussion
+  - "Start fresh" — Delete checkpoint, start discussion from scratch
+
+If "Resume": Parse the checkpoint JSON. Load `decisions` into the internal accumulator. Set `areas_completed` to skip those areas. Continue to `present_gray_areas` with only the remaining areas.
+If "Start fresh": Delete the checkpoint file. Continue as if no checkpoint existed.
+
 Check `has_plans` and `plan_count` from init. **If `has_plans` is true:**
 
 **If `--auto`:** Auto-select "Continue and replan after". Log: `[auto] Plans exist — continuing with context capture, will replan after.`
@@ -719,6 +739,44 @@ Back to [current area]: [return to current question]"
 
 Track deferred ideas internally.
 
+**Incremental checkpoint — save after each area completes:**
+
+After each area is resolved (user says "Next area" or area auto-resolves in `--auto` mode), immediately write a checkpoint file with all decisions captured so far. This prevents data loss if the session is interrupted mid-discussion.
+
+**Checkpoint file:** `${phase_dir}/${padded_phase}-DISCUSS-CHECKPOINT.json`
+
+Write after each area:
+```json
+{
+  "phase": "{PHASE_NUM}",
+  "phase_name": "{phase_name}",
+  "timestamp": "{ISO timestamp}",
+  "areas_completed": ["Area 1", "Area 2"],
+  "areas_remaining": ["Area 3", "Area 4"],
+  "decisions": {
+    "Area 1": [
+      {"question": "...", "answer": "...", "options_presented": ["..."]},
+      {"question": "...", "answer": "...", "options_presented": ["..."]}
+    ],
+    "Area 2": [
+      {"question": "...", "answer": "...", "options_presented": ["..."]}
+    ]
+  },
+  "deferred_ideas": ["..."],
+  "canonical_refs": ["..."]
+}
+```
+
+This is a structured checkpoint, not the final CONTEXT.md — the `write_context` step still produces the canonical output. But if the session dies, the next `gsd:discuss-phase` invocation can detect this checkpoint and offer to resume from it instead of starting from scratch.
+
+**On session resume:** In the `check_existing` step, also check for `*-DISCUSS-CHECKPOINT.json`. If found and no CONTEXT.md exists:
+- Display: "Found interrupted discussion checkpoint ({N} areas completed). Resume from checkpoint?"
+- Options: "Resume" / "Start fresh"
+- On "Resume": Load the checkpoint, skip completed areas, continue from where it left off
+- On "Start fresh": Delete the checkpoint, proceed as normal
+
+**After write_context completes successfully:** Delete the checkpoint file — the canonical CONTEXT.md now has all decisions.
+
 **Track discussion log data internally:**
 For each question asked, accumulate:
 - Area name
@@ -933,6 +991,12 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 
 Write file.
 
+**Clean up checkpoint file** — CONTEXT.md is now the canonical record:
+
+```bash
+rm -f "${phase_dir}/${padded_phase}-DISCUSS-CHECKPOINT.json"
+```
+
 Commit phase context and discussion log:
 
 ```bash
@@ -1046,4 +1110,7 @@ Route to `confirm_creation` step (existing behavior — show manual next steps).
 - Deferred ideas preserved for future phases
 - STATE.md updated with session info
 - User knows next steps
+- Checkpoint file written after each area completes (incremental save)
+- Interrupted sessions can be resumed from checkpoint (no re-answering completed areas)
+- Checkpoint file cleaned up after successful CONTEXT.md write
 </success_criteria>

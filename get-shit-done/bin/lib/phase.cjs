@@ -163,13 +163,22 @@ function cmdFindPhase(cwd, phase, raw) {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
     const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
 
-    const match = dirs.find(d => d.startsWith(normalized));
+    const match = dirs.find(d => {
+      if (d.startsWith(normalized)) return true;
+      if (d.toUpperCase().startsWith(normalized.toUpperCase())) return true;
+      // Strip optional project_code prefix (e.g., 'CK-01-name' → '01-name') and retry
+      const stripped = d.replace(/^[A-Z]{1,6}-/, '');
+      if (stripped.startsWith(normalized)) return true;
+      return false;
+    });
     if (!match) {
       output(notFound, raw, '');
       return;
     }
 
-    const dirMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i);
+    // Extract phase number — supports project-code-prefixed (CK-01-name), numeric (01-name), and custom IDs
+    const dirMatch = match.match(/^(?:[A-Z]{1,6}-)(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
+      || match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i);
     const phaseNumber = dirMatch ? dirMatch[1] : normalized;
     const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
 
@@ -326,11 +335,15 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
   let newPhaseId;
   let dirName;
 
+  // Optional project code prefix (e.g., 'CK' → 'CK-01-foundation')
+  const projectCode = config.project_code || '';
+  const prefix = projectCode ? `${projectCode}-` : '';
+
   if (customId || config.phase_naming === 'custom') {
     // Custom phase naming: use provided ID or generate from description
     newPhaseId = customId || slug.toUpperCase().replace(/-/g, '-');
     if (!newPhaseId) error('--id required when phase_naming is "custom"');
-    dirName = `${newPhaseId}-${slug}`;
+    dirName = `${prefix}${newPhaseId}-${slug}`;
   } else {
     // Sequential mode: find highest integer phase number (in current milestone only)
     const phasePattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
@@ -343,7 +356,7 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
 
     newPhaseId = maxPhase + 1;
     const paddedNum = String(newPhaseId).padStart(2, '0');
-    dirName = `${paddedNum}-${slug}`;
+    dirName = `${prefix}${paddedNum}-${slug}`;
   }
 
   const dirPath = path.join(planningDir(cwd), 'phases', dirName);
@@ -410,7 +423,7 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
   try {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
     const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-    const decimalPattern = new RegExp(`^${normalizedBase}\\.(\\d+)`);
+    const decimalPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${normalizedBase}\\.(\\d+)`);
     for (const dir of dirs) {
       const dm = dir.match(decimalPattern);
       if (dm) existingDecimals.push(parseInt(dm[1], 10));
@@ -419,7 +432,12 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
 
   const nextDecimal = existingDecimals.length === 0 ? 1 : Math.max(...existingDecimals) + 1;
   const decimalPhase = `${normalizedBase}.${nextDecimal}`;
-  const dirName = `${decimalPhase}-${slug}`;
+
+  // Optional project code prefix
+  const config = loadConfig(cwd);
+  const projectCode = config.project_code || '';
+  const prefix = projectCode ? `${projectCode}-` : '';
+  const dirName = `${prefix}${decimalPhase}-${slug}`;
   const dirPath = path.join(planningDir(cwd), 'phases', dirName);
 
   // Create directory with .gitkeep so git tracks empty folders

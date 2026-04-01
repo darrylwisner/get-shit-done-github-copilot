@@ -360,6 +360,32 @@ test -f "${PHASE_DIR}/${PADDED_PHASE}-VALIDATION.md" && echo "VALIDATION_CREATED
 
 **If not found:** Warn and continue — plans may fail Dimension 8.
 
+## 5.55. Security Threat Model Gate
+
+> Skip if `workflow.security_enforcement` is explicitly `false`. Absent = enabled.
+
+```bash
+SECURITY_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.security_enforcement --raw 2>/dev/null || echo "true")
+SECURITY_ASVS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.security_asvs_level --raw 2>/dev/null || echo "1")
+SECURITY_BLOCK=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.security_block_on --raw 2>/dev/null || echo "high")
+```
+
+**If `SECURITY_CFG` is `false`:** Skip to step 5.6.
+
+**If `SECURITY_CFG` is `true`:** Display banner:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► SECURITY THREAT MODEL REQUIRED (ASVS L{SECURITY_ASVS})
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Each PLAN.md must include a <threat_model> block.
+Block on: {SECURITY_BLOCK} severity threats.
+Opt out: set security_enforcement: false in .planning/config.json
+```
+
+Continue to step 5.6. Security config is passed to the planner in step 8.
+
 ## 5.6. UI Design Contract Gate
 
 > Skip if `workflow.ui_phase` is explicitly `false` AND `workflow.ui_safety_gate` is explicitly `false` in `.planning/config.json`. If keys are absent, treat as enabled.
@@ -496,6 +522,7 @@ ${AGENT_SKILLS_PLANNER}
 
 **Project instructions:** Read ./CLAUDE.md if exists — follow project-specific guidelines
 **Project skills:** Check .claude/skills/ or .agents/skills/ directory (if either exists) — read SKILL.md files, plans should account for project skill rules
+
 </planning_context>
 
 <downstream_consumer>
