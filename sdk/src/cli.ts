@@ -23,6 +23,8 @@ export interface ParsedCliArgs {
   prompt: string | undefined;
   /** For 'init' command: the raw input source (@file, text, or undefined for stdin). */
   initInput: string | undefined;
+  /** For 'auto --init': bootstrap from a PRD before running the autonomous loop. */
+  init: string | undefined;
   projectDir: string;
   wsPort: number | undefined;
   model: string | undefined;
@@ -43,6 +45,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
       'ws-port': { type: 'string' },
       model: { type: 'string' },
       'max-budget': { type: 'string' },
+      init: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -61,6 +64,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
     command,
     prompt,
     initInput,
+    init: values.init as string | undefined,
     projectDir: values['project-dir'] as string,
     wsPort: values['ws-port'] ? Number(values['ws-port']) : undefined,
     model: values.model as string | undefined,
@@ -85,6 +89,8 @@ Commands:
                           (empty)           Read from stdin
 
 Options:
+  --init <input>        Bootstrap from a PRD before running (auto only)
+                        Accepts @path/to/prd.md or "description text"
   --project-dir <dir>   Project directory (default: cwd)
   --ws-port <port>      Enable WebSocket transport on <port>
   --model <model>       Override LLM model
@@ -306,6 +312,47 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     }
 
     try {
+      // If --init provided, bootstrap project first
+      if (args.init) {
+        const initInput = await resolveInitInput({
+          ...args,
+          command: 'init',
+          initInput: args.init,
+        });
+
+        console.log(`[auto] Bootstrapping project from --init (${initInput.length} chars)`);
+
+        const tools = gsd.createTools();
+        const runner = new InitRunner({
+          projectDir: args.projectDir,
+          tools,
+          eventStream: gsd.eventStream,
+          config: {
+            maxBudgetPerSession: args.maxBudget,
+            orchestratorModel: args.model,
+          },
+        });
+
+        const initResult = await runner.run(initInput);
+
+        const initStatus = initResult.success ? 'SUCCESS' : 'FAILED';
+        const stepCount = initResult.steps.length;
+        const passedSteps = initResult.steps.filter(s => s.success).length;
+        const initCost = initResult.totalCostUsd.toFixed(2);
+        const initDuration = (initResult.totalDurationMs / 1000).toFixed(1);
+        console.log(`[init ${initStatus}] ${passedSteps}/${stepCount} steps, $${initCost}, ${initDuration}s`);
+
+        if (!initResult.success) {
+          for (const step of initResult.steps) {
+            if (!step.success && step.error) {
+              console.error(`  ✗ ${step.step}: ${step.error}`);
+            }
+          }
+          process.exitCode = 1;
+          return;
+        }
+      }
+
       const result = await gsd.run('');
 
       // Final summary

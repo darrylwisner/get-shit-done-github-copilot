@@ -116,9 +116,12 @@ describe('PromptFactory', () => {
   });
 
   function makeFactory(): PromptFactory {
+    // sdkPromptsDir points to a non-existent temp subdir so real sdk/prompts/ files
+    // don't interfere — tests control exactly which files exist on disk.
     return new PromptFactory({
       gsdInstallDir: tempDir,
       agentsDir,
+      sdkPromptsDir: join(tempDir, 'sdk-prompts-does-not-exist'),
     });
   }
 
@@ -365,6 +368,7 @@ describe('PromptFactory', () => {
         gsdInstallDir: tempDir,
         agentsDir,
         projectAgentsDir,
+        sdkPromptsDir: join(tempDir, 'sdk-prompts-does-not-exist'),
       });
 
       const content = await factory.loadAgentDef(PhaseType.Execute);
@@ -381,10 +385,136 @@ describe('PromptFactory', () => {
         gsdInstallDir: tempDir,
         agentsDir,
         projectAgentsDir,
+        sdkPromptsDir: join(tempDir, 'sdk-prompts-does-not-exist'),
       });
 
       const content = await factory.loadAgentDef(PhaseType.Execute);
       expect(content).toBe('user agent');
+    });
+  });
+
+  // ─── Headless prompt loading ─────────────────────────────────────────────
+
+  describe('headless prompt loading', () => {
+    it('loadWorkflowFile prefers sdkPromptsDir over GSD-1 workflowsDir', async () => {
+      const sdkDir = join(tempDir, 'sdk-prompts');
+      await mkdir(join(sdkDir, 'workflows'), { recursive: true });
+
+      // Write both: GSD-1 original and SDK headless version
+      await writeFile(join(workflowsDir, 'research-phase.md'), 'GSD-1 original');
+      await writeFile(join(sdkDir, 'workflows', 'research-phase.md'), 'SDK headless version');
+
+      const factory = new PromptFactory({
+        gsdInstallDir: tempDir,
+        agentsDir,
+        sdkPromptsDir: sdkDir,
+      });
+
+      const content = await factory.loadWorkflowFile(PhaseType.Research);
+      expect(content).toBe('SDK headless version');
+    });
+
+    it('loadWorkflowFile falls back to GSD-1 when sdkPromptsDir file missing', async () => {
+      const sdkDir = join(tempDir, 'sdk-prompts');
+      await mkdir(join(sdkDir, 'workflows'), { recursive: true });
+
+      // Only GSD-1 original exists, no SDK version
+      await writeFile(join(workflowsDir, 'research-phase.md'), 'GSD-1 original');
+
+      const factory = new PromptFactory({
+        gsdInstallDir: tempDir,
+        agentsDir,
+        sdkPromptsDir: sdkDir,
+      });
+
+      const content = await factory.loadWorkflowFile(PhaseType.Research);
+      expect(content).toBe('GSD-1 original');
+    });
+
+    it('loadAgentDef prefers sdkPromptsDir over user agents dir', async () => {
+      const sdkDir = join(tempDir, 'sdk-prompts');
+      await mkdir(join(sdkDir, 'agents'), { recursive: true });
+
+      // Write both: user agent and SDK headless agent
+      await writeFile(join(agentsDir, 'gsd-executor.md'), 'user agent');
+      await writeFile(join(sdkDir, 'agents', 'gsd-executor.md'), 'SDK headless agent');
+
+      const factory = new PromptFactory({
+        gsdInstallDir: tempDir,
+        agentsDir,
+        sdkPromptsDir: sdkDir,
+      });
+
+      const content = await factory.loadAgentDef(PhaseType.Execute);
+      expect(content).toBe('SDK headless agent');
+    });
+
+    it('loadAgentDef falls back to user agents when sdkPromptsDir file missing', async () => {
+      const sdkDir = join(tempDir, 'sdk-prompts');
+      await mkdir(join(sdkDir, 'agents'), { recursive: true });
+
+      // Only user agent exists, no SDK version
+      await writeFile(join(agentsDir, 'gsd-executor.md'), 'user agent');
+
+      const factory = new PromptFactory({
+        gsdInstallDir: tempDir,
+        agentsDir,
+        sdkPromptsDir: sdkDir,
+      });
+
+      const content = await factory.loadAgentDef(PhaseType.Execute);
+      expect(content).toBe('user agent');
+    });
+
+    it('buildPrompt sanitizes interactive patterns from output', async () => {
+      // Use separate lines so non-interactive content survives stripping
+      await writeFile(
+        join(workflowsDir, 'research-phase.md'),
+        makeWorkflowContent('Research the codebase thoroughly.', [
+          'Gather data from the project.\nAskUserQuestion("what?")\nAnalyze findings.',
+          'Run the analysis.\n/gsd:analyze --deep\nDocument results.',
+        ]),
+      );
+      await writeFile(
+        join(agentsDir, 'gsd-phase-researcher.md'),
+        makeAgentDef('gsd-phase-researcher', 'Read, Bash', 'You are a researcher.\nSTOP and wait for user input.\nBe thorough.'),
+      );
+
+      const factory = makeFactory();
+      const contextFiles: ContextFiles = { state: '# State' };
+
+      const prompt = await factory.buildPrompt(PhaseType.Research, null, contextFiles);
+
+      // Interactive patterns should be stripped by sanitizePrompt()
+      expect(prompt).not.toContain('AskUserQuestion');
+      expect(prompt).not.toContain('/gsd:');
+      expect(prompt).not.toMatch(/\bSTOP\s+and\s+wait/);
+
+      // Non-interactive content on separate lines should remain
+      expect(prompt).toContain('You are a researcher.');
+      expect(prompt).toContain('Be thorough.');
+      expect(prompt).toContain('Gather data from the project.');
+      expect(prompt).toContain('Analyze findings.');
+    });
+
+    it('buildPrompt with execute+plan sanitizes output from buildExecutorPrompt', async () => {
+      await writeFile(
+        join(agentsDir, 'gsd-executor.md'),
+        makeAgentDef('gsd-executor', 'Read, Write, Edit, Bash', 'You are an executor.\nSTOP and wait for user.\nExecute thoroughly.'),
+      );
+
+      const factory = makeFactory();
+      const plan = makeParsedPlan({ objective: 'Build the auth system' });
+      const contextFiles: ContextFiles = { state: '# State' };
+
+      const prompt = await factory.buildPrompt(PhaseType.Execute, plan, contextFiles);
+
+      // Objective should remain (no interactive pattern on that line)
+      expect(prompt).toContain('Build the auth system');
+      // The role's STOP directive should be stripped
+      expect(prompt).not.toMatch(/\bSTOP\s+and\s+wait/);
+      // Non-interactive role content should remain
+      expect(prompt).toContain('You are an executor.');
     });
   });
 });

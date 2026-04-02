@@ -352,7 +352,8 @@ describe('GSDTools typed methods', () => {
       expect(result.received_args).toContain('init');
       expect(result.received_args).toContain('phase-op');
       expect(result.received_args).toContain('7');
-      expect(result.received_args).toContain('--raw');
+      // exec() no longer appends --raw (only execRaw does)
+      expect(result.received_args).not.toContain('--raw');
     });
   });
 

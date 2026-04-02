@@ -7,6 +7,7 @@
 
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { InitNewProjectInfo, PhaseOpInfo, PhasePlanIndex, RoadmapAnalysis } from './types.js';
@@ -42,8 +43,7 @@ export class GSDTools {
   }) {
     this.projectDir = opts.projectDir;
     this.gsdToolsPath =
-      opts.gsdToolsPath ??
-      join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+      opts.gsdToolsPath ?? resolveGsdToolsPath(opts.projectDir);
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
@@ -51,11 +51,10 @@ export class GSDTools {
 
   /**
    * Execute a gsd-tools command and return parsed JSON output.
-   * Appends `--raw` to get machine-readable JSON output.
    * Handles the `@file:` prefix pattern for large results.
    */
   async exec(command: string, args: string[] = []): Promise<unknown> {
-    const fullArgs = [this.gsdToolsPath, command, ...args, '--raw'];
+    const fullArgs = [this.gsdToolsPath, command, ...args];
 
     return new Promise<unknown>((resolve, reject) => {
       const child = execFile(
@@ -281,4 +280,16 @@ export class GSDTools {
   async configSet(key: string, value: string): Promise<string> {
     return this.execRaw('config-set', [key, value]);
   }
+}
+
+// ─── Path resolution ────────────────────────────────────────────────────────
+
+/**
+ * Resolve gsd-tools.cjs path with repo-local fallback.
+ * Probe order: repo-local → global home directory.
+ */
+export function resolveGsdToolsPath(projectDir: string): string {
+  const localPath = join(projectDir, '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+  if (existsSync(localPath)) return localPath;
+  return join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
 }
