@@ -577,9 +577,9 @@ describe('PhaseRunner', () => {
 
       // 1 initial + 1 retry = 2 calls (not 3)
       expect(verifyCallCount).toBe(2);
-      // Verify step still succeeds (gap closure exhausted → proceed)
+      // Verify step fails when gaps persist after exhausting retries
       const verifyStep = result.steps.find(s => s.step === PhaseStepType.Verify);
-      expect(verifyStep!.success).toBe(true);
+      expect(verifyStep!.success).toBe(false);
     });
 
     it('gaps_found triggers plan → execute → re-verify cycle', async () => {
@@ -659,9 +659,9 @@ describe('PhaseRunner', () => {
       expect(afterVerify).not.toContain(PhaseStepType.Plan);
       expect(afterVerify.filter(s => s === PhaseStepType.Execute)).toHaveLength(0);
 
-      // Verify step still reports success (exhausted retries → proceed)
+      // Verify step fails when gaps persist (no retries allowed)
       const verifyStep = result.steps.find(s => s.step === PhaseStepType.Verify);
-      expect(verifyStep!.success).toBe(true);
+      expect(verifyStep!.success).toBe(false);
     });
 
     it('gap closure plan step failure proceeds to re-verify without executing', async () => {
@@ -724,8 +724,9 @@ describe('PhaseRunner', () => {
 
       // 1 initial + 3 retries = 4 verify calls
       expect(verifyCallCount).toBe(4);
+      // Verify step fails when gaps persist after all retries exhausted
       const verifyStep = result.steps.find(s => s.step === PhaseStepType.Verify);
-      expect(verifyStep!.success).toBe(true);
+      expect(verifyStep!.success).toBe(false);
     });
 
     it('gap closure results are included in the final verify step planResults', async () => {
@@ -771,6 +772,69 @@ describe('PhaseRunner', () => {
       expect(sessionIds).toContain('gap-exec');
       expect(sessionIds).toContain('verify-2');
       expect(verifyStep!.planResults!.length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
+  // ─── Advance gate on persistent gaps ──────────────────────────────────
+
+  describe('advance gate on persistent gaps', () => {
+    it('persistent gaps_found does NOT append Advance step', async () => {
+      const phaseOp = makePhaseOp({ has_context: true, has_plans: true, plan_count: 1 });
+      const config = makeConfig({ workflow: { research: false, skip_discuss: true, plan_check: false } as any });
+      const deps = makeDeps({ config });
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      mockRunPhaseStepSession.mockImplementation(async (_prompt, step) => {
+        if (step === PhaseStepType.Verify) {
+          return makePlanResult({
+            success: false,
+            error: { subtype: 'verification_failed', messages: ['Gaps persist'] },
+          });
+        }
+        return makePlanResult();
+      });
+
+      const runner = new PhaseRunner(deps);
+      const result = await runner.run('1');
+
+      const stepTypes = result.steps.map(s => s.step);
+      expect(stepTypes).not.toContain(PhaseStepType.Advance);
+    });
+
+    it('persistent gaps_found does NOT call phaseComplete', async () => {
+      const phaseOp = makePhaseOp({ has_context: true, has_plans: true, plan_count: 1 });
+      const config = makeConfig({ workflow: { research: false, skip_discuss: true, plan_check: false } as any });
+      const deps = makeDeps({ config });
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      mockRunPhaseStepSession.mockImplementation(async (_prompt, step) => {
+        if (step === PhaseStepType.Verify) {
+          return makePlanResult({
+            success: false,
+            error: { subtype: 'verification_failed', messages: ['Gaps persist'] },
+          });
+        }
+        return makePlanResult();
+      });
+
+      const runner = new PhaseRunner(deps);
+      await runner.run('1');
+
+      expect(deps.tools.phaseComplete).not.toHaveBeenCalled();
+    });
+
+    it('verifier disabled still advances normally', async () => {
+      const phaseOp = makePhaseOp({ has_context: true, has_plans: true, plan_count: 1 });
+      const config = makeConfig({ workflow: { research: false, verifier: false, skip_discuss: true, plan_check: false } as any });
+      const deps = makeDeps({ config });
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      const runner = new PhaseRunner(deps);
+      const result = await runner.run('1');
+
+      const stepTypes = result.steps.map(s => s.step);
+      expect(stepTypes).toContain(PhaseStepType.Advance);
+      expect(result.success).toBe(true);
     });
   });
 

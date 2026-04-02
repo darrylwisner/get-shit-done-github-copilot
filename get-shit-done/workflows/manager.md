@@ -210,7 +210,7 @@ After discuss completes, loop back to dashboard step.
 
 ### Plan Phase N
 
-Planning runs autonomously. Spawn a background agent:
+Planning runs autonomously. Spawn a background agent that delegates to the Skill pipeline:
 
 ```
 Task(
@@ -222,16 +222,12 @@ Working directory: {cwd}
 Phase: {N} — {phase_name}
 Goal: {goal}
 
-Steps:
-1. Read the plan-phase workflow: cat ~/.claude/get-shit-done/workflows/plan-phase.md
-2. Run: node \"$HOME/.claude/get-shit-done/bin/gsd-tools.cjs\" init plan-phase {N}
-3. Follow the workflow steps to produce PLAN.md files for this phase.
-4. If research is enabled in config, run the research step first.
-5. Spawn a gsd-planner subagent via Task() to create the plans.
-6. If plan-checker is enabled, spawn a gsd-plan-checker subagent to verify.
-7. Commit plan files when complete.
+Run the plan-phase Skill:
+Skill(skill=\"gsd:plan-phase\", args=\"{N} --auto\")
 
-Important: You are running in the background. Do NOT use AskUserQuestion — make autonomous decisions based on project context. If you hit a blocker, write it to STATE.md as a blocker and stop. Do NOT silently work around permission or file access errors — let them fail so the manager can surface them with resolution hints."
+This delegates to the full plan-phase pipeline including local patches, research, plan-checker, and all quality gates.
+
+Important: You are running in the background. Do NOT use AskUserQuestion — make autonomous decisions based on project context. If you hit a blocker, write it to STATE.md as a blocker and stop. Do NOT silently work around permission or file access errors — let them fail so the manager can surface them with resolution hints. Do NOT use --no-verify on git commits."
 )
 ```
 
@@ -245,7 +241,7 @@ Loop back to dashboard step.
 
 ### Execute Phase N
 
-Execution runs autonomously. Spawn a background agent:
+Execution runs autonomously. Spawn a background agent that delegates to the Skill pipeline:
 
 ```
 Task(
@@ -257,16 +253,12 @@ Working directory: {cwd}
 Phase: {N} — {phase_name}
 Goal: {goal}
 
-Steps:
-1. Read the execute-phase workflow: cat ~/.claude/get-shit-done/workflows/execute-phase.md
-2. Run: node \"$HOME/.claude/get-shit-done/bin/gsd-tools.cjs\" init execute-phase {N}
-3. Follow the workflow steps: discover plans, analyze dependencies, group into waves.
-4. For each wave, spawn gsd-executor subagents via Task() to execute plans in parallel.
-5. After all waves complete, spawn a gsd-verifier subagent if verifier is enabled.
-6. Update ROADMAP.md and STATE.md with progress.
-7. Commit all changes.
+Run the execute-phase Skill:
+Skill(skill=\"gsd:execute-phase\", args=\"{N}\")
 
-Important: You are running in the background. Do NOT use AskUserQuestion — make autonomous decisions. Use --no-verify on git commits. If you hit a permission error, file lock, or any access issue, do NOT work around it — let it fail and write the error to STATE.md as a blocker so the manager can surface it with resolution guidance."
+This delegates to the full execute-phase pipeline including local patches, branching, wave-based execution, verification, and all quality gates.
+
+Important: You are running in the background. Do NOT use AskUserQuestion — make autonomous decisions. Do NOT use --no-verify on git commits — let pre-commit hooks run normally. If you hit a permission error, file lock, or any access issue, do NOT work around it — let it fail and write the error to STATE.md as a blocker so the manager can surface it with resolution guidance."
 )
 ```
 
@@ -306,7 +298,7 @@ Classify the error:
   - **question:** "Phase {N} failed — permission denied for `{tool_or_command}`. Want me to add it to settings.local.json so it's allowed?"
   - **options:** "Add permission and retry" / "Run this phase inline instead" / "Skip and continue"
   - "Add permission and retry": Use `Skill(skill="update-config")` to add the permission to `settings.local.json`, then re-spawn the background agent. Loop to dashboard.
-  - "Run this phase inline instead": Dispatch the same action (plan/execute) inline via `Skill()` instead of a background Task. Loop to dashboard after.
+  - "Run this phase inline instead": Dispatch the same action inline via the appropriate Skill — use `Skill(skill="gsd:plan-phase", args="{N}")` if the failed action was planning, or `Skill(skill="gsd:execute-phase", args="{N}")` if the failed action was execution. Loop to dashboard after.
   - "Skip and continue": Loop to dashboard (phase stays in current state).
 
 **Other errors** (git lock, file conflict, logic error, etc.):
@@ -314,7 +306,7 @@ Classify the error:
   - **question:** "Background agent for Phase {N} encountered an issue: {error}. What next?"
   - **options:** "Retry" / "Run inline instead" / "Skip and continue" / "View details"
   - "Retry": Re-spawn the same background agent. Loop to dashboard.
-  - "Run inline instead": Dispatch the action inline via `Skill()`. Loop to dashboard after.
+  - "Run inline instead": Dispatch the action inline via the appropriate Skill — use `Skill(skill="gsd:plan-phase", args="{N}")` if the failed action was planning, or `Skill(skill="gsd:execute-phase", args="{N}")` if the failed action was execution. Loop to dashboard after.
   - "Skip and continue": Loop to dashboard (phase stays in current state).
   - "View details": Read STATE.md blockers section, display, then re-present options.
 

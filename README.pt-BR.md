@@ -71,6 +71,8 @@ O GSD corrige isso. É a camada de engenharia de contexto que torna o Claude Cod
 
 Para quem quer descrever o que precisa e receber isso construído do jeito certo — sem fingir que está rodando uma engenharia de 50 pessoas.
 
+Quality gates embutidos capturam problemas reais: detecção de schema drift sinaliza mudanças ORM sem migrations, segurança ancora verificação a modelos de ameaça, e detecção de redução de escopo impede o planner de descartar requisitos silenciosamente.
+
 ---
 
 ## Primeiros passos
@@ -290,7 +292,7 @@ Cada tarefa gera commit próprio, facilitando `git bisect`, rollback e rastreabi
 | Comando | O que faz |
 |---------|-----------|
 | `/gsd:new-project [--auto]` | Inicializa projeto completo |
-| `/gsd:discuss-phase [N] [--auto] [--analyze]` | Captura decisões antes do plano |
+| `/gsd:discuss-phase [N] [--auto] [--analyze] [--chain]` | Captura decisões antes do plano (`--chain` encadeia automaticamente em plan+execute) |
 | `/gsd:plan-phase [N] [--auto] [--reviews]` | Pesquisa + plano + validação |
 | `/gsd:execute-phase <N>` | Executa planos em ondas paralelas |
 | `/gsd:verify-work [N]` | UAT manual |
@@ -308,7 +310,7 @@ Cada tarefa gera commit próprio, facilitando `git bisect`, rollback e rastreabi
 | `/gsd:pr-branch` | Cria branch limpa para PR |
 | `/gsd:settings` | Configura perfis e agentes |
 | `/gsd:set-profile <profile>` | Troca perfil (quality/balanced/budget/inherit) |
-| `/gsd:quick [--full] [--discuss] [--research]` | Execução rápida com garantias do GSD |
+| `/gsd:quick [--full] [--discuss] [--research]` | Execução rápida com garantias do GSD (`--full` ativa todas as etapas, `--validate` ativa apenas verificação) |
 | `/gsd:health [--repair]` | Verifica e repara `.planning/` |
 
 > Para a lista completa de comandos e opções, use `/gsd:help`.

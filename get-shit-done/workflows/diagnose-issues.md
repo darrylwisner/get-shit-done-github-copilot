@@ -55,6 +55,12 @@ gaps = [
 </step>
 
 <step name="report_plan">
+**Read worktree config:**
+
+```bash
+USE_WORKTREES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.use_worktrees 2>/dev/null || echo "true")
+```
+
 **Report diagnosis plan to user:**
 
 ```
@@ -92,7 +98,7 @@ For each gap, fill the debug-subagent-prompt template and spawn:
 Task(
   prompt=filled_debug_subagent_prompt + "\n\n<files_to_read>\n- {phase_dir}/{phase_num}-UAT.md\n- .planning/STATE.md\n</files_to_read>\n${AGENT_SKILLS_DEBUGGER}",
   subagent_type="gsd-debugger",
-  isolation="worktree",
+  ${USE_WORKTREES !== "false" ? 'isolation="worktree",' : ''}
   description="Debug: {truth_short}"
 )
 ```

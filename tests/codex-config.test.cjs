@@ -169,6 +169,21 @@ Run /gsd:execute-phase to proceed.`;
     const result = convertClaudeAgentToCodexAgent(input);
     assert.strictEqual(result, input, 'returns input unchanged');
   });
+
+  test('replaces .claude paths with .codex paths (#1430)', () => {
+    const input = `---
+name: gsd-debugger
+description: Debugs issues
+tools: Read, Bash
+---
+
+INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state load)
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: resolve"`;
+
+    const result = convertClaudeAgentToCodexAgent(input);
+    assert.ok(result.includes('$HOME/.codex/get-shit-done/bin/gsd-tools.cjs'), 'replaces $HOME/.claude/ with $HOME/.codex/');
+    assert.ok(!result.includes('$HOME/.claude/'), 'no .claude paths remain');
+  });
 });
 
 // ─── generateCodexAgentToml ─────────────────────────────────────────────────────

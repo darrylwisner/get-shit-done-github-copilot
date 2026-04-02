@@ -22,6 +22,7 @@ const VALID_CONFIG_KEYS = new Set([
   'workflow.discuss_mode',
   'workflow.skip_discuss',
   'workflow._auto_chain_active',
+  'workflow.use_worktrees',
   'git.branching_strategy', 'git.phase_branch_template', 'git.milestone_branch_template', 'git.quick_branch_template',
   'planning.commit_docs', 'planning.search_gitignored',
   'hooks.context_warnings',

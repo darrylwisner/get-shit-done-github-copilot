@@ -8,6 +8,33 @@ const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, com
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const { MODEL_PROFILES } = require('./model-profiles.cjs');
 
+/**
+ * Determine phase status by checking plan/summary counts AND verification state.
+ * Introduces "Executed" for phases with all summaries but no passing verification.
+ */
+function determinePhaseStatus(plans, summaries, phaseDir, defaultPending) {
+  if (plans === 0) return defaultPending;
+  if (summaries < plans && summaries > 0) return 'In Progress';
+  if (summaries < plans) return 'Planned';
+
+  // summaries >= plans — check verification
+  try {
+    const files = fs.readdirSync(phaseDir);
+    const verificationFile = files.find(f => f === 'VERIFICATION.md' || f.endsWith('-VERIFICATION.md'));
+    if (verificationFile) {
+      const content = fs.readFileSync(path.join(phaseDir, verificationFile), 'utf-8');
+      if (/status:\s*passed/i.test(content)) return 'Complete';
+      if (/status:\s*human_needed/i.test(content)) return 'Needs Review';
+      if (/status:\s*gaps_found/i.test(content)) return 'Executed';
+      // Verification exists but unrecognized status — treat as executed
+      return 'Executed';
+    }
+  } catch { /* directory read failed — fall through */ }
+
+  // No verification file — executed but not verified
+  return 'Executed';
+}
+
 function cmdGenerateSlug(text, raw) {
   if (!text) {
     error('text required for slug generation');
@@ -529,11 +556,7 @@ function cmdProgressRender(cwd, format, raw) {
       totalPlans += plans;
       totalSummaries += summaries;
 
-      let status;
-      if (plans === 0) status = 'Pending';
-      else if (summaries >= plans) status = 'Complete';
-      else if (summaries > 0) status = 'In Progress';
-      else status = 'Planned';
+      const status = determinePhaseStatus(plans, summaries, path.join(phasesDir, dir), 'Pending');
 
       phases.push({ number: phaseNum, name: phaseName, plans, summaries, status });
     }
@@ -829,18 +852,14 @@ function cmdStats(cwd, format, raw) {
       totalPlans += plans;
       totalSummaries += summaries;
 
-      let status;
-      if (plans === 0) status = 'Not Started';
-      else if (summaries >= plans) status = 'Complete';
-      else if (summaries > 0) status = 'In Progress';
-      else status = 'Planned';
+      const status = determinePhaseStatus(plans, summaries, path.join(phasesDir, dir), 'Not Started');
 
       const existing = phasesByNumber.get(phaseNum);
       phasesByNumber.set(phaseNum, {
         number: phaseNum,
         name: existing?.name || phaseName,
-        plans,
-        summaries,
+        plans: (existing?.plans || 0) + plans,
+        summaries: (existing?.summaries || 0) + summaries,
         status,
       });
     }

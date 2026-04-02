@@ -874,6 +874,84 @@ function cmdValidateAgents(cwd, raw) {
   }, raw);
 }
 
+// ─── Schema Drift Detection ──────────────────────────────────────────────────
+
+function cmdVerifySchemaDrift(cwd, phaseArg, skipFlag, raw) {
+  const { detectSchemaFiles, checkSchemaDrift } = require('./schema-detect.cjs');
+
+  if (!phaseArg) {
+    error('Usage: verify schema-drift <phase> [--skip]');
+    return;
+  }
+
+  // Find phase directory
+  const pDir = planningDir(cwd);
+  const phasesDir = path.join(pDir, 'phases');
+  if (!fs.existsSync(phasesDir)) {
+    output({ drift_detected: false, blocking: false, message: 'No phases directory' }, raw);
+    return;
+  }
+
+  // Find matching phase directory
+  let phaseDir = null;
+  const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() && entry.name.includes(phaseArg)) {
+      phaseDir = path.join(phasesDir, entry.name);
+      break;
+    }
+  }
+
+  // Also try exact match
+  if (!phaseDir) {
+    const exact = path.join(phasesDir, phaseArg);
+    if (fs.existsSync(exact)) phaseDir = exact;
+  }
+
+  if (!phaseDir) {
+    output({ drift_detected: false, blocking: false, message: `Phase directory not found: ${phaseArg}` }, raw);
+    return;
+  }
+
+  // Collect files_modified from all PLAN.md files in the phase
+  const allFiles = [];
+  const planFiles = fs.readdirSync(phaseDir).filter(f => f.endsWith('-PLAN.md'));
+  for (const pf of planFiles) {
+    const content = fs.readFileSync(path.join(phaseDir, pf), 'utf-8');
+    // Extract files_modified from frontmatter
+    const fmMatch = content.match(/files_modified:\s*\[([^\]]*)\]/);
+    if (fmMatch) {
+      const files = fmMatch[1].split(',').map(f => f.trim()).filter(Boolean);
+      allFiles.push(...files);
+    }
+  }
+
+  // Collect execution log from SUMMARY.md files
+  let executionLog = '';
+  const summaryFiles = fs.readdirSync(phaseDir).filter(f => f.endsWith('-SUMMARY.md'));
+  for (const sf of summaryFiles) {
+    executionLog += fs.readFileSync(path.join(phaseDir, sf), 'utf-8') + '\n';
+  }
+
+  // Also check git commit messages for push evidence
+  const gitLog = execGit(cwd, ['log', '--oneline', '--all', '-50']);
+  if (gitLog.exitCode === 0) {
+    executionLog += '\n' + gitLog.stdout;
+  }
+
+  const result = checkSchemaDrift(allFiles, executionLog, { skipCheck: !!skipFlag });
+
+  output({
+    drift_detected: result.driftDetected,
+    blocking: result.blocking,
+    schema_files: result.schemaFiles,
+    orms: result.orms,
+    unpushed_orms: result.unpushedOrms,
+    message: result.message,
+    skipped: result.skipped || false,
+  }, raw);
+}
+
 module.exports = {
   cmdVerifySummary,
   cmdVerifyPlanStructure,
@@ -885,4 +963,5 @@ module.exports = {
   cmdValidateConsistency,
   cmdValidateHealth,
   cmdValidateAgents,
+  cmdVerifySchemaDrift,
 };

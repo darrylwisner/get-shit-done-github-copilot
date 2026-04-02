@@ -1,6 +1,6 @@
 <purpose>
 
-Drive all remaining milestone phases autonomously. For each incomplete phase: discuss → plan → execute using Skill() flat invocations. Pauses only for explicit user decisions (grey area acceptance, blockers, validation requests). Re-reads ROADMAP.md after each phase to catch dynamically inserted phases.
+Drive milestone phases autonomously — all remaining phases, or a single phase via `--only N`. For each incomplete phase: discuss → plan → execute using Skill() flat invocations. Pauses only for explicit user decisions (grey area acceptance, blockers, validation requests). Re-reads ROADMAP.md after each phase to catch dynamically inserted phases.
 
 </purpose>
 
@@ -16,14 +16,22 @@ Read all files referenced by the invoking prompt's execution_context before star
 
 ## 1. Initialize
 
-Parse `$ARGUMENTS` for `--from N` flag:
+Parse `$ARGUMENTS` for `--from N` and `--only N` flags:
 
 ```bash
 FROM_PHASE=""
 if echo "$ARGUMENTS" | grep -qE '\-\-from\s+[0-9]'; then
   FROM_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-from\s+[0-9]+\.?[0-9]*' | awk '{print $2}')
 fi
+
+ONLY_PHASE=""
+if echo "$ARGUMENTS" | grep -qE '\-\-only\s+[0-9]'; then
+  ONLY_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-only\s+[0-9]+\.?[0-9]*' | awk '{print $2}')
+  FROM_PHASE="$ONLY_PHASE"
+fi
 ```
+
+When `--only` is set, also set `FROM_PHASE` to the same value so existing filter logic applies.
 
 Bootstrap via milestone-level init:
 
@@ -48,7 +56,8 @@ Display startup banner:
  Phases: {phase_count} total, {completed_phases} complete
 ```
 
-If `FROM_PHASE` is set, display: `Starting from phase ${FROM_PHASE}`
+If `ONLY_PHASE` is set, display: `Single phase mode: Phase ${ONLY_PHASE}`
+Else if `FROM_PHASE` is set, display: `Starting from phase ${FROM_PHASE}`
 
 </step>
 
@@ -67,6 +76,16 @@ Parse the JSON `phases` array.
 **Filter to incomplete phases:** Keep only phases where `disk_status !== "complete"` OR `roadmap_complete === false`.
 
 **Apply `--from N` filter:** If `FROM_PHASE` was provided, additionally filter out phases where `number < FROM_PHASE` (use numeric comparison — handles decimal phases like "5.1").
+
+**Apply `--only N` filter:** If `ONLY_PHASE` was provided, additionally filter OUT phases where `number != ONLY_PHASE`. This means the phase list will contain exactly one phase (or zero if already complete).
+
+**If `ONLY_PHASE` is set and no phases remain** (phase already complete):
+
+```
+Phase ${ONLY_PHASE} is already complete. Nothing to do.
+```
+
+Exit cleanly.
 
 **Sort by `number`** in numeric ascending order.
 
@@ -117,7 +136,9 @@ For the current phase, display the progress banner:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Where N = current phase number (from the ROADMAP, e.g., 6), T = total milestone phases (from `phase_count` parsed in initialize step, e.g., 8), P = percentage of all milestone phases completed so far. Calculate P as: (number of phases with `disk_status` "complete" from the latest `roadmap analyze` / T × 100). Use █ for filled and ░ for empty segments in the progress bar (8 characters wide).
+Where N = current phase number (from the ROADMAP, e.g., 63), T = total milestone phases (from `phase_count` parsed in initialize step, e.g., 67). **Important:** T must be `phase_count` (the total number of phases in this milestone), NOT the count of remaining/incomplete phases. When phases are numbered 61-67, T=7 and the banner should read `Phase 63/7` (phase 63, 7 total in milestone), not `Phase 63/3` (which would confuse 3 remaining with 3 total). P = percentage of all milestone phases completed so far. Calculate P as: (number of phases with `disk_status` "complete" from the latest `roadmap analyze` / T × 100). Use █ for filled and ░ for empty segments in the progress bar (8 characters wide).
+
+**Alternative display when phase numbers exceed total** (e.g., multi-milestone projects where phases are numbered globally): If N > T (phase number exceeds milestone phase count), use the format `Phase {N} ({position}/{T})` where `position` is the 1-based index of this phase among incomplete phases being processed. This prevents confusing displays like "Phase 63/5".
 
 **3a. Smart Discuss**
 
@@ -210,6 +231,9 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(${PADDED_PHASE
 Proceed to 3b.
 
 **If SKIP_DISCUSS is `false` (or unset):** Execute the smart_discuss step for this phase.
+
+**IMPORTANT — Discuss must be single-pass in autonomous mode.**
+The discuss step in `--auto` mode MUST NOT loop. If CONTEXT.md already exists after discuss completes, do NOT re-invoke discuss for the same phase. The `has_context` check below is authoritative — once true, discuss is done for this phase regardless of perceived "gaps" in the context file.
 
 After smart_discuss completes, verify context was written:
 
@@ -686,7 +710,9 @@ Decisions captured: {count} across {area_count} areas
 
 ## 4. Iterate
 
-After each phase completes, re-read ROADMAP.md to catch phases inserted mid-execution (decimal phases like 5.1):
+**If `ONLY_PHASE` is set:** Do not iterate. Proceed directly to lifecycle step (which exits cleanly per single-phase mode).
+
+**Otherwise:** After each phase completes, re-read ROADMAP.md to catch phases inserted mid-execution (decimal phases like 5.1):
 
 ```bash
 ROADMAP=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze)
@@ -715,7 +741,23 @@ If all phases complete, proceed to lifecycle step.
 
 ## 5. Lifecycle
 
-After all phases complete, run the milestone lifecycle sequence: audit → complete → cleanup.
+**If `ONLY_PHASE` is set:** Skip lifecycle. A single phase does not trigger audit/complete/cleanup. Display:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► AUTONOMOUS ▸ PHASE ${ONLY_PHASE} COMPLETE ✓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ Phase ${ONLY_PHASE}: ${PHASE_NAME} — Done
+ Mode: Single phase (--only)
+
+ Lifecycle skipped — run /gsd:autonomous without --only
+ after all phases complete to trigger audit/complete/cleanup.
+```
+
+Exit cleanly.
+
+**Otherwise:** After all phases complete, run the milestone lifecycle sequence: audit → complete → cleanup.
 
 Display lifecycle transition banner:
 
@@ -852,7 +894,7 @@ When any phase operation fails or a blocker is detected, present 3 options via A
  Skipped: {list of skipped phases}
  Remaining: {list of remaining phases}
 
- Resume with: /gsd:autonomous --from {next_phase}
+ Resume with: /gsd:autonomous ${ONLY_PHASE ? "--only " + ONLY_PHASE : "--from " + next_phase}
 ```
 
 </step>
@@ -882,10 +924,15 @@ When any phase operation fails or a blocker is detected, present 3 options via A
 - [ ] Complete-milestone invoked via Skill() with ${milestone_version} arg
 - [ ] Cleanup invoked via Skill() — internal confirmation is acceptable (CTRL-01)
 - [ ] Final completion banner displayed after lifecycle
-- [ ] Progress bar uses phase number / total milestone phases (not position among incomplete)
+- [ ] Progress bar uses phase number / total milestone phases (not position among incomplete), with fallback display when phase numbers exceed total
 - [ ] Smart discuss documents relationship to discuss-phase with CTRL-03 note
 - [ ] Frontend phases get UI-SPEC generated before planning (step 3a.5) if not already present
 - [ ] Frontend phases get UI review audit after successful execution (step 3d.5) if UI-SPEC exists
 - [ ] UI phase and UI review respect workflow.ui_phase and workflow.ui_review config toggles
 - [ ] UI review is advisory (non-blocking) — phase proceeds to iterate regardless of score
+- [ ] `--only N` restricts execution to exactly one phase
+- [ ] `--only N` skips lifecycle step (audit/complete/cleanup)
+- [ ] `--only N` exits cleanly after single phase completes
+- [ ] `--only N` on already-complete phase exits with message
+- [ ] `--only N` handle_blocker resume message uses --only flag
 </success_criteria>

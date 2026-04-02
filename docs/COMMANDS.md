@@ -811,6 +811,7 @@ Cross-AI peer review of phase plans from external AI CLIs.
 | `--gemini` | Include Gemini CLI review |
 | `--claude` | Include Claude CLI review (separate session) |
 | `--codex` | Include Codex CLI review |
+| `--coderabbit` | Include CodeRabbit review |
 | `--all` | Include all available CLIs |
 
 **Produces:** `{phase}-REVIEWS.md` — consumable by `/gsd:plan-phase --reviews`

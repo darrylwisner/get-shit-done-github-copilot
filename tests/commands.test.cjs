@@ -1444,11 +1444,12 @@ describe('stats command', () => {
     fs.mkdirSync(p1, { recursive: true });
     fs.mkdirSync(p2, { recursive: true });
 
-    // Phase 1: 2 plans, 2 summaries (complete)
+    // Phase 1: 2 plans, 2 summaries, passing verification (complete)
     fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan');
     fs.writeFileSync(path.join(p1, '01-02-PLAN.md'), '# Plan');
     fs.writeFileSync(path.join(p1, '01-01-SUMMARY.md'), '# Summary');
     fs.writeFileSync(path.join(p1, '01-02-SUMMARY.md'), '# Summary');
+    fs.writeFileSync(path.join(p1, 'VERIFICATION.md'), '---\nstatus: passed\n---\n# Verification');
 
     // Phase 2: 1 plan, 0 summaries (planned)
     fs.writeFileSync(path.join(p2, '02-01-PLAN.md'), '# Plan');
@@ -1520,8 +1521,10 @@ describe('stats command', () => {
     fs.mkdirSync(p2, { recursive: true });
     fs.writeFileSync(path.join(p1, '14-01-PLAN.md'), '# Plan');
     fs.writeFileSync(path.join(p1, '14-01-SUMMARY.md'), '# Summary');
+    fs.writeFileSync(path.join(p1, 'VERIFICATION.md'), '---\nstatus: passed\n---\n# Verified');
     fs.writeFileSync(path.join(p2, '15-01-PLAN.md'), '# Plan');
     fs.writeFileSync(path.join(p2, '15-01-SUMMARY.md'), '# Summary');
+    fs.writeFileSync(path.join(p2, 'VERIFICATION.md'), '---\nstatus: passed\n---\n# Verified');
 
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'ROADMAP.md'),
@@ -1604,6 +1607,7 @@ describe('stats command', () => {
     fs.mkdirSync(p1, { recursive: true });
     fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan');
     fs.writeFileSync(path.join(p1, '01-01-SUMMARY.md'), '# Summary');
+    fs.writeFileSync(path.join(p1, 'VERIFICATION.md'), '---\nstatus: passed\n---\n# Verified');
 
     const result = runGsdTools('stats table', tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
@@ -1614,5 +1618,79 @@ describe('stats command', () => {
     assert.ok(parsed.rendered.includes('| Phase |'), 'should include table header');
     assert.ok(parsed.rendered.includes('| 1 |'), 'should include phase row');
     assert.ok(parsed.rendered.includes('1/1 phases'), 'should report phase progress');
+  });
+
+  test('phase with summaries but no verification is Executed, not Complete', () => {
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-auth');
+    fs.mkdirSync(p1, { recursive: true });
+    fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(p1, '01-01-SUMMARY.md'), '# Summary');
+    const result = runGsdTools('stats', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const stats = JSON.parse(result.output);
+    const phase = stats.phases.find(p => p.number === '01' || p.number === '1');
+    assert.strictEqual(phase.status, 'Executed', 'should be Executed without verification');
+    assert.strictEqual(stats.phases_completed, 0, 'unverified phase should not count as completed');
+  });
+
+  test('phase with passing verification is Complete', () => {
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-auth');
+    fs.mkdirSync(p1, { recursive: true });
+    fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(p1, '01-01-SUMMARY.md'), '# Summary');
+    fs.writeFileSync(path.join(p1, 'VERIFICATION.md'), '---\nstatus: passed\n---\n# Verification');
+    const result = runGsdTools('stats', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const stats = JSON.parse(result.output);
+    const phase = stats.phases.find(p => p.number === '01' || p.number === '1');
+    assert.strictEqual(phase.status, 'Complete', 'should be Complete with passing verification');
+    assert.strictEqual(stats.phases_completed, 1);
+  });
+
+  test('phase with gaps_found verification is Executed', () => {
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-auth');
+    fs.mkdirSync(p1, { recursive: true });
+    fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(p1, '01-01-SUMMARY.md'), '# Summary');
+    fs.writeFileSync(path.join(p1, 'VERIFICATION.md'), '---\nstatus: gaps_found\n---\n# Verification');
+    const result = runGsdTools('stats', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const stats = JSON.parse(result.output);
+    const phase = stats.phases.find(p => p.number === '01' || p.number === '1');
+    assert.strictEqual(phase.status, 'Executed', 'gaps_found should show as Executed');
+  });
+
+  test('phase with human_needed verification shows Needs Review', () => {
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-auth');
+    fs.mkdirSync(p1, { recursive: true });
+    fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(p1, '01-01-SUMMARY.md'), '# Summary');
+    fs.writeFileSync(path.join(p1, 'VERIFICATION.md'), '---\nstatus: human_needed\n---\n# Verification');
+    const result = runGsdTools('stats', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const stats = JSON.parse(result.output);
+    const phase = stats.phases.find(p => p.number === '01' || p.number === '1');
+    assert.strictEqual(phase.status, 'Needs Review', 'human_needed should show as Needs Review');
+  });
+
+  test('progress command also uses verification-aware status', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap v1.0 MVP\n`
+    );
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-auth');
+    fs.mkdirSync(p1, { recursive: true });
+    fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(p1, '01-01-SUMMARY.md'), '# Summary');
+
+    const result = runGsdTools('progress json', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phases[0].status, 'Executed', 'progress should show Executed without verification');
   });
 });

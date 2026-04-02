@@ -73,6 +73,8 @@ GSD가 그걸 고칩니다. Claude Code를 신뢰할 수 있게 만드는 컨텍
 
 원하는 걸 설명하면 제대로 만들어지길 바라는 사람들 — 50인 규모 엔지니어링 조직인 척하지 않아도 되는.
 
+내장 품질 게이트가 실제 문제를 잡아냅니다: 스키마 드리프트 감지는 마이그레이션 누락된 ORM 변경을 플래그하고, 보안 강제는 검증을 위협 모델에 고정시키고, 스코프 축소 감지는 플래너가 요구사항을 몰래 빠뜨리는 걸 방지합니다.
+
 ---
 
 ## 시작하기
@@ -369,7 +371,7 @@ claude --dangerously-skip-permissions
 
 마일스톤이 완료될 때까지 **논의 → 기획 → 실행 → 검증 → 출시** 반복.
 
-논의 중에 더 빠르게 진행하고 싶다면 `/gsd:discuss-phase <n> --batch`를 사용해 하나씩이 아닌 소그룹으로 한 번에 답할 수 있습니다.
+논의 중에 더 빠르게 진행하고 싶다면 `/gsd:discuss-phase <n> --batch`를 사용해 하나씩이 아닌 소그룹으로 한 번에 답할 수 있습니다. `--chain`을 사용하면 논의에서 기획+실행까지 중간에 멈추지 않고 자동 체이닝됩니다.
 
 각 단계는 사용자 입력(논의), 적절한 리서치(기획), 깔끔한 실행(실행), 사람의 검증(검증)을 거칩니다. 컨텍스트는 새롭게 유지됩니다. 품질도 높게 유지됩니다.
 
@@ -397,9 +399,11 @@ claude --dangerously-skip-permissions
 
 **`--research` 플래그:** 기획 전 집중 리서처를 생성합니다. 구현 접근법, 라이브러리 옵션, 주의사항을 조사합니다. 접근 방식이 불확실할 때 사용하세요.
 
-**`--full` 플래그:** 계획 확인 (최대 2회 반복)과 실행 후 검증을 활성화합니다.
+**`--full` 플래그:** 모든 단계를 활성화 — 논의 + 리서치 + 계획 확인 + 검증. 빠른 작업 형태의 전체 GSD 파이프라인.
 
-플래그는 조합 가능합니다: `--discuss --research --full`은 논의 + 리서치 + 계획 확인 + 검증을 제공합니다.
+**`--validate` 플래그:** 계획 확인 + 실행 후 검증만 활성화 (이전 `--full`의 동작).
+
+플래그는 조합 가능합니다: `--discuss --research --validate`은 논의 + 리서치 + 계획 확인 + 검증을 제공합니다.
 
 ```
 /gsd:quick
@@ -502,7 +506,7 @@ lmn012o feat(08-02): create registration endpoint
 | 명령어 | 역할 |
 |---------|------------|
 | `/gsd:new-project [--auto]` | 전체 초기화: 질문 → 리서치 → 요구사항 → 로드맵 |
-| `/gsd:discuss-phase [N] [--auto] [--analyze]` | 기획 전 구현 결정 캡처 (`--analyze`는 트레이드오프 분석 추가) |
+| `/gsd:discuss-phase [N] [--auto] [--analyze] [--chain]` | 기획 전 구현 결정 캡처 (`--analyze`는 트레이드오프 분석 추가, `--chain`은 기획+실행으로 자동 체이닝) |
 | `/gsd:plan-phase [N] [--auto] [--reviews]` | 단계에 대한 리서치 + 기획 + 검증 (`--reviews`는 코드베이스 리뷰 결과 로드) |
 | `/gsd:execute-phase <N>` | 병렬 웨이브로 모든 계획 실행, 완료 시 검증 |
 | `/gsd:verify-work [N]` | 수동 사용자 인수 테스트 ¹ |
@@ -602,7 +606,7 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd:debug [desc]` | 지속적 상태를 이용한 체계적 디버깅 |
 | `/gsd:do <text>` | 자유 형식 텍스트를 적절한 GSD 명령어로 자동 라우팅 |
 | `/gsd:note <text>` | 마찰 없는 아이디어 캡처 — 추가, 목록, 또는 할 일로 승격 |
-| `/gsd:quick [--full] [--discuss] [--research]` | GSD 보장과 함께 임시 작업 실행 (`--full`은 계획 확인 및 검증 추가, `--discuss`는 먼저 컨텍스트 수집, `--research`는 기획 전 접근법 조사) |
+| `/gsd:quick [--full] [--discuss] [--research]` | GSD 보장과 함께 임시 작업 실행 (`--full`은 전체 단계 활성화, `--discuss`는 먼저 컨텍스트 수집, `--research`는 기획 전 접근법 조사) |
 | `/gsd:health [--repair]` | `.planning/` 디렉터리 무결성 검증, `--repair`로 자동 복구 |
 | `/gsd:stats` | 프로젝트 통계 표시 — 단계, 계획, 요구사항, git 지표 |
 | `/gsd:profile-user [--questionnaire] [--refresh]` | 개인화된 응답을 위해 세션 분석에서 개발자 행동 프로필 생성 |

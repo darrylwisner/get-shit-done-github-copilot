@@ -736,7 +736,7 @@
 **요구사항.**
 - REQ-TODO-01: 현재 대화 컨텍스트에서 할 일을 캡처해야 합니다.
 - REQ-TODO-02: 할 일은 `.planning/todos/pending/`에 저장되어야 합니다.
-- REQ-TODO-03: 완료된 할 일은 `.planning/todos/done/`으로 이동해야 합니다.
+- REQ-TODO-03: 완료된 할 일은 `.planning/todos/completed/`으로 이동해야 합니다.
 - REQ-TODO-04: check-todos는 모든 보류 항목을 나열하고 하나를 선택하여 작업할 수 있어야 합니다.
 
 ---
@@ -1015,9 +1015,9 @@ fix(03-01): correct auth token expiry
 
 ### 42. Cross-AI Peer Review
 
-**명령어:** `/gsd:review --phase N [--gemini] [--claude] [--codex] [--all]`
+**명령어:** `/gsd:review --phase N [--gemini] [--claude] [--codex] [--coderabbit] [--all]`
 
-**목적:** 외부 AI CLI(Gemini, Claude, Codex)를 호출하여 페이즈 계획을 독립적으로 검토합니다. 검토자별 피드백이 담긴 구조화된 REVIEWS.md를 생성합니다.
+**목적:** 외부 AI CLI(Gemini, Claude, Codex, CodeRabbit)를 호출하여 페이즈 계획을 독립적으로 검토합니다. 검토자별 피드백이 담긴 구조화된 REVIEWS.md를 생성합니다.
 
 **요구사항.**
 - REQ-REVIEW-01: 시스템에서 사용 가능한 AI CLI를 감지해야 합니다.

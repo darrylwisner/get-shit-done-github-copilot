@@ -736,7 +736,7 @@
 **要件:**
 - REQ-TODO-01: システムは現在の会話コンテキストから Todo をキャプチャしなければならない
 - REQ-TODO-02: Todo は `.planning/todos/pending/` に保存されなければならない
-- REQ-TODO-03: 完了した Todo は `.planning/todos/done/` に移動されなければならない
+- REQ-TODO-03: 完了した Todo は `.planning/todos/completed/` に移動されなければならない
 - REQ-TODO-04: check-todos は保留中のすべてのアイテムを一覧表示し、作業するアイテムを選択できなければならない
 
 ---
@@ -1015,9 +1015,9 @@ fix(03-01): correct auth token expiry
 
 ### 42. クロス AI ピアレビュー
 
-**コマンド:** `/gsd:review --phase N [--gemini] [--claude] [--codex] [--all]`
+**コマンド:** `/gsd:review --phase N [--gemini] [--claude] [--codex] [--coderabbit] [--all]`
 
-**目的:** 外部の AI CLI（Gemini、Claude、Codex）を呼び出して、フェーズプランを独立してレビューします。レビュアーごとのフィードバックを含む構造化された REVIEWS.md を生成します。
+**目的:** 外部の AI CLI（Gemini、Claude、Codex、CodeRabbit）を呼び出して、フェーズプランを独立してレビューします。レビュアーごとのフィードバックを含む構造化された REVIEWS.md を生成します。
 
 **要件:**
 - REQ-REVIEW-01: システムはシステム上で利用可能な AI CLI を検出しなければならない

@@ -268,6 +268,24 @@ describe('workstream set/get', () => {
     assert.ok(result.success);
     assert.strictEqual(result.output, 'ws-a');
   });
+
+  test('errors when set called with no name (#1527)', () => {
+    const result = runGsdTools(['workstream', 'set', '--raw'], tmpDir);
+    assert.ok(!result.success, 'should fail when no name provided');
+    assert.ok(result.error.includes('name required'), 'error should mention name required');
+  });
+
+  test('--clear explicitly unsets active workstream', () => {
+    // First set one
+    runGsdTools(['workstream', 'set', 'ws-b', '--raw'], tmpDir);
+    // Then clear
+    const result = runGsdTools(['workstream', 'set', '--clear', '--raw'], tmpDir);
+    assert.ok(result.success);
+    const data = JSON.parse(result.output);
+    assert.strictEqual(data.active, null);
+    assert.strictEqual(data.cleared, true);
+    assert.strictEqual(data.previous, 'ws-b');
+  });
 });
 
 // ─── Collision Detection ────────────────────────────────────────────────────
