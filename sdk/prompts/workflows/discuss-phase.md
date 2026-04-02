@@ -64,6 +64,19 @@ Analyze the phase to identify gray areas:
 5. **Log each decision** with rationale
 </step>
 
+<step name="pass_guard">
+**CRITICAL — Single-pass guard:**
+This step MUST complete in ONE pass. After writing CONTEXT.md, you are DONE. Do NOT re-read your own CONTEXT.md to identify "gaps", "undefined types", or "missing references" and run additional passes. Each decision naturally references other types and interfaces — this is expected, not a gap. The planner and executor will handle implementation details.
+
+Self-referential gap-finding creates an infinite loop where:
+1. Pass N creates decisions referencing types/interfaces
+2. Pass N+1 "discovers" those references as "gaps"
+3. Pass N+1 creates new decisions that reference more types
+4. Repeat forever
+
+Write your decisions once, comprehensively, then stop.
+</step>
+
 <step name="write_context">
 Create CONTEXT.md capturing decisions made:
 

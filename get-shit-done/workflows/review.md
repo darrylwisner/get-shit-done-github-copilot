@@ -18,12 +18,14 @@ Check which AI CLIs are available on the system:
 command -v gemini >/dev/null 2>&1 && echo "gemini:available" || echo "gemini:missing"
 command -v claude >/dev/null 2>&1 && echo "claude:available" || echo "claude:missing"
 command -v codex >/dev/null 2>&1 && echo "codex:available" || echo "codex:missing"
+command -v coderabbit >/dev/null 2>&1 && echo "coderabbit:available" || echo "coderabbit:missing"
 ```
 
 Parse flags from `$ARGUMENTS`:
 - `--gemini` → include Gemini
 - `--claude` → include Claude
 - `--codex` → include Codex
+- `--coderabbit` → include CodeRabbit
 - `--all` → include all available
 - No flags → include all available
 
@@ -131,6 +133,14 @@ claude -p "$(cat /tmp/gsd-review-prompt-{phase}.md)" --no-input 2>/dev/null > /t
 codex exec --skip-git-repo-check "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-codex-{phase}.md
 ```
 
+**CodeRabbit:**
+
+Note: CodeRabbit reviews the current git diff/working tree — it does not accept a prompt. It may take up to 5 minutes. Use `timeout: 360000` on the Bash tool call.
+
+```bash
+coderabbit review --prompt-only 2>/dev/null > /tmp/gsd-review-coderabbit-{phase}.md
+```
+
 If a CLI fails, log the error and continue with remaining CLIs.
 
 Display progress:
@@ -150,7 +160,7 @@ Combine all review responses into `{phase_dir}/{padded_phase}-REVIEWS.md`:
 ```markdown
 ---
 phase: {N}
-reviewers: [gemini, claude, codex]
+reviewers: [gemini, claude, codex, coderabbit]
 reviewed_at: {ISO timestamp}
 plans_reviewed: [{list of PLAN.md files}]
 ---
@@ -172,6 +182,12 @@ plans_reviewed: [{list of PLAN.md files}]
 ## Codex Review
 
 {codex review content}
+
+---
+
+## CodeRabbit Review
+
+{coderabbit review content}
 
 ---
 

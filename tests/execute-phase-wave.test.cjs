@@ -105,4 +105,80 @@ describe('execute-phase docs: user-facing wave flag', () => {
       'help.md should include wave-filter usage'
     );
   });
+
+  test('workflow supports use_worktrees config toggle', () => {
+    const content = fs.readFileSync(WORKFLOW_PATH, 'utf-8');
+    assert.ok(
+      content.includes('USE_WORKTREES'),
+      'workflow should reference USE_WORKTREES variable'
+    );
+    assert.ok(
+      content.includes('config-get workflow.use_worktrees'),
+      'workflow should read use_worktrees from config'
+    );
+    assert.ok(
+      content.includes('Sequential mode'),
+      'workflow should document sequential mode when worktrees disabled'
+    );
+  });
+});
+
+describe('use_worktrees config: cross-workflow structural coverage', () => {
+  const QUICK_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'quick.md');
+  const DIAGNOSE_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'diagnose-issues.md');
+  const EXECUTE_PLAN_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'execute-plan.md');
+  const PLANNING_CONFIG_PATH = path.join(__dirname, '..', 'get-shit-done', 'references', 'planning-config.md');
+  const CONFIG_CJS_PATH = path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'config.cjs');
+
+  test('quick workflow reads USE_WORKTREES from config', () => {
+    const content = fs.readFileSync(QUICK_PATH, 'utf-8');
+    assert.ok(
+      content.includes('config-get workflow.use_worktrees'),
+      'quick.md should read use_worktrees from config'
+    );
+    assert.ok(
+      content.includes('USE_WORKTREES'),
+      'quick.md should reference USE_WORKTREES variable'
+    );
+  });
+
+  test('diagnose-issues workflow reads USE_WORKTREES from config', () => {
+    const content = fs.readFileSync(DIAGNOSE_PATH, 'utf-8');
+    assert.ok(
+      content.includes('config-get workflow.use_worktrees'),
+      'diagnose-issues.md should read use_worktrees from config'
+    );
+    assert.ok(
+      content.includes('USE_WORKTREES'),
+      'diagnose-issues.md should reference USE_WORKTREES variable'
+    );
+  });
+
+  test('execute-plan workflow references use_worktrees config', () => {
+    const content = fs.readFileSync(EXECUTE_PLAN_PATH, 'utf-8');
+    assert.ok(
+      content.includes('workflow.use_worktrees'),
+      'execute-plan.md should reference workflow.use_worktrees'
+    );
+  });
+
+  test('planning-config reference documents use_worktrees', () => {
+    const content = fs.readFileSync(PLANNING_CONFIG_PATH, 'utf-8');
+    assert.ok(
+      content.includes('workflow.use_worktrees'),
+      'planning-config.md should document workflow.use_worktrees'
+    );
+    assert.ok(
+      content.includes('worktree'),
+      'planning-config.md should describe worktree behavior'
+    );
+  });
+
+  test('config.cjs includes workflow.use_worktrees in VALID_CONFIG_KEYS', () => {
+    const content = fs.readFileSync(CONFIG_CJS_PATH, 'utf-8');
+    assert.ok(
+      content.includes("'workflow.use_worktrees'"),
+      'config.cjs VALID_CONFIG_KEYS should include workflow.use_worktrees'
+    );
+  });
 });

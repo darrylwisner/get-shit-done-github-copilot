@@ -386,55 +386,23 @@ describe('DISCUSS: discussion log generation', () => {
   });
 });
 
-// ─── Worktree Permission Mode (#1334) ───────────────────────────────────────
+// ─── Cross-runtime agent compatibility (#1522) ──────────────────────────────
 
-describe('PERM: worktree agents have permissionMode: acceptEdits', () => {
-  // Agents spawned with isolation="worktree" need permissionMode: acceptEdits
-  // to avoid per-directory edit permission prompts in the worktree path.
-  // See: anthropics/claude-code#29110, anthropics/claude-code#28041
-  const WORKTREE_AGENTS = ['gsd-executor', 'gsd-debugger'];
+describe('COMPAT: agents must not use runtime-specific frontmatter keys', () => {
+  // permissionMode is Claude Code-specific and breaks Gemini CLI agent loading.
+  // It also has no effect on subagent Write permissions in Claude Code (blocked
+  // at runtime level regardless). See #1522, #1387.
+  const AGENTS_WITH_WRITE = ['gsd-executor', 'gsd-debugger'];
 
-  for (const agent of WORKTREE_AGENTS) {
-    test(`${agent} has permissionMode: acceptEdits`, () => {
+  for (const agent of AGENTS_WITH_WRITE) {
+    test(`${agent} does not have permissionMode (breaks Gemini CLI)`, () => {
       const content = fs.readFileSync(path.join(AGENTS_DIR, agent + '.md'), 'utf-8');
       const frontmatter = content.split('---')[1] || '';
       assert.ok(
-        frontmatter.includes('permissionMode: acceptEdits'),
-        `${agent} must have permissionMode: acceptEdits — worktree agents need this to avoid ` +
-        `per-directory edit permission prompts (see #1334)`
+        !frontmatter.includes('permissionMode'),
+        `${agent} must not have permissionMode — it breaks Gemini CLI agent loading (#1522) ` +
+        `and has no effect in Claude Code (#1387)`
       );
     });
   }
-
-  test('worktree-spawned agents are covered', () => {
-    // Verify that agents referenced with isolation="worktree" in workflows
-    // are included in the WORKTREE_AGENTS list above
-    const dirs = [WORKFLOWS_DIR, COMMANDS_DIR];
-    const worktreeAgentTypes = new Set();
-
-    for (const dir of dirs) {
-      if (!fs.existsSync(dir)) continue;
-      const files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
-      for (const file of files) {
-        const content = fs.readFileSync(path.join(dir, file), 'utf-8');
-        // Find patterns like: subagent_type="gsd-executor" ... isolation="worktree"
-        // These can span multiple lines in Task() calls
-        const taskBlocks = content.match(/Task\([^)]*isolation="worktree"[^)]*\)/gs) || [];
-        for (const block of taskBlocks) {
-          const typeMatch = block.match(/subagent_type="([^"]+)"/);
-          if (typeMatch) {
-            worktreeAgentTypes.add(typeMatch[1]);
-          }
-        }
-      }
-    }
-
-    for (const agentType of worktreeAgentTypes) {
-      assert.ok(
-        WORKTREE_AGENTS.includes(agentType),
-        `${agentType} is spawned with isolation="worktree" but not in WORKTREE_AGENTS list — ` +
-        `add permissionMode: acceptEdits to its frontmatter and update this test`
-      );
-    }
-  });
 });

@@ -88,13 +88,21 @@ Extract phase goal from ROADMAP.md — this is the outcome to verify, not the ta
 
 In re-verification mode, must-haves come from Step 0.
 
-**Option A: Must-haves in PLAN frontmatter**
+**Step 2a: Always load ROADMAP Success Criteria**
+
+```bash
+PHASE_DATA=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "$PHASE_NUM" --raw)
+```
+
+Parse the `success_criteria` array from the JSON output. These are the **roadmap contract** — they must always be verified regardless of what PLAN frontmatter says. Store them as `roadmap_truths`.
+
+**Step 2b: Load PLAN frontmatter must-haves (if present)**
 
 ```bash
 grep -l "must_haves:" "$PHASE_DIR"/*-PLAN.md 2>/dev/null
 ```
 
-If found, extract and use:
+If found, extract:
 
 ```yaml
 must_haves:
@@ -110,25 +118,20 @@ must_haves:
       via: "fetch in useEffect"
 ```
 
-**Option B: Use Success Criteria from ROADMAP.md**
+**Step 2c: Merge must-haves**
 
-If no must_haves in frontmatter, check for Success Criteria:
+Combine all sources into a single must-haves list:
 
-```bash
-PHASE_DATA=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "$PHASE_NUM" --raw)
-```
+1. **Start with `roadmap_truths`** from Step 2a (these are non-negotiable)
+2. **Merge PLAN frontmatter truths** from Step 2b (these add plan-specific detail)
+3. **Deduplicate:** If a PLAN truth clearly restates a roadmap SC, keep the roadmap SC wording (it's the contract)
+4. **If neither 2a nor 2b produced any truths**, fall back to Option C below
 
-Parse the `success_criteria` array from the JSON output. If non-empty:
-1. **Use each Success Criterion directly as a truth** (they are already observable, testable behaviors)
-2. **Derive artifacts:** For each truth, "What must EXIST?" — map to concrete file paths
-3. **Derive key links:** For each artifact, "What must be CONNECTED?" — this is where stubs hide
-4. **Document must-haves** before proceeding
-
-Success Criteria from ROADMAP.md are the contract — they take priority over Goal-derived truths.
+**CRITICAL:** PLAN frontmatter must-haves must NOT reduce scope. If ROADMAP.md defines 5 Success Criteria but the plan only lists 3 in must_haves, all 5 must still be verified. The plan can ADD must-haves but never subtract roadmap SCs.
 
 **Option C: Derive from phase goal (fallback)**
 
-If no must_haves in frontmatter AND no Success Criteria in ROADMAP:
+If no Success Criteria in ROADMAP AND no must_haves in frontmatter:
 
 1. **State the goal** from ROADMAP.md
 2. **Derive truths:** "What must be TRUE?" — list 3-7 observable, testable behaviors
@@ -442,15 +445,25 @@ npm test -- --grep "$PHASE_TEST_PATTERN" 2>&1 | grep -q "passing"
 
 ## Step 9: Determine Overall Status
 
-**Status: passed** — All truths VERIFIED, all artifacts pass levels 1-3, all key links WIRED, no blocker anti-patterns.
+Classify status using this decision tree IN ORDER (most restrictive first):
 
-**Status: gaps_found** — One or more truths FAILED, artifacts MISSING/STUB, key links NOT_WIRED, or blocker anti-patterns found.
+1. IF any truth FAILED, artifact MISSING/STUB, key link NOT_WIRED, or blocker anti-pattern found:
+   → **status: gaps_found**
 
-**Status: human_needed** — All automated checks pass but items flagged for human verification.
+2. IF Step 8 produced ANY human verification items (section is non-empty):
+   → **status: human_needed**
+   (Even if all truths are VERIFIED and score is N/N — human items take priority)
+
+3. IF all truths VERIFIED, all artifacts pass, all links WIRED, no blockers, AND no human verification items:
+   → **status: passed**
+
+**passed is ONLY valid when the human verification section is empty.** If you identified items requiring human testing in Step 8, status MUST be human_needed.
 
 **Score:** `verified_truths / total_truths`
 
 ## Step 10: Structure Gap Output (If Gaps Found)
+
+Before writing VERIFICATION.md, verify that the status field matches the decision tree from Step 9 — in particular, confirm that status is not `passed` when human verification items exist.
 
 Structure gaps in YAML frontmatter for `/gsd:plan-phase --gaps`:
 

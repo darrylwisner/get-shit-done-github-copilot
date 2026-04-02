@@ -232,6 +232,16 @@ describe('config-set command', () => {
     assert.strictEqual(config.workflow.text_mode, true);
   });
 
+  test('sets workflow.use_worktrees to disable worktree isolation', () => {
+    writeConfig(tmpDir, {});
+
+    const result = runGsdTools('config-set workflow.use_worktrees false', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.use_worktrees, false);
+  });
+
   test('errors when no key path provided', () => {
     const result = runGsdTools('config-set', tmpDir);
     assert.strictEqual(result.success, false);
@@ -759,6 +769,61 @@ describe('config-set workflow.skip_discuss', () => {
   test('config-get workflow.skip_discuss returns the set value', () => {
     runGsdTools('config-set workflow.skip_discuss true', tmpDir);
     const result = runGsdTools('config-get workflow.skip_discuss', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output, true);
+  });
+});
+
+// ─── config-set/config-get workflow.use_worktrees ────────────────────────────
+
+describe('config-set/config-get workflow.use_worktrees', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('config-get workflow.use_worktrees returns false after setting to false', () => {
+    runGsdTools('config-set workflow.use_worktrees false', tmpDir);
+    const result = runGsdTools('config-get workflow.use_worktrees', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output, false);
+  });
+
+  test('config-get workflow.use_worktrees errors when not set (default config)', () => {
+    // config-ensure-section does NOT include use_worktrees in hardcoded defaults,
+    // so config-get should error with "Key not found". This is the expected behavior
+    // that workflows rely on: the shell fallback `|| echo "true"` provides the default.
+    const result = runGsdTools('config-get workflow.use_worktrees', tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(
+      result.error.includes('Key not found'),
+      `Expected "Key not found" in error: ${result.error}`
+    );
+  });
+
+  test('config-get workflow.use_worktrees returns true after setting to true', () => {
+    runGsdTools('config-set workflow.use_worktrees true', tmpDir);
+    const result = runGsdTools('config-get workflow.use_worktrees', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output, true);
+  });
+
+  test('use_worktrees can be toggled back and forth', () => {
+    runGsdTools('config-set workflow.use_worktrees false', tmpDir);
+    runGsdTools('config-set workflow.use_worktrees true', tmpDir);
+    const result = runGsdTools('config-get workflow.use_worktrees', tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const output = JSON.parse(result.output);

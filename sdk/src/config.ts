@@ -31,6 +31,8 @@ export interface WorkflowConfig {
   research_before_questions: boolean;
   discuss_mode: string;
   skip_discuss: boolean;
+  /** Maximum self-discuss passes in auto/headless mode before forcing proceed. Default: 3. */
+  max_discuss_passes: number;
 }
 
 export interface HooksConfig {
@@ -82,6 +84,7 @@ export const CONFIG_DEFAULTS: GSDConfig = {
     research_before_questions: false,
     discuss_mode: 'discuss',
     skip_discuss: false,
+    max_discuss_passes: 3,
   },
   hooks: {
     context_warnings: true,

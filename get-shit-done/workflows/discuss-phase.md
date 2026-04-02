@@ -155,6 +155,11 @@ Exit workflow.
 - In `discuss_areas`: for each discussion question, choose the recommended option (first option, or the one marked "recommended") without using AskUserQuestion
 - Log each auto-selected choice inline so the user can review decisions in the context file
 - After discussion completes, auto-advance to plan-phase (existing behavior)
+
+**Chain mode** — If `--chain` is present in ARGUMENTS:
+- Discussion is fully interactive (questions, gray area selection — same as default mode)
+- After discussion completes, auto-advance to plan-phase → execute-phase (same as `--auto`)
+- This is the middle ground: user controls the discuss decisions, then plan+execute run autonomously
 </step>
 
 <step name="check_existing">
@@ -660,6 +665,16 @@ Each answer (or answer set, in batch mode) should reveal the next question or ne
 ```
 After all areas are auto-resolved, skip the "Explore more gray areas" prompt and proceed directly to write_context.
 
+**CRITICAL — Auto-mode pass cap:**
+In `--auto` mode, the discuss step MUST complete in a **single pass**. After writing CONTEXT.md once, you are DONE — proceed immediately to write_context and then auto_advance. Do NOT re-read your own CONTEXT.md to find "gaps", "undefined types", or "missing decisions" and run additional passes. This creates a self-feeding loop where each pass generates references that the next pass treats as gaps, consuming unbounded time and resources.
+
+Check the pass cap from config:
+```bash
+MAX_PASSES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.max_discuss_passes 2>/dev/null || echo "3")
+```
+
+If you have already written and committed CONTEXT.md, the discuss step is complete. Move on.
+
 **Interactive mode (no `--auto`):**
 
 **For each area:**
@@ -938,6 +953,7 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 ---
 
 **Also available:**
+- `/gsd:discuss-phase ${PHASE} --chain ${GSD_WS}` — re-run with auto plan+execute after
 - `/gsd:plan-phase ${PHASE} --skip-research ${GSD_WS}` — plan without research
 - `/gsd:ui-phase ${PHASE} ${GSD_WS}` — generate UI design contract before planning (if phase has frontend work)
 - Review/edit CONTEXT.md before continuing
@@ -1025,10 +1041,10 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(state): record
 <step name="auto_advance">
 Check for auto-advance trigger:
 
-1. Parse `--auto` flag from $ARGUMENTS
-2. **Sync chain flag with intent** — if user invoked manually (no `--auto`), clear the ephemeral chain flag from any previous interrupted `--auto` chain. This does NOT touch `workflow.auto_advance` (the user's persistent settings preference):
+1. Parse `--auto` and `--chain` flags from $ARGUMENTS
+2. **Sync chain flag with intent** — if user invoked manually (no `--auto` and no `--chain`), clear the ephemeral chain flag from any previous interrupted `--auto` chain. This does NOT touch `workflow.auto_advance` (the user's persistent settings preference):
    ```bash
-   if [[ ! "$ARGUMENTS" =~ --auto ]]; then
+   if [[ ! "$ARGUMENTS" =~ --auto ]] && [[ ! "$ARGUMENTS" =~ --chain ]]; then
      node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow._auto_chain_active false 2>/dev/null
    fi
    ```
@@ -1038,12 +1054,12 @@ Check for auto-advance trigger:
    AUTO_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.auto_advance 2>/dev/null || echo "false")
    ```
 
-**If `--auto` flag present AND `AUTO_CHAIN` is not true:** Persist chain flag to config (handles direct `--auto` usage without new-project):
+**If `--auto` or `--chain` flag present AND `AUTO_CHAIN` is not true:** Persist chain flag to config (handles direct usage without new-project):
 ```bash
 node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow._auto_chain_active true
 ```
 
-**If `--auto` flag present OR `AUTO_CHAIN` is true OR `AUTO_CFG` is true:**
+**If `--auto` flag present OR `--chain` flag present OR `AUTO_CHAIN` is true OR `AUTO_CFG` is true:**
 
 Display banner:
 ```
@@ -1070,7 +1086,7 @@ This keeps the auto-advance chain flat — discuss, plan, and execute all run at
 
   Auto-advance pipeline finished: discuss → plan → execute
 
-  Next: /gsd:discuss-phase ${NEXT_PHASE} --auto ${GSD_WS}
+  Next: /gsd:discuss-phase ${NEXT_PHASE} ${WAS_CHAIN ? "--chain" : "--auto"} ${GSD_WS}
   <sub>/clear first → fresh context window</sub>
   ```
 - **PLANNING COMPLETE** → Planning done, execution didn't complete:
@@ -1089,7 +1105,7 @@ This keeps the auto-advance chain flat — discuss, plan, and execute all run at
   Continue: /gsd:plan-phase ${PHASE} --gaps ${GSD_WS}
   ```
 
-**If neither `--auto` nor config enabled:**
+**If none of `--auto`, `--chain`, nor config enabled:**
 Route to `confirm_creation` step (existing behavior — show manual next steps).
 </step>
 
@@ -1113,4 +1129,6 @@ Route to `confirm_creation` step (existing behavior — show manual next steps).
 - Checkpoint file written after each area completes (incremental save)
 - Interrupted sessions can be resumed from checkpoint (no re-answering completed areas)
 - Checkpoint file cleaned up after successful CONTEXT.md write
+- `--chain` triggers interactive discuss followed by auto plan+execute (no auto-answering)
+- `--chain` and `--auto` both persist chain flag and auto-advance to plan-phase
 </success_criteria>

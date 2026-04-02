@@ -6,6 +6,49 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-04-01
+
+### Added
+- **Claude Code 2.1.88+ skills migration** — Commands now install as `skills/gsd-*/SKILL.md` instead of deprecated `commands/gsd/`. Auto-cleans legacy directory on install
+- **`/gsd:docs-update` command** — Verified documentation generation with doc-writer and doc-verifier agents
+- **`--chain` flag for discuss-phase** — Interactive discuss that auto-chains into plan+execute
+- **`--only N` flag for autonomous** — Execute a single phase instead of all remaining
+- **Schema drift detection** — Prevents false-positive verification when ORM schema files change without migration
+- **`/gsd:secure-phase` command** — Security enforcement layer with threat-model-anchored verification
+- **Claim provenance tagging** — Researcher marks claims with source evidence
+- **Scope reduction detection** — Planner blocked from silently dropping requirements
+- **`workflow.use_worktrees` config** — Toggle to disable worktree isolation
+- **`project_code` config** — Prefix phase directories with project code
+- **Project skills discovery** — CLAUDE.md generation now includes project-specific skills section
+- **CodeRabbit integration** — Added to cross-AI review workflow
+- **GSD SDK enhancements** — Auto `--init` flag, headless prompts, prompt sanitizer
+
+### Changed
+- **`/gsd:quick --full` flag** — Now enables all phases (discussion + research + plan-checking + verification). New `--validate` flag covers previous `--full` behavior (plan-checking + verification only)
+
+### Fixed
+- **Gemini CLI agent loading** — Removed `permissionMode` that broke agent frontmatter parsing
+- **Phase count display** — Clarified misleading N/T banner in autonomous mode
+- **Workstream `set` command** — Now requires name arg, added `--clear` flag
+- **Infinite self-discuss loop** — Fixed in auto/headless mode with `max_discuss_passes` config
+- **Orphan worktree cleanup** — Post-execution cleanup added
+- **JSONC settings.json** — Comments no longer cause data loss
+- **Incremental checkpoint saves** — Discuss answers preserved on interrupt
+- **Stats accuracy** — Verification required for Complete status, added Executed state
+- **Three-way merge for reapply-patches** — Never-skip invariant for backed-up files
+- **SDK verify gates advance** — Skip advance when verification finds gaps
+- **Manager delegates to Skill pipeline** — Instead of raw Task prompts
+- **ROADMAP.md Plans column** — cmdPhaseComplete now updates correctly
+- **Decimal phase numbers** — Commit regex captures decimal phases
+- **Codex path replacement** — Added .claude path replacement
+- **Verifier loads all ROADMAP SCs** — Regardless of PLAN must_haves
+- **Verifier human_needed status** — Enforced when human verification items exist
+- **Hooks shared cache dir** — Correct stale hooks path
+- **Plan file naming** — Convention enforced in gsd-planner agent
+- **Copilot path replacement** — Fixed ~/.claude to ~/.github
+- **Windsurf trailing slash** — Removed from .windsurf/rules path
+- **Slug sanitization** — Added --raw flag, capped length to 60 chars
+
 ## [1.30.0] - 2026-03-26
 
 ### Added

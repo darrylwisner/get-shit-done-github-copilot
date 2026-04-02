@@ -811,6 +811,7 @@ GSDアップデート後にローカルの変更を復元します。
 | `--gemini` | Gemini CLIレビューを含める |
 | `--claude` | Claude CLIレビューを含める（別セッション） |
 | `--codex` | Codex CLIレビューを含める |
+| `--coderabbit` | CodeRabbitレビューを含める |
 | `--all` | 利用可能なすべてのCLIを含める |
 
 **生成物:** `{phase}-REVIEWS.md` — `/gsd:plan-phase --reviews` で利用可能

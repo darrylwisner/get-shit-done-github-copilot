@@ -30,7 +30,7 @@ describe('generate-claude-md', () => {
 
     const output = JSON.parse(result.output);
     assert.strictEqual(output.action, 'created');
-    assert.strictEqual(output.sections_total, 5);
+    assert.strictEqual(output.sections_total, 6);
     assert.ok(output.sections_generated.includes('workflow'));
 
     const claudePath = path.join(tmpDir, 'CLAUDE.md');
@@ -78,5 +78,172 @@ describe('new-project workflow includes CLAUDE.md generation', () => {
     assert.ok(workflowContent.includes('| Project guide  | `CLAUDE.md`'));
     assert.ok(workflowContent.includes('- `CLAUDE.md`'));
     assert.ok(commandsContent.includes('`CLAUDE.md`'));
+  });
+});
+
+describe('generate-claude-md skills section', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'PROJECT.md'),
+      '# Test Project\n\n## What This Is\n\nA test project.\n'
+    );
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('includes skills fallback when no skills directories exist', () => {
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.ok(output.sections_fallback.includes('skills'));
+
+    const content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    assert.ok(content.includes('<!-- GSD:skills-start'));
+    assert.ok(content.includes('<!-- GSD:skills-end -->'));
+    assert.ok(content.includes('No project skills found. Add skills to any of'));
+  });
+
+  test('discovers skills from .claude/skills/ directory', () => {
+    const skillDir = path.join(tmpDir, '.claude', 'skills', 'api-payments');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: api-payments\ndescription: Payment gateway integration.\n---\n\n# API Payments\n'
+    );
+
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.ok(output.sections_generated.includes('skills'));
+    assert.ok(!output.sections_fallback.includes('skills'));
+
+    const content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    assert.ok(content.includes('api-payments'));
+    assert.ok(content.includes('Payment gateway integration'));
+    assert.ok(content.includes('## Project Skills'));
+  });
+
+  test('discovers skills from .agents/skills/ directory', () => {
+    const skillDir = path.join(tmpDir, '.agents', 'skills', 'data-sync');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: data-sync\ndescription: ERP synchronization flows.\n---\n\n# Data Sync\n'
+    );
+
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    assert.ok(content.includes('data-sync'));
+    assert.ok(content.includes('ERP synchronization flows'));
+  });
+
+  test('skips gsd- prefixed skill directories', () => {
+    const gsdSkillDir = path.join(tmpDir, '.claude', 'skills', 'gsd-plan-phase');
+    const userSkillDir = path.join(tmpDir, '.claude', 'skills', 'my-feature');
+    fs.mkdirSync(gsdSkillDir, { recursive: true });
+    fs.mkdirSync(userSkillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(gsdSkillDir, 'SKILL.md'),
+      '---\nname: gsd-plan-phase\ndescription: GSD internal skill.\n---\n'
+    );
+    fs.writeFileSync(
+      path.join(userSkillDir, 'SKILL.md'),
+      '---\nname: my-feature\ndescription: Custom project skill.\n---\n'
+    );
+
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    assert.ok(!content.includes('gsd-plan-phase'));
+    assert.ok(content.includes('my-feature'));
+    assert.ok(content.includes('Custom project skill'));
+  });
+
+  test('handles multi-line description in frontmatter', () => {
+    const skillDir = path.join(tmpDir, '.claude', 'skills', 'complex-skill');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: complex-skill\ndescription: First line of description.\n  Continued on second line.\n  And a third line.\n---\n'
+    );
+
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    assert.ok(content.includes('First line of description'));
+    assert.ok(content.includes('Continued on second line'));
+    assert.ok(content.includes('And a third line'));
+  });
+
+  test('deduplicates skills found in multiple directories', () => {
+    // Same skill in both .claude/skills/ and .agents/skills/
+    const dir1 = path.join(tmpDir, '.claude', 'skills', 'shared-skill');
+    const dir2 = path.join(tmpDir, '.agents', 'skills', 'shared-skill');
+    fs.mkdirSync(dir1, { recursive: true });
+    fs.mkdirSync(dir2, { recursive: true });
+    const skillContent = '---\nname: shared-skill\ndescription: Appears twice.\n---\n';
+    fs.writeFileSync(path.join(dir1, 'SKILL.md'), skillContent);
+    fs.writeFileSync(path.join(dir2, 'SKILL.md'), skillContent);
+
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    const matches = content.match(/shared-skill/g);
+    // Should appear exactly twice: once in name column, once in path column (single row)
+    assert.strictEqual(matches.length, 2);
+  });
+
+  test('updates existing skills section on regeneration', () => {
+    // First generation — no skills
+    runGsdTools('generate-claude-md', tmpDir);
+    let content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    assert.ok(content.includes('No project skills found'));
+
+    // Add a skill and regenerate
+    const skillDir = path.join(tmpDir, '.claude', 'skills', 'new-skill');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: new-skill\ndescription: Just added.\n---\n'
+    );
+
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    assert.ok(!content.includes('No project skills found'));
+    assert.ok(content.includes('new-skill'));
+    assert.ok(content.includes('Just added'));
+  });
+
+  test('skills section appears between architecture and workflow', () => {
+    const skillDir = path.join(tmpDir, '.claude', 'skills', 'ordering-test');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: ordering-test\ndescription: Verify section order.\n---\n'
+    );
+
+    const result = runGsdTools('generate-claude-md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const content = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    const archIdx = content.indexOf('## Architecture');
+    const skillsIdx = content.indexOf('## Project Skills');
+    const workflowIdx = content.indexOf('## GSD Workflow Enforcement');
+    assert.ok(archIdx < skillsIdx, 'Skills section should come after Architecture');
+    assert.ok(skillsIdx < workflowIdx, 'Skills section should come before Workflow Enforcement');
   });
 });

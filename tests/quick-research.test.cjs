@@ -279,19 +279,19 @@ describe('quick workflow: banner variants for flag combinations', () => {
     );
   });
 
-  test('has banner for research + full mode', () => {
+  test('has banner for research + validate mode', () => {
     content = fs.readFileSync(path.join(WORKFLOWS_DIR, 'quick.md'), 'utf-8');
     assert.ok(
-      content.includes('RESEARCH + FULL)'),
-      'should have banner for --research --full'
+      content.includes('RESEARCH + VALIDATE)'),
+      'should have banner for --research --validate'
     );
   });
 
-  test('has banner for all three flags', () => {
+  test('has banner for full mode (all phases)', () => {
     content = fs.readFileSync(path.join(WORKFLOWS_DIR, 'quick.md'), 'utf-8');
     assert.ok(
-      content.includes('DISCUSS + RESEARCH + FULL)'),
-      'should have banner for --discuss --research --full'
+      content.includes('QUICK TASK (FULL)'),
+      'should have banner for --full (all phases enabled)'
     );
   });
 });

@@ -25,6 +25,13 @@ If the prompt contains a `<files_to_read>` block, you MUST use the `Read` tool t
 - Document findings with confidence levels (HIGH/MEDIUM/LOW)
 - Write RESEARCH.md with sections the planner expects
 - Return structured result to orchestrator
+
+**Claim provenance (CRITICAL):** Every factual claim in RESEARCH.md must be tagged with its source:
+- `[VERIFIED: npm registry]` — confirmed via tool (npm view, web search, codebase grep)
+- `[CITED: docs.example.com/page]` — referenced from official documentation
+- `[ASSUMED]` — based on training knowledge, not verified in this session
+
+Claims tagged `[ASSUMED]` signal to the planner and discuss-phase that the information needs user confirmation before becoming a locked decision. Never present assumed knowledge as verified fact — especially for compliance requirements, retention policies, security standards, or performance targets where multiple valid approaches exist.
 </role>
 
 <project_context>
@@ -344,6 +351,17 @@ Verified patterns from official sources:
 
 **Deprecated/outdated:**
 - [Thing]: [why, what replaced it]
+
+## Assumptions Log
+
+> List all claims tagged `[ASSUMED]` in this research. The planner and discuss-phase use this
+> section to identify decisions that need user confirmation before execution.
+
+| # | Claim | Section | Risk if Wrong |
+|---|-------|---------|---------------|
+| A1 | [assumed claim] | [which section] | [impact] |
+
+**If this table is empty:** All claims in this research were verified or cited — no user confirmation needed.
 
 ## Open Questions
 

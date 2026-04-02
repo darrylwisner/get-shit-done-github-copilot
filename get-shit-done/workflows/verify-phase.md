@@ -199,11 +199,18 @@ Format each as: Test Name → What to do → Expected result → Why can't verif
 </step>
 
 <step name="determine_status">
-**passed:** All truths VERIFIED, all artifacts pass levels 1-3, all key links WIRED, no blocker anti-patterns.
+Classify status using this decision tree IN ORDER (most restrictive first):
 
-**gaps_found:** Any truth FAILED, artifact MISSING/STUB, key link NOT_WIRED, or blocker found.
+1. IF any truth FAILED, artifact MISSING/STUB, key link NOT_WIRED, or blocker found:
+   → **gaps_found**
 
-**human_needed:** All automated checks pass but human verification items remain.
+2. IF the previous step produced ANY human verification items:
+   → **human_needed** (even if all truths VERIFIED and score is N/N)
+
+3. IF all checks pass AND no human verification items:
+   → **passed**
+
+**passed is ONLY valid when no human verification items exist.**
 
 **Score:** `verified_truths / total_truths`
 </step>
