@@ -560,4 +560,224 @@ describe('InitRunner', () => {
     // 1 PROJECT.md + 4 research + 1 synthesis + 1 requirements + 1 roadmap = 8
     expect(mockRunSession).toHaveBeenCalledTimes(8);
   });
+
+  // ─── Headless prompt loading (sdkPromptsDir preference) ──────────────────
+
+  describe('sdkPromptsDir preference and sanitizer integration', () => {
+    let sdkPromptsDir: string;
+
+    beforeEach(async () => {
+      // Create a temp SDK prompts directory with test fixtures
+      sdkPromptsDir = join(tmpDir, 'sdk-prompts');
+      await mkdir(join(sdkPromptsDir, 'templates', 'research-project'), { recursive: true });
+      await mkdir(join(sdkPromptsDir, 'agents'), { recursive: true });
+
+      // Write headless templates (with known marker text for assertion)
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'project.md'),
+        '# PROJECT Template\nSDK_HEADLESS_MARKER_PROJECT\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'requirements.md'),
+        '# REQUIREMENTS Template\nSDK_HEADLESS_MARKER_REQUIREMENTS\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'roadmap.md'),
+        '# ROADMAP Template\nSDK_HEADLESS_MARKER_ROADMAP\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'state.md'),
+        '# STATE Template\nSDK_HEADLESS_MARKER_STATE\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'research-project', 'STACK.md'),
+        '# STACK Template\nSDK_HEADLESS_MARKER_STACK\n',
+      );
+
+      // Write headless agents (with known marker text)
+      await writeFile(
+        join(sdkPromptsDir, 'agents', 'gsd-project-researcher.md'),
+        '# Project Researcher Agent\nSDK_HEADLESS_MARKER_RESEARCHER\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'agents', 'gsd-research-synthesizer.md'),
+        '# Research Synthesizer Agent\nSDK_HEADLESS_MARKER_SYNTHESIZER\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'agents', 'gsd-roadmapper.md'),
+        '# Roadmapper Agent\nSDK_HEADLESS_MARKER_ROADMAPPER\n',
+      );
+    });
+
+    function createRunnerWithSdkPrompts(
+      toolsOverrides: Record<string, unknown> = {},
+      configOverrides?: Partial<InitRunnerDeps['config']>,
+    ) {
+      const tools = makeTools(toolsOverrides);
+      const eventStream = makeEventStream();
+      const runner = new InitRunner({
+        projectDir: tmpDir,
+        tools,
+        eventStream,
+        config: configOverrides as any,
+        sdkPromptsDir,
+      });
+      return { runner, tools, eventStream, events: eventStream.events as GSDEvent[] };
+    }
+
+    it('readGSDFile prefers sdk/prompts/ template over GSD-1 path', async () => {
+      const { runner } = createRunnerWithSdkPrompts();
+
+      await runner.run('build a todo app');
+
+      // The first session call is buildProjectPrompt → reads templates/project.md
+      const projectPrompt = mockRunSession.mock.calls[0]![0] as string;
+      expect(projectPrompt).toContain('SDK_HEADLESS_MARKER_PROJECT');
+    });
+
+    it('readAgentFile prefers sdk/prompts/agents/ over GSD-1 path', async () => {
+      const { runner } = createRunnerWithSdkPrompts();
+
+      await runner.run('build a todo app');
+
+      // Research calls (indices 1-4) use gsd-project-researcher.md agent def
+      const researchPrompt = mockRunSession.mock.calls[1]![0] as string;
+      expect(researchPrompt).toContain('SDK_HEADLESS_MARKER_RESEARCHER');
+    });
+
+    it('readGSDFile falls back to GSD-1 when sdk/prompts/ file does not exist', async () => {
+      // Create an empty sdkPromptsDir — no templates at all
+      const emptySdkDir = join(tmpDir, 'empty-sdk-prompts');
+      await mkdir(join(emptySdkDir, 'templates'), { recursive: true });
+      await mkdir(join(emptySdkDir, 'agents'), { recursive: true });
+
+      const tools = makeTools();
+      const eventStream = makeEventStream();
+      const runner = new InitRunner({
+        projectDir: tmpDir,
+        tools,
+        eventStream,
+        sdkPromptsDir: emptySdkDir,
+      });
+
+      await runner.run('build a todo app');
+
+      // buildProjectPrompt reads templates/project.md — not found in empty dir,
+      // falls through to GSD-1 path. If GSD-1 also missing, gets placeholder.
+      const projectPrompt = mockRunSession.mock.calls[0]![0] as string;
+
+      // Should NOT contain our marker (since empty dir was used)
+      expect(projectPrompt).not.toContain('SDK_HEADLESS_MARKER_PROJECT');
+      // Should still contain the PROJECT.md synthesis instruction (from the prompt builder)
+      expect(projectPrompt).toContain('PROJECT.md');
+    });
+
+    it('readAgentFile falls back to GSD-1 when sdk/prompts/agents/ file does not exist', async () => {
+      // Empty sdkPromptsDir — no agent files
+      const emptySdkDir = join(tmpDir, 'empty-sdk-agents');
+      await mkdir(join(emptySdkDir, 'templates', 'research-project'), { recursive: true });
+      await mkdir(join(emptySdkDir, 'agents'), { recursive: true });
+
+      // Write templates so we get past buildProjectPrompt
+      await writeFile(join(emptySdkDir, 'templates', 'project.md'), '# project\n');
+      await writeFile(join(emptySdkDir, 'templates', 'research-project', 'STACK.md'), '# stack\n');
+      await writeFile(join(emptySdkDir, 'templates', 'research-project', 'FEATURES.md'), '# features\n');
+      await writeFile(join(emptySdkDir, 'templates', 'research-project', 'ARCHITECTURE.md'), '# arch\n');
+      await writeFile(join(emptySdkDir, 'templates', 'research-project', 'PITFALLS.md'), '# pitfalls\n');
+
+      const tools = makeTools();
+      const eventStream = makeEventStream();
+      const runner = new InitRunner({
+        projectDir: tmpDir,
+        tools,
+        eventStream,
+        sdkPromptsDir: emptySdkDir,
+      });
+
+      await runner.run('build a todo app');
+
+      // Research prompt uses agent def — not in empty agents dir, falls to GSD-1
+      const researchPrompt = mockRunSession.mock.calls[1]![0] as string;
+      // Should NOT contain our marker
+      expect(researchPrompt).not.toContain('SDK_HEADLESS_MARKER_RESEARCHER');
+      // Should still have the "researching the" instruction
+      expect(researchPrompt).toContain('You are researching the');
+    });
+
+    it('buildProjectPrompt output passes through sanitizePrompt (no /gsd: patterns)', async () => {
+      // Write a template that contains an interactive pattern
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'project.md'),
+        '# PROJECT Template\nRun /gsd:map-codebase to analyze.\nSDK_HEADLESS_MARKER_PROJECT\n',
+      );
+
+      const { runner } = createRunnerWithSdkPrompts();
+      await runner.run('build a todo app');
+
+      const projectPrompt = mockRunSession.mock.calls[0]![0] as string;
+      // sanitizePrompt should have stripped the /gsd: line
+      expect(projectPrompt).not.toMatch(/\/gsd:\S+/);
+      // But the marker should still be there
+      expect(projectPrompt).toContain('SDK_HEADLESS_MARKER_PROJECT');
+    });
+
+    it('buildResearchPrompt output passes through sanitizePrompt (no /gsd: patterns)', async () => {
+      // Write an agent def that contains interactive patterns
+      await writeFile(
+        join(sdkPromptsDir, 'agents', 'gsd-project-researcher.md'),
+        '# Researcher Agent\nSpawn /gsd:something for analysis.\nSDK_HEADLESS_MARKER_RESEARCHER\n',
+      );
+
+      const { runner } = createRunnerWithSdkPrompts();
+      await runner.run('build a todo app');
+
+      const researchPrompt = mockRunSession.mock.calls[1]![0] as string;
+      // sanitizePrompt should have stripped the /gsd: line
+      expect(researchPrompt).not.toMatch(/\/gsd:\S+/);
+      // Marker should still be present
+      expect(researchPrompt).toContain('SDK_HEADLESS_MARKER_RESEARCHER');
+    });
+
+    it('buildRoadmapPrompt output passes through sanitizePrompt (no /gsd: patterns)', async () => {
+      // Write agent and templates with interactive patterns
+      await writeFile(
+        join(sdkPromptsDir, 'agents', 'gsd-roadmapper.md'),
+        '# Roadmapper Agent\nUse /gsd:execute to run.\nSDK_HEADLESS_MARKER_ROADMAPPER\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'roadmap.md'),
+        '# ROADMAP Template\nRun /gsd:check-progress.\nSDK_HEADLESS_MARKER_ROADMAP\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'state.md'),
+        '# STATE Template\nUse /gsd:add-todo for tracking.\nSDK_HEADLESS_MARKER_STATE\n',
+      );
+
+      // Also need research templates and synth agent for earlier steps
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'research-project', 'FEATURES.md'), '# features\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'research-project', 'ARCHITECTURE.md'), '# arch\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'research-project', 'PITFALLS.md'), '# pitfalls\n',
+      );
+      await writeFile(
+        join(sdkPromptsDir, 'templates', 'research-project', 'SUMMARY.md'), '# summary\n',
+      );
+
+      const { runner } = createRunnerWithSdkPrompts();
+      await runner.run('build a todo app');
+
+      // Roadmap prompt is the last session call (index 7)
+      const roadmapPrompt = mockRunSession.mock.calls[7]![0] as string;
+      // sanitizePrompt should have stripped all /gsd: patterns
+      expect(roadmapPrompt).not.toMatch(/\/gsd:\S+/);
+      // Markers from templates should still be present
+      expect(roadmapPrompt).toContain('SDK_HEADLESS_MARKER_ROADMAPPER');
+      expect(roadmapPrompt).toContain('SDK_HEADLESS_MARKER_ROADMAP');
+      expect(roadmapPrompt).toContain('SDK_HEADLESS_MARKER_STATE');
+    });
+  });
 });

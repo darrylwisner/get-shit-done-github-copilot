@@ -10,6 +10,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 
@@ -31,6 +32,7 @@ import type { GSDTools } from './gsd-tools.js';
 import type { GSDEventStream } from './event-stream.js';
 import { loadConfig } from './config.js';
 import { runPhaseStepSession } from './session-runner.js';
+import { sanitizePrompt } from './prompt-sanitizer.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -68,6 +70,8 @@ export interface InitRunnerDeps {
   tools: GSDTools;
   eventStream: GSDEventStream;
   config?: Partial<InitConfig>;
+  /** Override for SDK prompts directory. Defaults to package-relative sdk/prompts/. */
+  sdkPromptsDir?: string;
 }
 
 export class InitRunner {
@@ -76,6 +80,7 @@ export class InitRunner {
   private readonly eventStream: GSDEventStream;
   private readonly config: InitConfig;
   private readonly sessionId: string;
+  private readonly sdkPromptsDir: string;
 
   constructor(deps: InitRunnerDeps) {
     this.projectDir = deps.projectDir;
@@ -88,6 +93,10 @@ export class InitRunner {
       orchestratorModel: deps.config?.orchestratorModel,
     };
     this.sessionId = `init-${Date.now()}`;
+    // SDK prompts dir: explicit override → package-relative default via import.meta.url
+    this.sdkPromptsDir =
+      deps.sdkPromptsDir ??
+      join(fileURLToPath(new URL('.', import.meta.url)), '..', 'prompts');
   }
 
   /**
@@ -375,7 +384,7 @@ export class InitRunner {
   private async buildProjectPrompt(input: string): Promise<string> {
     const template = await this.readGSDFile('templates/project.md');
 
-    return [
+    return sanitizePrompt([
       'You are creating the PROJECT.md for a new software project.',
       'Write .planning/PROJECT.md based on the template structure below and the user\'s project description.',
       '',
@@ -389,7 +398,7 @@ export class InitRunner {
       '',
       'Write the file to .planning/PROJECT.md. Follow the template structure but fill in with real content derived from the user input.',
       'Be specific and opinionated — make decisions, don\'t list options.',
-    ].join('\n');
+    ].join('\n'));
   }
 
   /**
@@ -415,7 +424,7 @@ export class InitRunner {
       projectContent = input;
     }
 
-    return [
+    return sanitizePrompt([
       '<agent_definition>',
       agentDef,
       '</agent_definition>',
@@ -437,7 +446,7 @@ export class InitRunner {
       '',
       `Write .planning/research/${researchType}.md following the template structure.`,
       'Be comprehensive but opinionated. "Use X because Y" not "Options are X, Y, Z."',
-    ].join('\n');
+    ].join('\n'));
   }
 
   /**
@@ -460,7 +469,7 @@ export class InitRunner {
       }
     }
 
-    return [
+    return sanitizePrompt([
       '<agent_definition>',
       agentDef,
       '</agent_definition>',
@@ -482,7 +491,7 @@ export class InitRunner {
       '',
       'Write .planning/research/SUMMARY.md synthesizing all research findings.',
       'Also commit all research files: git add .planning/research/ && git commit.',
-    ].join('\n');
+    ].join('\n'));
   }
 
   /**
@@ -511,7 +520,7 @@ export class InitRunner {
       // Research may have partially failed
     }
 
-    return [
+    return sanitizePrompt([
       'You are generating REQUIREMENTS.md for this project.',
       'Derive requirements from the PROJECT.md and research outputs.',
       'Auto-include all table-stakes requirements (auth, error handling, logging, etc.).',
@@ -530,7 +539,7 @@ export class InitRunner {
       '',
       'Write .planning/REQUIREMENTS.md following the template structure.',
       'Every requirement must be testable and specific. No vague aspirations.',
-    ].join('\n');
+    ].join('\n'));
   }
 
   /**
@@ -559,7 +568,7 @@ export class InitRunner {
       }
     }
 
-    return [
+    return sanitizePrompt([
       '<agent_definition>',
       agentDef,
       '</agent_definition>',
@@ -581,7 +590,7 @@ export class InitRunner {
       'Create .planning/ROADMAP.md and .planning/STATE.md.',
       'ROADMAP.md: Transform requirements into phases. Every v1 requirement maps to exactly one phase.',
       'STATE.md: Initialize project state tracking.',
-    ].join('\n');
+    ].join('\n'));
   }
 
   // ─── Session execution ─────────────────────────────────────────────────────
@@ -610,9 +619,20 @@ export class InitRunner {
   // ─── File reading helpers ──────────────────────────────────────────────────
 
   /**
-   * Read a file from the GSD templates directory (~/.claude/get-shit-done/).
+   * Read a file from the GSD templates directory.
+   * Tries sdk/prompts/{relativePath} first (headless versions), then
+   * falls back to GSD-1 originals (~/.claude/get-shit-done/).
    */
   private async readGSDFile(relativePath: string): Promise<string> {
+    // Try SDK prompts dir first (headless versions)
+    const sdkPath = join(this.sdkPromptsDir, relativePath);
+    try {
+      return await readFile(sdkPath, 'utf-8');
+    } catch {
+      // Not in sdk/prompts/, fall through to GSD-1 originals
+    }
+
+    // Fall back to GSD-1 originals
     const fullPath = join(GSD_TEMPLATES_DIR, '..', relativePath);
     try {
       return await readFile(fullPath, 'utf-8');
@@ -623,9 +643,20 @@ export class InitRunner {
   }
 
   /**
-   * Read an agent definition from ~/.claude/agents/.
+   * Read an agent definition.
+   * Tries sdk/prompts/agents/{filename} first (headless versions), then
+   * falls back to GSD-1 originals (~/.claude/agents/).
    */
   private async readAgentFile(filename: string): Promise<string> {
+    // Try SDK prompts dir first (headless versions)
+    const sdkPath = join(this.sdkPromptsDir, 'agents', filename);
+    try {
+      return await readFile(sdkPath, 'utf-8');
+    } catch {
+      // Not in sdk/prompts/, fall through to GSD-1 originals
+    }
+
+    // Fall back to GSD-1 originals
     const fullPath = join(GSD_AGENTS_DIR, filename);
     try {
       return await readFile(fullPath, 'utf-8');

@@ -1,12 +1,12 @@
 ---
-name: gsd.manager
-description: "Interactive command center for managing multiple phases from one terminal"
+name: gsd.secure-phase
+description: "Retroactively verify threat mitigations for a completed phase"
+argument-hint: "[phase number]"
 tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Skill","Task"] -->
-<!-- omitted-tools: ["skill"] — no Copilot equivalent found -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","Task","AskUserQuestion"] -->
 
 ## Path Resolution 
 
@@ -35,29 +35,23 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Single-terminal command center for managing a milestone. Shows a dashboard of all phases with visual status indicators, recommends optimal next actions, and dispatches work — discuss runs inline, plan/execute run as background agents.
+Verify threat mitigations for a completed phase. Three states:
+- (A) SECURITY.md exists — audit and verify mitigations
+- (B) No SECURITY.md, PLAN.md with threat model exists — run from artifacts
+- (C) Phase not executed — exit with guidance
 
-Designed for power users who want to parallelize work across phases from one terminal: discuss a phase while another plans or executes in the background.
-
-**Creates/Updates:**
-- No files created directly — dispatches to existing GSD commands via Skill() and background Task agents.
-- Reads `.planning/STATE.md`, `.planning/ROADMAP.md`, phase directories for status.
-
-**After:** User exits when done managing, or all phases complete and milestone lifecycle is suggested.
+Output: updated SECURITY.md.
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/manager.md
-- Read file at: ./.claude/get-shit-done/references/ui-brand.md
+- Read file at: ./.claude/get-shit-done/workflows/secure-phase.md
 </execution_context>
 
 <context>
-No arguments required. Requires an active milestone with ROADMAP.md and STATE.md.
-
-Project context, phase list, dependencies, and recommendations are resolved inside the workflow using `gsd-tools.cjs init manager`. No upfront context loading needed.
+Phase: $ARGUMENTS — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute the manager workflow from @./.claude/get-shit-done/workflows/manager.md end-to-end.
-Maintain the dashboard refresh loop until the user exits or all phases complete.
+Execute @./.claude/get-shit-done/workflows/secure-phase.md.
+Preserve all workflow gates.
 </process>

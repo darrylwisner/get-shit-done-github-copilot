@@ -198,6 +198,51 @@ describe('parseCliArgs', () => {
 
     expect(result.initInput).toBeUndefined();
   });
+
+  // ─── Auto --init parsing ──────────────────────────────────────────────
+
+  it('parses auto --init with @file', () => {
+    const result = parseCliArgs(['auto', '--init', '@prd.md']);
+
+    expect(result.command).toBe('auto');
+    expect(result.init).toBe('@prd.md');
+    expect(result.initInput).toBeUndefined();
+  });
+
+  it('parses auto --init with raw text', () => {
+    const result = parseCliArgs(['auto', '--init', 'build a todo app']);
+
+    expect(result.command).toBe('auto');
+    expect(result.init).toBe('build a todo app');
+  });
+
+  it('parses auto --init with other options', () => {
+    const result = parseCliArgs([
+      'auto',
+      '--init', '@spec.md',
+      '--project-dir', '/tmp/proj',
+      '--model', 'claude-sonnet-4-6',
+      '--max-budget', '25',
+    ]);
+
+    expect(result.command).toBe('auto');
+    expect(result.init).toBe('@spec.md');
+    expect(result.projectDir).toBe('/tmp/proj');
+    expect(result.model).toBe('claude-sonnet-4-6');
+    expect(result.maxBudget).toBe(25);
+  });
+
+  it('init is undefined when --init not provided', () => {
+    const result = parseCliArgs(['auto']);
+
+    expect(result.init).toBeUndefined();
+  });
+
+  it('init is undefined for non-auto commands', () => {
+    const result = parseCliArgs(['run', 'build auth']);
+
+    expect(result.init).toBeUndefined();
+  });
 });
 
 // ─── resolveInitInput tests ──────────────────────────────────────────────────
@@ -219,6 +264,7 @@ describe('resolveInitInput', () => {
       command: 'init',
       prompt: undefined,
       initInput: undefined,
+      init: undefined,
       projectDir: tmpDir,
       wsPort: undefined,
       model: undefined,
@@ -306,5 +352,10 @@ describe('USAGE', () => {
 
   it('describes auto as autonomous lifecycle', () => {
     expect(USAGE).toMatch(/auto\s+.*autonomous/i);
+  });
+
+  it('documents --init option', () => {
+    expect(USAGE).toContain('--init');
+    expect(USAGE).toContain('Bootstrap from a PRD');
   });
 });

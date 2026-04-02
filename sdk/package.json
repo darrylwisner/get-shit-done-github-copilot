@@ -1,5 +1,5 @@
 {
-  "name": "@gsd/sdk",
+  "name": "@gsd-build/sdk",
   "version": "0.1.0",
   "description": "GSD SDK — programmatic interface for running GSD plans via the Agent SDK",
   "type": "module",
@@ -14,6 +14,21 @@
   "bin": {
     "gsd-sdk": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "prompts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gsd-build/get-shit-done.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://github.com/gsd-build/get-shit-done/tree/main/sdk",
+  "bugs": {
+    "url": "https://github.com/gsd-build/get-shit-done/issues"
+  },
+  "author": "TÂCHES",
+  "license": "MIT",
   "engines": {
     "node": ">=20"
   },
