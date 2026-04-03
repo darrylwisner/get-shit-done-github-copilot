@@ -8,6 +8,7 @@ const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 
 const {
   validatePath,
@@ -412,5 +413,95 @@ describe('validateFieldName', () => {
   test('must start with a letter', () => {
     assert.ok(!validateFieldName('123field').valid);
     assert.ok(!validateFieldName('-field').valid);
+  });
+});
+
+// ─── Hook session_id path traversal (#1533) ────────────────────────────────
+// Verify that gsd-context-monitor and gsd-statusline reject session_id values
+// containing path traversal sequences before constructing temp file paths.
+
+const { execFileSync } = require('child_process');
+
+function runHook(hookPath, inputJson) {
+  try {
+    const result = execFileSync(process.execPath, [hookPath], {
+      input: JSON.stringify(inputJson),
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 3000,
+    });
+    return { exitCode: 0, stdout: result };
+  } catch (err) {
+    return { exitCode: err.status || 1, stdout: err.stdout || '', stderr: err.stderr || '' };
+  }
+}
+
+describe('gsd-context-monitor session_id path traversal', () => {
+  const monitorPath = path.join(__dirname, '..', 'hooks', 'gsd-context-monitor.js');
+  const tmpDir = os.tmpdir();
+
+  test('exits silently for session_id with ../ traversal', () => {
+    const maliciousId = '../../../etc/passwd';
+    const result = runHook(monitorPath, { session_id: maliciousId });
+    assert.strictEqual(result.exitCode, 0, 'hook should exit 0 for malicious session_id');
+    assert.strictEqual(result.stdout.trim(), '', 'hook should produce no output for malicious session_id');
+    const escapedPath = path.join(tmpDir, 'claude-ctx-' + maliciousId + '.json');
+    assert.ok(!fs.existsSync(escapedPath), 'traversal file must not be created');
+  });
+
+  test('exits silently for session_id with / separator', () => {
+    const maliciousId = 'foo/bar';
+    const result = runHook(monitorPath, { session_id: maliciousId });
+    assert.strictEqual(result.exitCode, 0);
+    assert.strictEqual(result.stdout.trim(), '');
+  });
+
+  test('exits silently for session_id with backslash', () => {
+    const maliciousId = 'foo\\bar';
+    const result = runHook(monitorPath, { session_id: maliciousId });
+    assert.strictEqual(result.exitCode, 0);
+    assert.strictEqual(result.stdout.trim(), '');
+  });
+});
+
+describe('gsd-statusline session_id path traversal', () => {
+  const statuslinePath = path.join(__dirname, '..', 'hooks', 'gsd-statusline.js');
+  const tmpDir = os.tmpdir();
+
+  const baseInput = {
+    model: { display_name: 'Claude' },
+    context_window: { remaining_percentage: 80 },
+    workspace: { current_dir: os.tmpdir() },
+  };
+
+  test('does not write bridge file for session_id with ../ traversal', () => {
+    const maliciousId = '../../../etc/gsd-test';
+    const bridgePath = path.join(tmpDir, 'claude-ctx-' + maliciousId + '.json');
+    try { fs.unlinkSync(bridgePath); } catch { /* intentionally empty */ }
+
+    runHook(statuslinePath, { ...baseInput, session_id: maliciousId });
+
+    assert.ok(!fs.existsSync(bridgePath), 'bridge file must not be written for traversal session_id');
+  });
+
+  test('does not write bridge file for session_id with forward slash', () => {
+    const maliciousId = 'sub/path';
+    const bridgePath = path.join(tmpDir, 'claude-ctx-' + maliciousId + '.json');
+    try { fs.unlinkSync(bridgePath); } catch { /* intentionally empty */ }
+
+    runHook(statuslinePath, { ...baseInput, session_id: maliciousId });
+
+    assert.ok(!fs.existsSync(bridgePath), 'bridge file must not be written for session_id with /');
+  });
+
+  test('writes bridge file for safe session_id', () => {
+    const safeId = 'abc123-safe-session';
+    const bridgePath = path.join(tmpDir, 'claude-ctx-' + safeId + '.json');
+    try { fs.unlinkSync(bridgePath); } catch { /* intentionally empty */ }
+
+    runHook(statuslinePath, { ...baseInput, session_id: safeId });
+
+    assert.ok(fs.existsSync(bridgePath), 'bridge file must be written for safe session_id');
+    try { fs.unlinkSync(bridgePath); } catch { /* intentionally empty */ }
   });
 });

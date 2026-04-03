@@ -861,10 +861,10 @@ fix(03-01): correct auth token expiry
 
 ### 36. Multi-Runtime Support
 
-**목적:** 6가지 다른 AI 코딩 에이전트 런타임에서 GSD를 실행합니다.
+**목적:** 여러 AI 코딩 에이전트 런타임에서 GSD를 실행합니다.
 
 **요구사항.**
-- REQ-RUNTIME-01: Claude Code, OpenCode, Gemini CLI, Codex, Copilot, Antigravity를 지원해야 합니다.
+- REQ-RUNTIME-01: Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Antigravity를 지원해야 합니다.
 - REQ-RUNTIME-02: 설치 프로그램은 런타임별로 콘텐츠를 변환해야 합니다(도구 이름, 경로, 프론트매터).
 - REQ-RUNTIME-03: 설치 프로그램은 대화형 및 비대화형(`--claude --global`) 모드를 모두 지원해야 합니다.
 - REQ-RUNTIME-04: 설치 프로그램은 전역 및 로컬 설치를 모두 지원해야 합니다.
@@ -873,12 +873,12 @@ fix(03-01): correct auth token expiry
 
 **런타임 변환.**
 
-| 측면 | Claude Code | OpenCode | Gemini | Codex | Copilot | Antigravity |
-|--------|------------|----------|--------|-------|---------|-------------|
-| 명령어 | 슬래시 명령어 | 슬래시 명령어 | 슬래시 명령어 | Skills(TOML) | 슬래시 명령어 | Skills |
-| 에이전트 형식 | Claude native | `mode: subagent` | Claude native | Skills | Tool mapping | Skills |
-| 훅 이벤트 | `PostToolUse` | N/A | `AfterTool` | N/A | N/A | N/A |
-| 구성 | `settings.json` | `opencode.json(c)` | `settings.json` | TOML | Instructions | Config |
+| 측면 | Claude Code | OpenCode | Gemini | Kilo | Codex | Copilot | Antigravity |
+|--------|------------|----------|--------|-------|-------|---------|-------------|
+| 명령어 | 슬래시 명령어 | 슬래시 명령어 | 슬래시 명령어 | 슬래시 명령어 | Skills(TOML) | 슬래시 명령어 | Skills |
+| 에이전트 형식 | Claude native | `mode: subagent` | Claude native | `mode: subagent` | Skills | Tool mapping | Skills |
+| 훅 이벤트 | `PostToolUse` | N/A | `AfterTool` | N/A | N/A | N/A | N/A |
+| 구성 | `settings.json` | `opencode.json(c)` | `settings.json` | `kilo.json(c)` | TOML | Instructions | Config |
 
 ---
 

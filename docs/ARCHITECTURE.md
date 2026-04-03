@@ -21,7 +21,7 @@
 
 ## System Overview
 
-GSD is a **meta-prompting framework** that sits between the user and AI coding agents (Claude Code, Gemini CLI, OpenCode, Codex, Copilot, Antigravity). It provides:
+GSD is a **meta-prompting framework** that sits between the user and AI coding agents (Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Copilot, Antigravity). It provides:
 
 1. **Context engineering** — Structured artifacts that give the AI everything it needs per task
 2. **Multi-agent orchestration** — Thin orchestrators that spawn specialized agents with fresh context windows
@@ -108,7 +108,7 @@ Multiple layers prevent common failure modes:
 
 User-facing entry points. Each file contains YAML frontmatter (name, description, allowed-tools) and a prompt body that bootstraps the workflow. Commands are installed as:
 - **Claude Code:** Custom slash commands (`/gsd:command-name`)
-- **OpenCode:** Slash commands (`/gsd-command-name`)
+- **OpenCode / Kilo:** Slash commands (`/gsd-command-name`)
 - **Codex:** Skills (`$gsd-command-name`)
 - **Copilot:** Slash commands (`/gsd:command-name`)
 - **Antigravity:** Skills
@@ -362,6 +362,7 @@ UI-SPEC.md (per phase) ───────────────────
 
 Equivalent paths for other runtimes:
 - **OpenCode:** `~/.config/opencode/` or `~/.opencode/`
+- **Kilo:** `~/.config/kilo/` or `~/.kilo/`
 - **Gemini CLI:** `~/.gemini/`
 - **Codex:** `~/.codex/` (uses skills instead of commands)
 - **Copilot:** `~/.github/`
@@ -425,12 +426,13 @@ Equivalent paths for other runtimes:
 
 The installer (`bin/install.js`, ~3,000 lines) handles:
 
-1. **Runtime detection** — Interactive prompt or CLI flags (`--claude`, `--opencode`, `--gemini`, `--codex`, `--copilot`, `--antigravity`, `--all`)
+1. **Runtime detection** — Interactive prompt or CLI flags (`--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--antigravity`, `--all`)
 2. **Location selection** — Global (`--global`) or local (`--local`)
 3. **File deployment** — Copies commands, workflows, references, templates, agents, hooks
 4. **Runtime adaptation** — Transforms file content per runtime:
    - Claude Code: Uses as-is
-   - OpenCode: Converts agent frontmatter to `name:`, `model: inherit`, `mode: subagent`
+   - OpenCode: Converts commands/agents to OpenCode-compatible flat command + subagent format
+   - Kilo: Reuses the OpenCode conversion pipeline with Kilo config paths
    - Codex: Generates TOML config + skills from commands
    - Copilot: Maps tool names (Read→read, Bash→execute, etc.)
    - Gemini: Adjusts hook event names (`AfterTool` instead of `PostToolUse`)
@@ -505,12 +507,13 @@ Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→
 
 ## Runtime Abstraction
 
-GSD supports 6 AI coding runtimes through a unified command/workflow architecture:
+GSD supports multiple AI coding runtimes through a unified command/workflow architecture:
 
 | Runtime | Command Format | Agent System | Config Location |
 |---------|---------------|--------------|-----------------|
 | Claude Code | `/gsd:command` | Task spawning | `~/.claude/` |
 | OpenCode | `/gsd-command` | Subagent mode | `~/.config/opencode/` |
+| Kilo | `/gsd-command` | Subagent mode | `~/.config/kilo/` |
 | Gemini CLI | `/gsd:command` | Task spawning | `~/.gemini/` |
 | Codex | `$gsd-command` | Skills | `~/.codex/` |
 | Copilot | `/gsd:command` | Agent delegation | `~/.github/` |

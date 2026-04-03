@@ -276,7 +276,7 @@ function cmdInitNewProject(cwd, raw) {
       '.ex', '.exs',           // Elixir
       '.clj',                  // Clojure
     ]);
-    const skipDirs = new Set(['node_modules', '.git', '.planning', '.claude', '__pycache__', 'target', 'dist', 'build']);
+    const skipDirs = new Set(['node_modules', '.git', '.planning', '.claude', '.codex', '__pycache__', 'target', 'dist', 'build']);
     function findCodeFiles(dir, depth) {
       if (depth > 3) return false;
       let entries;
@@ -956,9 +956,11 @@ function cmdInitManager(cwd, raw) {
   } catch { /* intentionally empty */ }
 
   // Compute recommended actions (execute > plan > discuss)
+  // Skip BACKLOG phases (999.x numbering) — they are parked ideas, not active work
   const recommendedActions = [];
   for (const phase of phases) {
     if (phase.disk_status === 'complete') continue;
+    if (/^999(?:\.|$)/.test(phase.number)) continue;
 
     if (phase.disk_status === 'planned' && phase.deps_satisfied) {
       recommendedActions.push({
@@ -1026,6 +1028,27 @@ function cmdInitManager(cwd, raw) {
   });
 
   const completedCount = phases.filter(p => p.disk_status === 'complete').length;
+
+  // Read manager flags from config (passthrough flags for each step)
+  // Validate: flags must be CLI-safe (only --flags, alphanumeric, hyphens, spaces)
+  const sanitizeFlags = (raw) => {
+    const val = typeof raw === 'string' ? raw : '';
+    if (!val) return '';
+    // Allow only --flag patterns with alphanumeric/hyphen values separated by spaces
+    const tokens = val.split(/\s+/).filter(Boolean);
+    const safe = tokens.every(t => /^--[a-zA-Z0-9][-a-zA-Z0-9]*$/.test(t) || /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/.test(t));
+    if (!safe) {
+      process.stderr.write(`gsd-tools: warning: manager.flags contains invalid tokens, ignoring: ${val}\n`);
+      return '';
+    }
+    return val;
+  };
+  const managerFlags = {
+    discuss: sanitizeFlags(config.manager && config.manager.flags && config.manager.flags.discuss),
+    plan: sanitizeFlags(config.manager && config.manager.flags && config.manager.flags.plan),
+    execute: sanitizeFlags(config.manager && config.manager.flags && config.manager.flags.execute),
+  };
+
   const result = {
     milestone_version: milestone.version,
     milestone_name: milestone.name,
@@ -1039,6 +1062,7 @@ function cmdInitManager(cwd, raw) {
     project_exists: pathExistsInternal(cwd, '.planning/PROJECT.md'),
     roadmap_exists: true,
     state_exists: true,
+    manager_flags: managerFlags,
   };
 
   output(withProjectRoot(cwd, result), raw);

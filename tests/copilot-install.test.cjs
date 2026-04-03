@@ -44,6 +44,7 @@ describe('getDirName (Copilot)', () => {
     assert.strictEqual(getDirName('claude'), '.claude');
     assert.strictEqual(getDirName('opencode'), '.opencode');
     assert.strictEqual(getDirName('gemini'), '.gemini');
+    assert.strictEqual(getDirName('kilo'), '.kilo');
     assert.strictEqual(getDirName('codex'), '.codex');
   });
 });
@@ -109,6 +110,7 @@ describe('getConfigDirFromHome (Copilot)', () => {
     assert.strictEqual(getConfigDirFromHome('opencode', true), "'.config', 'opencode'");
     assert.strictEqual(getConfigDirFromHome('claude', true), "'.claude'");
     assert.strictEqual(getConfigDirFromHome('gemini', true), "'.gemini'");
+    assert.strictEqual(getConfigDirFromHome('kilo', true), "'.config', 'kilo'");
     assert.strictEqual(getConfigDirFromHome('codex', true), "'.codex'");
   });
 });
@@ -137,13 +139,19 @@ describe('Source code integration (Copilot)', () => {
     assert.ok(src.includes('--copilot'), 'help text has --copilot option');
   });
 
-  test('CLI-02: promptRuntime runtimeMap has Copilot as option 5', () => {
-    assert.ok(src.includes("'5': 'copilot'"), 'runtimeMap has 5 -> copilot');
+  test('CLI-02: promptRuntime runtimeMap has Copilot as option 6', () => {
+    assert.ok(src.includes("'6': 'copilot'"), 'runtimeMap has 6 -> copilot');
   });
 
   test('CLI-02: promptRuntime allRuntimes array includes copilot', () => {
     const allMatch = src.match(/const allRuntimes = \[([^\]]+)\]/);
     assert.ok(allMatch && allMatch[1].includes('copilot'), 'allRuntimes includes copilot');
+  });
+
+  test('CLI-02: promptRuntime keeps Kilo above OpenCode in allRuntimes', () => {
+    const allMatch = src.match(/const allRuntimes = \[([^\]]+)\]/);
+    assert.ok(allMatch, 'allRuntimes array found');
+    assert.ok(allMatch[1].indexOf("'kilo'") < allMatch[1].indexOf("'opencode'"), 'kilo appears before opencode');
   });
 
   test('isCopilot variable exists in install function', () => {

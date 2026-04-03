@@ -33,6 +33,40 @@ describe('init commands', () => {
     assert.strictEqual(output.config_path, '.planning/config.json');
   });
 
+  test('init execute-phase respects model_overrides for executor_model', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-foundation');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
+      model_profile: 'balanced',
+      model_overrides: { 'gsd-executor': 'openai/o4-mini' },
+    }));
+
+    const result = runGsdTools('init execute-phase 1 --raw', tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.executor_model, 'openai/o4-mini',
+      'model_overrides["gsd-executor"] must take precedence over profile');
+  });
+
+  test('init execute-phase respects model_overrides when resolve_model_ids is omit', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-foundation');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
+      resolve_model_ids: 'omit',
+      model_overrides: { 'gsd-executor': 'openai/o4-mini' },
+    }));
+
+    const result = runGsdTools('init execute-phase 1 --raw', tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.executor_model, 'openai/o4-mini',
+      'model_overrides must take precedence even when resolve_model_ids is omit');
+  });
+
   test('init plan-phase returns file paths', () => {
     const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
     fs.mkdirSync(phaseDir, { recursive: true });

@@ -45,6 +45,13 @@ process.stdin.on('end', () => {
       process.exit(0);
     }
 
+    // Reject session IDs that contain path traversal sequences or path separators.
+    // session_id is used to construct file paths in /tmp — an unsanitized value
+    // could escape the temp directory and read or write arbitrary files.
+    if (/[/\\]|\.\./.test(sessionId)) {
+      process.exit(0);
+    }
+
     // Check if context warnings are disabled via config
     const cwd = data.cwd || process.cwd();
     const configPath = path.join(cwd, '.planning', 'config.json');

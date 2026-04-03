@@ -4,7 +4,7 @@
 
 [English](README.md) · [Português](README.pt-BR.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · **한국어**
 
-**Claude Code, OpenCode, Gemini CLI, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment를 위한 가볍고 강력한 메타 프롬프팅, 컨텍스트 엔지니어링, 스펙 기반 개발 시스템.**
+**Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment를 위한 가볍고 강력한 메타 프롬프팅, 컨텍스트 엔지니어링, 스펙 기반 개발 시스템.**
 
 **컨텍스트 rot를 해결합니다 — Claude의 컨텍스트 창이 채워질수록 품질이 저하되는 문제.**
 
@@ -82,12 +82,13 @@ npx get-shit-done-cc@latest
 ```
 
 설치 중에 다음을 선택합니다:
-1. **런타임** — Claude Code, OpenCode, Gemini, Codex, Copilot, Cursor, Antigravity, 또는 전체 (대화형 다중 선택 — 한 번에 여러 런타임 선택 가능)
+1. **런타임** — Claude Code, OpenCode, Gemini, Kilo, Codex, Copilot, Cursor, Antigravity, 또는 전체 (대화형 다중 선택 — 한 번에 여러 런타임 선택 가능)
 2. **위치** — 전역 (모든 프로젝트) 또는 로컬 (현재 프로젝트만)
 
 설치가 됐는지 확인하려면:
 - Claude Code / Gemini: `/gsd:help`
 - OpenCode: `/gsd-help`
+- Kilo: `/gsd-help`
 - Codex: `$gsd-help`
 - Copilot: `/gsd:help`
 - Antigravity: `/gsd:help`
@@ -117,6 +118,10 @@ npx get-shit-done-cc --opencode --global # ~/.config/opencode/에 설치
 # Gemini CLI
 npx get-shit-done-cc --gemini --global   # ~/.gemini/에 설치
 
+# Kilo (OpenCode 포크)
+npx get-shit-done-cc --kilo --global     # ~/.config/kilo/에 설치
+npx get-shit-done-cc --kilo --local      # ./.kilo/에 설치
+
 # Codex (스킬 우선)
 npx get-shit-done-cc --codex --global    # ~/.codex/에 설치
 npx get-shit-done-cc --codex --local     # ./.codex/에 설치
@@ -138,7 +143,7 @@ npx get-shit-done-cc --all --global      # 모든 디렉터리에 설치
 ```
 
 위치 프롬프트 건너뛰기: `--global` (`-g`) 또는 `--local` (`-l`).
-런타임 프롬프트 건너뛰기: `--claude`, `--opencode`, `--gemini`, `--codex`, `--copilot`, `--cursor`, `--antigravity`, 또는 `--all`.
+런타임 프롬프트 건너뛰기: `--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--cursor`, `--antigravity`, 또는 `--all`.
 
 </details>
 
@@ -766,6 +771,7 @@ GSD를 완전히 제거하려면:
 npx get-shit-done-cc --claude --global --uninstall
 npx get-shit-done-cc --opencode --global --uninstall
 npx get-shit-done-cc --gemini --global --uninstall
+npx get-shit-done-cc --kilo --global --uninstall
 npx get-shit-done-cc --codex --global --uninstall
 npx get-shit-done-cc --copilot --global --uninstall
 npx get-shit-done-cc --cursor --global --uninstall
@@ -775,6 +781,7 @@ npx get-shit-done-cc --antigravity --global --uninstall
 npx get-shit-done-cc --claude --local --uninstall
 npx get-shit-done-cc --opencode --local --uninstall
 npx get-shit-done-cc --gemini --local --uninstall
+npx get-shit-done-cc --kilo --local --uninstall
 npx get-shit-done-cc --codex --local --uninstall
 npx get-shit-done-cc --copilot --local --uninstall
 npx get-shit-done-cc --cursor --local --uninstall
@@ -787,7 +794,7 @@ npx get-shit-done-cc --antigravity --local --uninstall
 
 ## 커뮤니티 포트
 
-OpenCode, Gemini CLI, Codex는 이제 `npx get-shit-done-cc`를 통해 기본 지원됩니다.
+OpenCode, Gemini CLI, Kilo, Codex는 이제 `npx get-shit-done-cc`를 통해 기본 지원됩니다.
 
 이 커뮤니티 포트들이 멀티 런타임 지원의 선구자였습니다:
 

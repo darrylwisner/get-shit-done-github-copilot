@@ -1,4 +1,5 @@
 ---
+name: gsd:reapply-patches
 description: Reapply local modifications after a GSD update
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
 ---
@@ -16,19 +17,90 @@ After a GSD update wipes and reinstalls files, this command merges user's previo
 Check for local patches directory:
 
 ```bash
-# Global install — detect runtime config directory
-if [ -d "$HOME/.config/opencode/gsd-local-patches" ]; then
-  PATCHES_DIR="$HOME/.config/opencode/gsd-local-patches"
-elif [ -d "$HOME/.opencode/gsd-local-patches" ]; then
-  PATCHES_DIR="$HOME/.opencode/gsd-local-patches"
-elif [ -d "$HOME/.gemini/gsd-local-patches" ]; then
-  PATCHES_DIR="$HOME/.gemini/gsd-local-patches"
-else
-  PATCHES_DIR="$HOME/.claude/gsd-local-patches"
+expand_home() {
+  case "$1" in
+    "~/"*) printf '%s/%s\n' "$HOME" "${1#~/}" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+PATCHES_DIR=""
+
+# Env overrides first — covers custom config directories used with --config-dir
+if [ -n "$KILO_CONFIG_DIR" ]; then
+  candidate="$(expand_home "$KILO_CONFIG_DIR")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+elif [ -n "$KILO_CONFIG" ]; then
+  candidate="$(dirname "$(expand_home "$KILO_CONFIG")")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+elif [ -n "$XDG_CONFIG_HOME" ]; then
+  candidate="$(expand_home "$XDG_CONFIG_HOME")/kilo/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+fi
+
+if [ -z "$PATCHES_DIR" ] && [ -n "$OPENCODE_CONFIG_DIR" ]; then
+  candidate="$(expand_home "$OPENCODE_CONFIG_DIR")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+elif [ -z "$PATCHES_DIR" ] && [ -n "$OPENCODE_CONFIG" ]; then
+  candidate="$(dirname "$(expand_home "$OPENCODE_CONFIG")")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+elif [ -z "$PATCHES_DIR" ] && [ -n "$XDG_CONFIG_HOME" ]; then
+  candidate="$(expand_home "$XDG_CONFIG_HOME")/opencode/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+fi
+
+if [ -z "$PATCHES_DIR" ] && [ -n "$GEMINI_CONFIG_DIR" ]; then
+  candidate="$(expand_home "$GEMINI_CONFIG_DIR")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+fi
+
+if [ -z "$PATCHES_DIR" ] && [ -n "$CODEX_HOME" ]; then
+  candidate="$(expand_home "$CODEX_HOME")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+fi
+
+if [ -z "$PATCHES_DIR" ] && [ -n "$CLAUDE_CONFIG_DIR" ]; then
+  candidate="$(expand_home "$CLAUDE_CONFIG_DIR")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+fi
+
+# Global install — detect runtime config directory defaults
+if [ -z "$PATCHES_DIR" ]; then
+  if [ -d "$HOME/.config/kilo/gsd-local-patches" ]; then
+    PATCHES_DIR="$HOME/.config/kilo/gsd-local-patches"
+  elif [ -d "$HOME/.config/opencode/gsd-local-patches" ]; then
+    PATCHES_DIR="$HOME/.config/opencode/gsd-local-patches"
+  elif [ -d "$HOME/.opencode/gsd-local-patches" ]; then
+    PATCHES_DIR="$HOME/.opencode/gsd-local-patches"
+  elif [ -d "$HOME/.gemini/gsd-local-patches" ]; then
+    PATCHES_DIR="$HOME/.gemini/gsd-local-patches"
+  elif [ -d "$HOME/.codex/gsd-local-patches" ]; then
+    PATCHES_DIR="$HOME/.codex/gsd-local-patches"
+  else
+    PATCHES_DIR="$HOME/.claude/gsd-local-patches"
+  fi
 fi
 # Local install fallback — check all runtime directories
 if [ ! -d "$PATCHES_DIR" ]; then
-  for dir in .config/opencode .opencode .gemini .claude; do
+  for dir in .config/kilo .kilo .config/opencode .opencode .gemini .codex .claude; do
     if [ -d "./$dir/gsd-local-patches" ]; then
       PATCHES_DIR="./$dir/gsd-local-patches"
       break
@@ -152,22 +224,13 @@ Each matching commit represents an intentional user modification. Use the commit
 
 **Never report `Skipped — no custom content`.** If a file is in the backup, it has custom content.
 
-## Step 5: Update manifest
-
-After reapplying, regenerate the file manifest so future updates correctly detect these as user modifications:
-
-```bash
-# The manifest will be regenerated on next /gsd:update
-# For now, just note which files were modified
-```
-
-## Step 6: Cleanup option
+## Step 5: Cleanup option
 
 Ask user:
 - "Keep patch backups for reference?" → preserve `gsd-local-patches/`
 - "Clean up patch backups?" → remove `gsd-local-patches/` directory
 
-## Step 7: Report
+## Step 6: Report
 
 ```
 ## Patches Reapplied

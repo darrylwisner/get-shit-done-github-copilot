@@ -4,7 +4,9 @@
 
 const { describe, test, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
 
@@ -17,6 +19,53 @@ function createProjectWithState(tmpDir, roadmap, state) {
   if (state) {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), state, 'utf-8');
   }
+}
+
+function createFailingTtyEnv(tmpDir) {
+  const binDir = path.join(tmpDir, 'fake-bin');
+  const markerFile = path.join(tmpDir, 'tty-invoked.log');
+  const inheritedPath = process.env.PATH || process.env.Path || '';
+
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(binDir, 'tty'),
+    '#!/bin/sh\nif [ -n "$GSD_TTY_MARKER" ]; then printf "tty\\n" >> "$GSD_TTY_MARKER"; fi\nexit 99\n',
+    'utf-8'
+  );
+  fs.chmodSync(path.join(binDir, 'tty'), 0o755);
+  fs.writeFileSync(
+    path.join(binDir, 'tty.cmd'),
+    '@echo off\r\nif not "%GSD_TTY_MARKER%"=="" echo tty>>"%GSD_TTY_MARKER%"\r\nexit /b 99\r\n',
+    'utf-8'
+  );
+
+  return {
+    markerFile,
+    env: {
+      PATH: `${binDir}${path.delimiter}${inheritedPath}`,
+      GSD_TTY_MARKER: markerFile,
+    },
+  };
+}
+
+function getSessionPointerDir(tmpDir) {
+  const planningPath = fs.realpathSync.native(path.join(tmpDir, '.planning'));
+  const projectId = crypto
+    .createHash('sha1')
+    .update(planningPath)
+    .digest('hex')
+    .slice(0, 16);
+  return path.join(os.tmpdir(), 'gsd-workstream-sessions', projectId);
+}
+
+function sanitizeSessionToken(value) {
+  const token = String(value).trim().replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return token ? token.slice(0, 160) : null;
+}
+
+function getSessionPointerFileName(envKey, value) {
+  const token = sanitizeSessionToken(value);
+  return `${envKey.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${token}`;
 }
 
 // ─── planningDir / planningPaths env-var awareness ──────────────────────────
@@ -62,6 +111,208 @@ describe('planningDir workstream awareness via env var', () => {
 
     const result = runGsdTools(['state', 'json', '--raw', '--ws', 'beta'], tmpDir, { GSD_WORKSTREAM: 'alpha' });
     assert.ok(result.success, `state json --ws beta failed: ${result.error}`);
+  });
+});
+
+describe('session-scoped active workstream routing', () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = createTempProject();
+
+    for (const [ws, status] of [['alpha', 'Alpha active'], ['beta', 'Beta active']]) {
+      const wsDir = path.join(tmpDir, '.planning', 'workstreams', ws);
+      fs.mkdirSync(path.join(wsDir, 'phases'), { recursive: true });
+      fs.writeFileSync(path.join(wsDir, 'STATE.md'), `# State\n**Status:** ${status}\n`);
+    }
+  });
+
+  after(() => cleanup(tmpDir));
+
+  test('stores active workstream per session instead of mutating shared pointer', () => {
+    const alphaSet = runGsdTools(['workstream', 'set', 'alpha', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const betaSet = runGsdTools(['workstream', 'set', 'beta', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+
+    assert.ok(alphaSet.success, `alpha set failed: ${alphaSet.error}`);
+    assert.ok(betaSet.success, `beta set failed: ${betaSet.error}`);
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.planning', 'active-workstream')),
+      'shared active-workstream file should not be used when session keys are available');
+  });
+
+  test('different sessions resolve different active workstreams without --ws', () => {
+    const alpha = runGsdTools(['workstream', 'get', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const beta = runGsdTools(['workstream', 'get', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+
+    assert.ok(alpha.success, `alpha get failed: ${alpha.error}`);
+    assert.ok(beta.success, `beta get failed: ${beta.error}`);
+    assert.strictEqual(alpha.output, 'alpha');
+    assert.strictEqual(beta.output, 'beta');
+  });
+
+  test('session-scoped pointer ignores legacy shared active-workstream file', () => {
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'active-workstream'), 'beta\n');
+
+    const alpha = runGsdTools(['workstream', 'get', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const shared = runGsdTools(['workstream', 'get', '--raw'], tmpDir);
+
+    assert.ok(alpha.success, `session-scoped get failed: ${alpha.error}`);
+    assert.ok(shared.success, `legacy get failed: ${shared.error}`);
+    assert.strictEqual(alpha.output, 'alpha');
+    assert.strictEqual(shared.output, 'beta');
+  });
+
+  test('state commands route to the session-scoped workstream automatically', () => {
+    const alpha = runGsdTools(['state', 'json', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const beta = runGsdTools(['state', 'json', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+
+    assert.ok(alpha.success, `alpha state failed: ${alpha.error}`);
+    assert.ok(beta.success, `beta state failed: ${beta.error}`);
+    const alphaState = JSON.parse(alpha.output);
+    const betaState = JSON.parse(beta.output);
+    assert.strictEqual(alphaState.status, 'Alpha active');
+    assert.strictEqual(betaState.status, 'Beta active');
+  });
+
+  test('clearing one session does not clear another session pointer', () => {
+    const clearAlpha = runGsdTools(['workstream', 'set', '--clear', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const alpha = runGsdTools(['workstream', 'get'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const beta = runGsdTools(['workstream', 'get', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+
+    assert.ok(clearAlpha.success, `clear alpha failed: ${clearAlpha.error}`);
+    assert.ok(alpha.success, `alpha get after clear failed: ${alpha.error}`);
+    assert.ok(beta.success, `beta get after alpha clear failed: ${beta.error}`);
+
+    const cleared = JSON.parse(alpha.output);
+    assert.strictEqual(cleared.active, null);
+    assert.strictEqual(beta.output, 'beta');
+  });
+});
+
+describe('session resolution hardening', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+
+    for (const [ws, status] of [['alpha', 'Alpha active'], ['beta', 'Beta active']]) {
+      const wsDir = path.join(tmpDir, '.planning', 'workstreams', ws);
+      fs.mkdirSync(path.join(wsDir, 'phases'), { recursive: true });
+      fs.writeFileSync(path.join(wsDir, 'STATE.md'), `# State\n**Status:** ${status}\n`);
+    }
+  });
+
+  afterEach(() => cleanup(tmpDir));
+
+  test('headless runs skip tty probing and use the shared active-workstream fallback', () => {
+    const { markerFile, env } = createFailingTtyEnv(tmpDir);
+    const set = runGsdTools(['workstream', 'set', 'alpha', '--raw'], tmpDir, env);
+    const get = runGsdTools(['workstream', 'get', '--raw'], tmpDir, env);
+
+    assert.ok(set.success, `headless set failed: ${set.error}`);
+    assert.ok(get.success, `headless get failed: ${get.error}`);
+    assert.ok(!fs.existsSync(markerFile), 'headless fallback should not invoke the tty subprocess');
+    assert.strictEqual(get.output, 'alpha');
+    assert.strictEqual(
+      fs.readFileSync(path.join(tmpDir, '.planning', 'active-workstream'), 'utf-8').trim(),
+      'alpha'
+    );
+    assert.ok(!fs.existsSync(getSessionPointerDir(tmpDir)), 'headless fallback should not create session tmp pointers');
+  });
+
+  test('explicit runtime session ids outrank tty-derived identities', () => {
+    const set = runGsdTools(['workstream', 'set', 'alpha', '--raw'], tmpDir, {
+      GSD_SESSION_KEY: 'shared-session',
+      TTY: '/dev/pts/42',
+    });
+    const get = runGsdTools(['workstream', 'get', '--raw'], tmpDir, {
+      GSD_SESSION_KEY: 'shared-session',
+      TTY: '/dev/pts/99',
+    });
+
+    assert.ok(set.success, `session-key set failed: ${set.error}`);
+    assert.ok(get.success, `session-key get failed: ${get.error}`);
+    assert.strictEqual(get.output, 'alpha');
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.planning', 'active-workstream')));
+  });
+
+  test('TTY environment variables provide a session-scoped pointer without spawning tty', () => {
+    const { markerFile, env } = createFailingTtyEnv(tmpDir);
+    const ttyEnv = { ...env, TTY: '/dev/pts/42' };
+    const set = runGsdTools(['workstream', 'set', 'beta', '--raw'], tmpDir, ttyEnv);
+    const get = runGsdTools(['workstream', 'get', '--raw'], tmpDir, ttyEnv);
+
+    assert.ok(set.success, `TTY set failed: ${set.error}`);
+    assert.ok(get.success, `TTY get failed: ${get.error}`);
+    assert.ok(!fs.existsSync(markerFile), 'TTY env should be used directly without invoking the tty subprocess');
+    assert.strictEqual(get.output, 'beta');
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.planning', 'active-workstream')));
+  });
+});
+
+describe('pointer lifecycle hardening', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+
+    for (const [ws, status] of [['alpha', 'Alpha active'], ['beta', 'Beta active']]) {
+      const wsDir = path.join(tmpDir, '.planning', 'workstreams', ws);
+      fs.mkdirSync(path.join(wsDir, 'phases'), { recursive: true });
+      fs.writeFileSync(path.join(wsDir, 'STATE.md'), `# State\n**Status:** ${status}\n`);
+    }
+  });
+
+  afterEach(() => cleanup(tmpDir));
+
+  test('clearing one session pointer leaves sibling session pointers intact', () => {
+    const sessionDir = getSessionPointerDir(tmpDir);
+    const alphaFile = getSessionPointerFileName('GSD_SESSION_KEY', 'session-alpha');
+    const betaFile = getSessionPointerFileName('GSD_SESSION_KEY', 'session-beta');
+
+    runGsdTools(['workstream', 'set', 'alpha', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    runGsdTools(['workstream', 'set', 'beta', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+
+    const clearAlpha = runGsdTools(['workstream', 'set', '--clear', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const beta = runGsdTools(['workstream', 'get', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+
+    assert.ok(clearAlpha.success, `clear alpha failed: ${clearAlpha.error}`);
+    assert.ok(beta.success, `beta get failed: ${beta.error}`);
+    assert.strictEqual(beta.output, 'beta');
+    assert.ok(fs.existsSync(sessionDir), 'session tmp directory should remain while a sibling pointer exists');
+    assert.deepStrictEqual(fs.readdirSync(sessionDir).sort(), [betaFile]);
+    assert.ok(!fs.existsSync(path.join(sessionDir, alphaFile)));
+  });
+
+  test('stale pointers self-clean without deleting sibling session pointers', () => {
+    const sessionDir = getSessionPointerDir(tmpDir);
+    const betaFile = getSessionPointerFileName('GSD_SESSION_KEY', 'session-beta');
+
+    runGsdTools(['workstream', 'set', 'alpha', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    runGsdTools(['workstream', 'set', 'beta', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+    fs.rmSync(path.join(tmpDir, '.planning', 'workstreams', 'alpha'), { recursive: true, force: true });
+
+    const alpha = runGsdTools(['workstream', 'get'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+    const beta = runGsdTools(['workstream', 'get', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-beta' });
+
+    assert.ok(alpha.success, `stale alpha get failed: ${alpha.error}`);
+    assert.ok(beta.success, `beta get after stale cleanup failed: ${beta.error}`);
+    assert.strictEqual(JSON.parse(alpha.output).active, null);
+    assert.strictEqual(beta.output, 'beta');
+    assert.ok(fs.existsSync(sessionDir), 'sibling pointer should keep the session tmp directory alive');
+    assert.deepStrictEqual(fs.readdirSync(sessionDir).sort(), [betaFile]);
+  });
+
+  test('clearing the last session pointer removes the empty session tmp directory', () => {
+    const sessionDir = getSessionPointerDir(tmpDir);
+    const set = runGsdTools(['workstream', 'set', 'alpha', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+
+    assert.ok(set.success, `set alpha failed: ${set.error}`);
+    assert.ok(fs.existsSync(sessionDir), 'session tmp directory should exist after storing a session-scoped pointer');
+
+    const clear = runGsdTools(['workstream', 'set', '--clear', '--raw'], tmpDir, { GSD_SESSION_KEY: 'session-alpha' });
+
+    assert.ok(clear.success, `clear alpha failed: ${clear.error}`);
+    assert.ok(!fs.existsSync(sessionDir), 'last-pointer cleanup should remove the empty session tmp directory');
   });
 });
 

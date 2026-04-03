@@ -413,4 +413,97 @@ describe('init manager', () => {
     // macOS resolves /var → /private/var; normalize both sides
     assert.strictEqual(fs.realpathSync(output.project_root), fs.realpathSync(tmpDir));
   });
+
+  test('output includes manager_flags defaults when not configured', () => {
+    writeState(tmpDir);
+    writeRoadmap(tmpDir, [{ number: '1', name: 'Test' }]);
+
+    const result = runGsdTools('init manager', tmpDir);
+    const output = JSON.parse(result.output);
+
+    assert.ok(output.manager_flags, 'should include manager_flags');
+    assert.strictEqual(output.manager_flags.discuss, '');
+    assert.strictEqual(output.manager_flags.plan, '');
+    assert.strictEqual(output.manager_flags.execute, '');
+  });
+
+  test('output includes manager_flags from config when set', () => {
+    writeState(tmpDir);
+    writeRoadmap(tmpDir, [{ number: '1', name: 'Test' }]);
+
+    // Write config with manager flags
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({
+        manager: {
+          flags: {
+            discuss: '--auto --analyze',
+            plan: '--skip-research',
+            execute: '--interactive',
+          }
+        }
+      })
+    );
+
+    const result = runGsdTools('init manager', tmpDir);
+    const output = JSON.parse(result.output);
+
+    assert.ok(output.manager_flags, 'should include manager_flags');
+    assert.strictEqual(output.manager_flags.discuss, '--auto --analyze');
+    assert.strictEqual(output.manager_flags.plan, '--skip-research');
+    assert.strictEqual(output.manager_flags.execute, '--interactive');
+  });
+
+  test('sanitizes invalid manager_flags to prevent injection (#1410)', () => {
+    writeState(tmpDir);
+    writeRoadmap(tmpDir, [{ number: '1', name: 'Test' }]);
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({
+        manager: {
+          flags: {
+            discuss: '; rm -rf /',
+            plan: '--valid-flag',
+            execute: '$(whoami)',
+          }
+        }
+      })
+    );
+
+    const result = runGsdTools('init manager', tmpDir);
+    const output = JSON.parse(result.output);
+
+    // Invalid flags should be sanitized to empty string
+    assert.strictEqual(output.manager_flags.discuss, '', 'injection attempt should be sanitized');
+    assert.strictEqual(output.manager_flags.plan, '--valid-flag', 'valid flag should pass through');
+    assert.strictEqual(output.manager_flags.execute, '', 'command substitution should be sanitized');
+  });
+
+  test('does not recommend BACKLOG phases (999.x) as next actions', () => {
+    writeState(tmpDir);
+    // Regular phase (planned, deps met) plus a backlog phase (999.1) also planned
+    writeRoadmap(tmpDir, [
+      { number: '1', name: 'Foundation' },
+      { number: '999.1', name: 'Nice to have feature (BACKLOG)' },
+    ]);
+    // Phase 1: planned (has plan, no summary)
+    scaffoldPhase(tmpDir, 1, { plans: 1 });
+    // Phase 999.1: planned (has plan, no summary)
+    const backlogDir = path.join(tmpDir, '.planning', 'phases', '999.1-backlog');
+    fs.mkdirSync(backlogDir, { recursive: true });
+    fs.writeFileSync(path.join(backlogDir, '999.1-01-PLAN.md'), '# Backlog Plan');
+
+    const result = runGsdTools('init manager', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    const recommended = output.recommended_actions || [];
+    const backlogRecs = recommended.filter(r => /^999/.test(r.phase));
+    assert.strictEqual(backlogRecs.length, 0, 'no 999.x phases should appear in recommended_actions');
+
+    // Phase 1 (non-backlog) should still be recommended
+    const activeRecs = recommended.filter(r => r.phase === '1');
+    assert.strictEqual(activeRecs.length, 1, 'phase 1 should still be recommended');
+  });
 });

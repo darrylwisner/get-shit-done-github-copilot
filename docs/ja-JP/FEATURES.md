@@ -861,10 +861,10 @@ fix(03-01): correct auth token expiry
 
 ### 36. マルチランタイムサポート
 
-**目的:** 6つの異なる AI コーディングエージェントランタイムで GSD を実行します。
+**目的:** 複数の AI コーディングエージェントランタイムで GSD を実行します。
 
 **要件:**
-- REQ-RUNTIME-01: システムは Claude Code、OpenCode、Gemini CLI、Codex、Copilot、Antigravity をサポートしなければならない
+- REQ-RUNTIME-01: システムは Claude Code、OpenCode、Gemini CLI、Kilo、Codex、Copilot、Antigravity をサポートしなければならない
 - REQ-RUNTIME-02: インストーラーはランタイムごとにコンテンツを変換しなければならない（ツール名、パス、フロントマター）
 - REQ-RUNTIME-03: インストーラーはインタラクティブおよび非インタラクティブ（`--claude --global`）モードをサポートしなければならない
 - REQ-RUNTIME-04: インストーラーはグローバルとローカルの両方のインストールをサポートしなければならない
@@ -873,12 +873,12 @@ fix(03-01): correct auth token expiry
 
 **ランタイム変換:**
 
-| 側面 | Claude Code | OpenCode | Gemini | Codex | Copilot | Antigravity |
-|------|------------|----------|--------|-------|---------|-------------|
-| コマンド | スラッシュコマンド | スラッシュコマンド | スラッシュコマンド | スキル（TOML） | スラッシュコマンド | スキル |
-| エージェント形式 | Claude ネイティブ | `mode: subagent` | Claude ネイティブ | スキル | ツールマッピング | スキル |
-| フックイベント | `PostToolUse` | N/A | `AfterTool` | N/A | N/A | N/A |
-| 設定 | `settings.json` | `opencode.json(c)` | `settings.json` | TOML | Instructions | Config |
+| 側面 | Claude Code | OpenCode | Gemini | Kilo | Codex | Copilot | Antigravity |
+|------|------------|----------|--------|-------|-------|---------|-------------|
+| コマンド | スラッシュコマンド | スラッシュコマンド | スラッシュコマンド | スラッシュコマンド | スキル（TOML） | スラッシュコマンド | スキル |
+| エージェント形式 | Claude ネイティブ | `mode: subagent` | Claude ネイティブ | `mode: subagent` | スキル | ツールマッピング | スキル |
+| フックイベント | `PostToolUse` | N/A | `AfterTool` | N/A | N/A | N/A | N/A |
+| 設定 | `settings.json` | `opencode.json(c)` | `settings.json` | `kilo.json(c)` | TOML | Instructions | Config |
 
 ---
 

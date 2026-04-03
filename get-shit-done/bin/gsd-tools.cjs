@@ -235,7 +235,7 @@ async function main() {
   }
 
   // Optional workstream override for parallel milestone work.
-  // Priority: --ws flag > GSD_WORKSTREAM env var > active-workstream file > null (flat mode)
+  // Priority: --ws flag > GSD_WORKSTREAM env var > session-scoped pointer > shared legacy pointer > null
   const wsEqArg = args.find(arg => arg.startsWith('--ws='));
   const wsIdx = args.indexOf('--ws');
   let ws = null;
@@ -583,8 +583,10 @@ async function runCommand(command, args, cwd, raw) {
           includeArchived: args.includes('--include-archived'),
         };
         phase.cmdPhasesList(cwd, options, raw);
+      } else if (subcommand === 'clear') {
+        milestone.cmdPhasesClear(cwd, raw);
       } else {
-        error('Unknown phases subcommand. Available: list');
+        error('Unknown phases subcommand. Available: list, clear');
       }
       break;
     }
