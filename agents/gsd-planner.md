@@ -1216,13 +1216,26 @@ for each plan in plan_order:
   else:
     plan.wave = max(waves[dep] for dep in plan.depends_on) + 1
   waves[plan.id] = plan.wave
+
+# Implicit dependency: files_modified overlap forces a later wave.
+for each plan B in plan_order:
+  for each earlier plan A where A != B:
+    if any file in B.files_modified is also in A.files_modified:
+      B.wave = max(B.wave, A.wave + 1)
+      waves[B.id] = B.wave
 ```
+
+**Rule:** Any two plans in the same wave MUST have zero `files_modified` overlap — even if
+no explicit `depends_on` was set. After computing all wave numbers, verify every wave group:
+collect the union of `files_modified` per wave; if any file appears in two or more plans
+within the same wave, bump the later plan to the next wave and repeat until clean.
+Log each bump: `"Plan {B} moved to wave {N+1}: files_modified overlap with Plan {A} on {file}"`
 </step>
 
 <step name="group_into_plans">
 Rules:
 1. Same-wave tasks with no file conflicts → parallel plans
-2. Shared files → same plan or sequential plans
+2. Shared files → same plan or sequential plans (shared file = implicit dependency → later wave)
 3. Checkpoint tasks → `autonomous: false`
 4. Each plan: 2-3 tasks, single concern, ~50% context target
 </step>

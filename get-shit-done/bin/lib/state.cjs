@@ -704,8 +704,14 @@ function buildStateFrontmatter(bodyContent, cwd) {
     } catch { /* intentionally empty */ }
   }
 
+  // Derive percent from disk counts when available (ground truth).
+  // Only falls back to the body Progress: field when no plan files exist on disk
+  // (phases directory empty or absent), which means disk has no authoritative data.
+  // This prevents a stale body "0%" from overriding the real 100% completion state.
   let progressPercent = null;
-  if (progressRaw) {
+  if (totalPlans !== null && totalPlans > 0 && completedPlans !== null) {
+    progressPercent = Math.min(100, Math.round(completedPlans / totalPlans * 100));
+  } else if (progressRaw) {
     const pctMatch = progressRaw.match(/(\d+)%/);
     if (pctMatch) progressPercent = parseInt(pctMatch[1], 10);
   }
@@ -871,16 +877,27 @@ function cmdStateJson(cwd, raw) {
   }
 
   const content = fs.readFileSync(statePath, 'utf-8');
-  const fm = extractFrontmatter(content);
+  const existingFm = extractFrontmatter(content);
+  const body = stripFrontmatter(content);
 
-  if (!fm || Object.keys(fm).length === 0) {
-    const body = stripFrontmatter(content);
-    const built = buildStateFrontmatter(body, cwd);
-    output(built, raw, JSON.stringify(built, null, 2));
-    return;
+  // Always rebuild from body + disk so progress counters reflect current state.
+  // Returning cached frontmatter directly causes stale percent/completed_plans
+  // when SUMMARY files were added after the last STATE.md write (#1589).
+  const built = buildStateFrontmatter(body, cwd);
+
+  // Preserve frontmatter-only fields that cannot be recovered from the body.
+  if (existingFm && existingFm.stopped_at && !built.stopped_at) {
+    built.stopped_at = existingFm.stopped_at;
+  }
+  if (existingFm && existingFm.paused_at && !built.paused_at) {
+    built.paused_at = existingFm.paused_at;
+  }
+  // Preserve existing status when body-derived status is 'unknown' (same logic as syncStateFrontmatter).
+  if (built.status === 'unknown' && existingFm && existingFm.status && existingFm.status !== 'unknown') {
+    built.status = existingFm.status;
   }
 
-  output(fm, raw, JSON.stringify(fm, null, 2));
+  output(built, raw, JSON.stringify(built, null, 2));
 }
 
 /**

@@ -743,12 +743,13 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
       );
 
       // Mark completed plan checkboxes (safety net for missed per-plan updates)
+      // Handles both plain IDs ("- [ ] 01-01-PLAN.md") and bold-wrapped IDs ("- [ ] **01-01**")
       for (const summaryFile of phaseInfo.summaries) {
         const planId = summaryFile.replace('-SUMMARY.md', '').replace('SUMMARY.md', '');
         if (!planId) continue;
         const planEscaped = escapeRegex(planId);
         const planCheckboxPattern = new RegExp(
-          `(-\\s*\\[) (\\]\\s*${planEscaped})`,
+          `(-\\s*\\[) (\\]\\s*(?:\\*\\*)?${planEscaped}(?:\\*\\*)?)`,
           'i'
         );
         roadmapContent = roadmapContent.replace(planCheckboxPattern, '$1x$2');

@@ -7,7 +7,7 @@
 ## 명령어 문법
 
 - **Claude Code / Gemini / Copilot:** `/gsd:command-name [args]`
-- **OpenCode:** `/gsd-command-name [args]`
+- **OpenCode / Kilo:** `/gsd-command-name [args]`
 - **Codex:** `$gsd-command-name [args]`
 
 ---

@@ -23,7 +23,14 @@ INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init manager)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
-Parse JSON for: `milestone_version`, `milestone_name`, `phase_count`, `completed_count`, `in_progress_count`, `phases`, `recommended_actions`, `all_complete`, `waiting_signal`.
+Parse JSON for: `milestone_version`, `milestone_name`, `phase_count`, `completed_count`, `in_progress_count`, `phases`, `recommended_actions`, `all_complete`, `waiting_signal`, `manager_flags`.
+
+`manager_flags` contains per-step passthrough flags from config:
+- `manager_flags.discuss` — appended to `/gsd:discuss-phase` args (e.g. `"--auto --analyze"`)
+- `manager_flags.plan` — appended to plan agent init command
+- `manager_flags.execute` — appended to execute agent init command
+
+These are empty strings by default. Set via: `gsd-tools config-set manager.flags.discuss "--auto --analyze"`
 
 **If error:** Display the error message and exit.
 
@@ -193,24 +200,24 @@ When the user selects a compound option:
 2. **Then run the inline discuss:**
 
 ```
-Skill(skill="gsd:discuss-phase", args="{PHASE_NUM}")
+Skill(skill="gsd:discuss-phase", args="{PHASE_NUM} {manager_flags.discuss}")
 ```
 
 After discuss completes, loop back to dashboard step (background agents continue running).
 
 ### Discuss Phase N
 
-Discussion is interactive — needs user input. Run inline:
+Discussion is interactive — needs user input. Run inline with any configured flags:
 
 ```
-Skill(skill="gsd:discuss-phase", args="{PHASE_NUM}")
+Skill(skill="gsd:discuss-phase", args="{PHASE_NUM} {manager_flags.discuss}")
 ```
 
 After discuss completes, loop back to dashboard step.
 
 ### Plan Phase N
 
-Planning runs autonomously. Spawn a background agent that delegates to the Skill pipeline:
+Planning runs autonomously. Spawn a background agent that delegates to the Skill pipeline with any configured flags:
 
 ```
 Task(
@@ -221,9 +228,10 @@ Task(
 Working directory: {cwd}
 Phase: {N} — {phase_name}
 Goal: {goal}
+Manager flags: {manager_flags.plan}
 
-Run the plan-phase Skill:
-Skill(skill=\"gsd:plan-phase\", args=\"{N} --auto\")
+Run the plan-phase Skill with any configured manager flags:
+Skill(skill=\"gsd:plan-phase\", args=\"{N} --auto {manager_flags.plan}\")
 
 This delegates to the full plan-phase pipeline including local patches, research, plan-checker, and all quality gates.
 
@@ -241,7 +249,7 @@ Loop back to dashboard step.
 
 ### Execute Phase N
 
-Execution runs autonomously. Spawn a background agent that delegates to the Skill pipeline:
+Execution runs autonomously. Spawn a background agent that delegates to the Skill pipeline with any configured flags:
 
 ```
 Task(
@@ -252,9 +260,10 @@ Task(
 Working directory: {cwd}
 Phase: {N} — {phase_name}
 Goal: {goal}
+Manager flags: {manager_flags.execute}
 
-Run the execute-phase Skill:
-Skill(skill=\"gsd:execute-phase\", args=\"{N}\")
+Run the execute-phase Skill with any configured manager flags:
+Skill(skill=\"gsd:execute-phase\", args=\"{N} {manager_flags.execute}\")
 
 This delegates to the full execute-phase pipeline including local patches, branching, wave-based execution, verification, and all quality gates.
 

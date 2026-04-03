@@ -8,11 +8,11 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { homedir } from 'node:os';
 
-import { GSDTools } from './gsd-tools.js';
+import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
 import { PhaseRunner } from './phase-runner.js';
 import type { PhaseRunnerDeps } from './phase-runner.js';
 import { ContextEngine } from './context-engine.js';
@@ -24,7 +24,8 @@ import { GSDEventType, PhaseStepType } from './types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const GSD_TOOLS_PATH = join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+const GSD_TOOLS_PATH = resolveGsdToolsPath(process.cwd());
+const gsdToolsAvailable = existsSync(GSD_TOOLS_PATH);
 
 async function createTempPlanningDir(): Promise<string> {
   const tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-phase-int-'));
@@ -65,7 +66,7 @@ async function createTempPlanningDir(): Promise<string> {
 
 // ─── Test suite ──────────────────────────────────────────────────────────────
 
-describe('Integration: PhaseRunner against real gsd-tools.cjs', () => {
+describe.skipIf(!gsdToolsAvailable)('Integration: PhaseRunner against real gsd-tools.cjs', () => {
   let tmpDir: string;
   let tools: GSDTools;
 
@@ -303,7 +304,7 @@ must_haves:
   return tmpDir;
 }
 
-describe('Integration: phasePlanIndex and wave execution', () => {
+describe.skipIf(!gsdToolsAvailable)('Integration: phasePlanIndex and wave execution', () => {
   let tmpDir: string;
   let tools: GSDTools;
 

@@ -39,11 +39,11 @@ Model profiles control which Claude model each GSD agent uses. This allows balan
 
 **inherit** - Follow the current session model
 - All agents resolve to `inherit`
-- Best when you switch models interactively (for example OpenCode `/model`)
+- Best when you switch models interactively (for example OpenCode or Kilo `/model`)
 - **Required when using non-Anthropic providers** (OpenRouter, local models, etc.) — otherwise GSD may call Anthropic models directly, incurring unexpected costs
 - Use when: you want GSD to follow your currently selected runtime model
 
-## Using Non-Claude Runtimes (Codex, OpenCode, Gemini CLI)
+## Using Non-Claude Runtimes (Codex, OpenCode, Gemini CLI, Kilo)
 
 When installed for a non-Claude runtime, the GSD installer sets `resolve_model_ids: "omit"` in `~/.gsd/defaults.json`. This returns an empty model parameter for all agents, so each agent uses the runtime's default model. No manual setup is needed.
 

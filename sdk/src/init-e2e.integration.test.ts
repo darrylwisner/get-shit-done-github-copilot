@@ -13,13 +13,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'node:child_process';
 import { mkdtemp, rm, readFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { homedir } from 'node:os';
 
 import { InitRunner } from './init-runner.js';
-import { GSDTools } from './gsd-tools.js';
+import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
 import { GSDEventStream } from './event-stream.js';
 import { GSDEventType } from './types.js';
 import type { GSDEvent } from './types.js';
@@ -36,11 +36,12 @@ try {
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const sdkPromptsDir = join(__dirname, '..', 'prompts');
-const GSD_TOOLS_PATH = join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+const GSD_TOOLS_PATH = resolveGsdToolsPath(process.cwd());
+const gsdToolsAvailable = existsSync(GSD_TOOLS_PATH);
 
 // ─── Test suite ──────────────────────────────────────────────────────────────
 
-describe.skipIf(!cliAvailable)('E2E: InitRunner.run() full workflow', () => {
+describe.skipIf(!cliAvailable || !gsdToolsAvailable)('E2E: InitRunner.run() full workflow', () => {
   let tmpDir: string;
   let events: GSDEvent[];
 

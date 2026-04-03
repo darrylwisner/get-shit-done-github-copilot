@@ -4,7 +4,7 @@
 
 [English](README.md) · [Português](README.pt-BR.md) · **简体中文** · [日本語](README.ja-JP.md)
 
-**一个轻量但强大的元提示、上下文工程与规格驱动开发系统，适用于 Claude Code、OpenCode、Gemini CLI、Codex、Copilot、Cursor 和 Antigravity。**
+**一个轻量但强大的元提示、上下文工程与规格驱动开发系统，适用于 Claude Code、OpenCode、Gemini CLI、Kilo、Codex、Copilot、Cursor 和 Antigravity。**
 
 **它解决的是 context rot：随着 Claude 的上下文窗口被填满，输出质量逐步劣化的问题。**
 
@@ -82,12 +82,13 @@ npx get-shit-done-cc@latest
 ```
 
 安装器会提示你选择：
-1. **运行时**：Claude Code、OpenCode、Gemini、Codex、Copilot、Cursor、Antigravity，或全部
+1. **运行时**：Claude Code、OpenCode、Gemini、Kilo、Codex、Copilot、Cursor、Antigravity，或全部
 2. **安装位置**：全局（所有项目）或本地（仅当前项目）
 
 安装后可这样验证：
 - Claude Code / Gemini：`/gsd:help`
 - OpenCode：`/gsd-help`
+- Kilo：`/gsd-help`
 - Codex：`$gsd-help`
 - Copilot：`/gsd:help`
 - Antigravity：`/gsd:help`
@@ -117,6 +118,10 @@ npx get-shit-done-cc --opencode --global # 安装到 ~/.config/opencode/
 # Gemini CLI
 npx get-shit-done-cc --gemini --global   # 安装到 ~/.gemini/
 
+# Kilo（OpenCode 分支）
+npx get-shit-done-cc --kilo --global     # 安装到 ~/.config/kilo/
+npx get-shit-done-cc --kilo --local      # 安装到 ./.kilo/
+
 # Codex（以 skills 为主）
 npx get-shit-done-cc --codex --global    # 安装到 ~/.codex/
 npx get-shit-done-cc --codex --local     # 安装到 ./.codex/
@@ -138,7 +143,7 @@ npx get-shit-done-cc --all --global      # 安装到所有目录
 ```
 
 使用 `--global`（`-g`）或 `--local`（`-l`）可以跳过安装位置提示。
-使用 `--claude`、`--opencode`、`--gemini`、`--codex`、`--copilot`、`--cursor`、`--antigravity` 或 `--all` 可以跳过运行时提示。
+使用 `--claude`、`--opencode`、`--gemini`、`--kilo`、`--codex`、`--copilot`、`--cursor`、`--antigravity` 或 `--all` 可以跳过运行时提示。
 
 </details>
 
@@ -743,6 +748,7 @@ CLAUDE_CONFIG_DIR=/home/youruser/.claude npx get-shit-done-cc --global
 npx get-shit-done-cc --claude --global --uninstall
 npx get-shit-done-cc --opencode --global --uninstall
 npx get-shit-done-cc --gemini --global --uninstall
+npx get-shit-done-cc --kilo --global --uninstall
 npx get-shit-done-cc --codex --global --uninstall
 npx get-shit-done-cc --copilot --global --uninstall
 npx get-shit-done-cc --cursor --global --uninstall
@@ -752,6 +758,7 @@ npx get-shit-done-cc --antigravity --global --uninstall
 npx get-shit-done-cc --claude --local --uninstall
 npx get-shit-done-cc --opencode --local --uninstall
 npx get-shit-done-cc --gemini --local --uninstall
+npx get-shit-done-cc --kilo --local --uninstall
 npx get-shit-done-cc --codex --local --uninstall
 npx get-shit-done-cc --copilot --local --uninstall
 npx get-shit-done-cc --cursor --local --uninstall
@@ -764,7 +771,7 @@ npx get-shit-done-cc --antigravity --local --uninstall
 
 ## 社区移植版本
 
-OpenCode、Gemini CLI 和 Codex 现在都已经通过 `npx get-shit-done-cc` 获得原生支持。
+OpenCode、Gemini CLI、Kilo 和 Codex 现在都已经通过 `npx get-shit-done-cc` 获得原生支持。
 
 这些社区移植版本曾率先探索多运行时支持：
 

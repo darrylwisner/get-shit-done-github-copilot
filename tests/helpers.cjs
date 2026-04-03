@@ -7,6 +7,22 @@ const fs = require('fs');
 const path = require('path');
 
 const TOOLS_PATH = path.join(__dirname, '..', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+const TEST_ENV_BASE = {
+  GSD_SESSION_KEY: '',
+  CODEX_THREAD_ID: '',
+  CLAUDE_SESSION_ID: '',
+  CLAUDE_CODE_SSE_PORT: '',
+  OPENCODE_SESSION_ID: '',
+  GEMINI_SESSION_ID: '',
+  CURSOR_SESSION_ID: '',
+  WINDSURF_SESSION_ID: '',
+  TERM_SESSION_ID: '',
+  WT_SESSION: '',
+  TMUX_PANE: '',
+  ZELLIJ_SESSION_NAME: '',
+  TTY: '',
+  SSH_TTY: '',
+};
 
 /**
  * Run gsd-tools command.
@@ -21,7 +37,7 @@ const TOOLS_PATH = path.join(__dirname, '..', 'get-shit-done', 'bin', 'gsd-tools
 function runGsdTools(args, cwd = process.cwd(), env = {}) {
   try {
     let result;
-    const childEnv = { ...process.env, ...env };
+    const childEnv = { ...process.env, ...TEST_ENV_BASE, ...env };
     if (Array.isArray(args)) {
       result = execFileSync(process.execPath, [TOOLS_PATH, ...args], {
         cwd,

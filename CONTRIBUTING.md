@@ -16,9 +16,12 @@ npm test
 
 ## Pull Request Guidelines
 
+**Every PR must link to an open issue.** PRs without a linked issue are closed without review, no exceptions. If no issue exists for your change, open one first.
+
+- **Open an issue first** — describe the bug or feature before writing code. This lets maintainers confirm the direction before you invest time.
+- **Link with a closing keyword** — use `Closes #123`, `Fixes #123`, or `Resolves #123` in the PR body. The CI check will fail and the PR will be auto-closed if no valid issue reference is found.
 - **One concern per PR** — bug fixes, features, and refactors should be separate PRs
 - **No drive-by formatting** — don't reformat code unrelated to your change
-- **Link issues** — use `Fixes #123` or `Closes #123` in PR body for auto-close
 - **CI must pass** — all matrix jobs (Ubuntu, macOS, Windows × Node 22, 24) must be green
 
 ## Testing Standards

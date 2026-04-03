@@ -2,7 +2,7 @@
 
 # GET SHIT DONE
 
-**一个轻量级且强大的元提示、上下文工程和规格驱动开发系统，支持 Claude Code、OpenCode、Gemini CLI、Codex、Copilot、Cursor、Windsurf、Antigravity 和 Augment。**
+**一个轻量级且强大的元提示、上下文工程和规格驱动开发系统，支持 Claude Code、OpenCode、Gemini CLI、Kilo、Codex、Copilot、Cursor、Windsurf、Antigravity 和 Augment。**
 
 **解决上下文衰减 —— 即 Claude 填充上下文窗口时发生的质量退化问题。**
 
@@ -80,12 +80,13 @@ npx get-shit-done-cc@latest
 ```
 
 安装程序会提示你选择：
-1. **运行时** —— Claude Code、OpenCode、Gemini、Codex 或全部
+1. **运行时** —— Claude Code、OpenCode、Gemini、Kilo、Codex 或全部
 2. **位置** —— 全局（所有项目）或本地（仅当前项目）
 
 验证安装：
 - Claude Code / Gemini: `/gsd:help`
 - OpenCode: `/gsd-help`
+- Kilo: `/gsd-help`
 - Codex: `$gsd-help`
 
 > [!NOTE]
@@ -113,6 +114,10 @@ npx get-shit-done-cc --opencode --global # 安装到 ~/.config/opencode/
 # Gemini CLI
 npx get-shit-done-cc --gemini --global   # 安装到 ~/.gemini/
 
+# Kilo（OpenCode 分支）
+npx get-shit-done-cc --kilo --global     # 安装到 ~/.config/kilo/
+npx get-shit-done-cc --kilo --local      # 安装到 ./.kilo/
+
 # Codex（技能优先）
 npx get-shit-done-cc --codex --global    # 安装到 ~/.codex/
 npx get-shit-done-cc --codex --local     # 安装到 ./.codex/
@@ -122,7 +127,7 @@ npx get-shit-done-cc --all --global      # 安装到所有目录
 ```
 
 使用 `--global`（`-g`）或 `--local`（`-l`）跳过位置提示。
-使用 `--claude`、`--opencode`、`--gemini`、`--codex` 或 `--all` 跳过运行时提示。
+使用 `--claude`、`--opencode`、`--gemini`、`--kilo`、`--codex` 或 `--all` 跳过运行时提示。
 
 </details>
 
@@ -657,11 +662,13 @@ CLAUDE_CONFIG_DIR=/home/youruser/.claude npx get-shit-done-cc --global
 # 全局安装
 npx get-shit-done-cc --claude --global --uninstall
 npx get-shit-done-cc --opencode --global --uninstall
+npx get-shit-done-cc --kilo --global --uninstall
 npx get-shit-done-cc --codex --global --uninstall
 
 # 本地安装（当前项目）
 npx get-shit-done-cc --claude --local --uninstall
 npx get-shit-done-cc --opencode --local --uninstall
+npx get-shit-done-cc --kilo --local --uninstall
 npx get-shit-done-cc --codex --local --uninstall
 ```
 
@@ -671,7 +678,7 @@ npx get-shit-done-cc --codex --local --uninstall
 
 ## 社区移植
 
-OpenCode、Gemini CLI 和 Codex 现在通过 `npx get-shit-done-cc` 原生支持。
+OpenCode、Gemini CLI、Kilo 和 Codex 现在通过 `npx get-shit-done-cc` 原生支持。
 
 这些社区移植开创了多运行时支持：
 

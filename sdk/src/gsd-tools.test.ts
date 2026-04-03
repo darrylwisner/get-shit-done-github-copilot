@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GSDTools, GSDToolsError, resolveGsdToolsPath } from './gsd-tools.js';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+const BUNDLED_GSD_TOOLS_PATH = fileURLToPath(
+  new URL('../../get-shit-done/bin/gsd-tools.cjs', import.meta.url),
+);
 
 describe('GSDTools', () => {
   let tmpDir: string;
@@ -330,11 +336,13 @@ describe('GSDTools', () => {
       expect(result).toBe(join(localBinDir, 'gsd-tools.cjs'));
     });
 
-    it('falls back to global path when repo-local does not exist', () => {
+    it('falls back to bundled repo path when repo-local does not exist', () => {
       const result = resolveGsdToolsPath(tmpDir);
-      expect(result).toBe(
-        join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs'),
-      );
+      const expected = existsSync(BUNDLED_GSD_TOOLS_PATH)
+        ? BUNDLED_GSD_TOOLS_PATH
+        : join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+
+      expect(result).toBe(expected);
     });
 
     it('constructor uses repo-local path when available', async () => {

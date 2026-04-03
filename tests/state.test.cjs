@@ -1607,5 +1607,138 @@ Progress: [..........] 0%
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Bug #1589 — progress counters not updated during plan execution
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('progress counters correct after plan execution (#1589)', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('percent in frontmatter is derived from disk counts, not stale Progress body field', () => {
+    // STATE.md body still says 0% (update-progress was never called or was skipped),
+    // but all 4 plans across 2 phases have SUMMARY.md files on disk.
+    // After any STATE.md write, the frontmatter percent must reflect disk reality.
+    const phase01Dir = path.join(tmpDir, '.planning', 'phases', '01-foundation');
+    const phase02Dir = path.join(tmpDir, '.planning', 'phases', '02-api');
+    fs.mkdirSync(phase01Dir, { recursive: true });
+    fs.mkdirSync(phase02Dir, { recursive: true });
+
+    // Phase 01: 2 plans, 2 summaries (complete)
+    fs.writeFileSync(path.join(phase01Dir, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase01Dir, '01-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phase01Dir, '01-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase01Dir, '01-02-SUMMARY.md'), '# Summary\n');
+
+    // Phase 02: 2 plans, 2 summaries (complete)
+    fs.writeFileSync(path.join(phase02Dir, '02-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase02Dir, '02-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phase02Dir, '02-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase02Dir, '02-02-SUMMARY.md'), '# Summary\n');
+
+    // Body Progress: still says 0% (stale — never updated by update-progress)
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      '# Project State\n\n**Current Phase:** 02\n**Status:** Phase complete — ready for verification\n**Progress:** [░░░░░░░░░░] 0%\n'
+    );
+
+    // Trigger a STATE.md write (e.g. state update Status)
+    const result = runGsdTools('state update Status "Milestone complete"', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    // Read the frontmatter — percent must be derived from disk (4/4 = 100%), not from body "0%"
+    const jsonResult = runGsdTools('state json', tmpDir);
+    assert.ok(jsonResult.success, `state json failed: ${jsonResult.error}`);
+    const output = JSON.parse(jsonResult.output);
+
+    assert.ok(output.progress, 'frontmatter must have progress object');
+    assert.strictEqual(Number(output.progress.total_plans), 4, 'total_plans must be 4 from disk');
+    assert.strictEqual(Number(output.progress.completed_plans), 4, 'completed_plans must be 4 from disk');
+    assert.strictEqual(Number(output.progress.total_phases), 2, 'total_phases must be 2 from disk');
+    assert.strictEqual(Number(output.progress.completed_phases), 2, 'completed_phases must be 2 from disk');
+    assert.strictEqual(Number(output.progress.percent), 100, 'percent must be 100 (derived from disk counts, not stale body 0%)');
+  });
+
+  test('percent is 0 when no summaries exist even if Progress body says 100%', () => {
+    // Inverse: body says 100% but disk has no summaries.
+    // Frontmatter percent must come from disk, not body.
+    const phase01Dir = path.join(tmpDir, '.planning', 'phases', '01-foundation');
+    fs.mkdirSync(phase01Dir, { recursive: true });
+    fs.writeFileSync(path.join(phase01Dir, '01-01-PLAN.md'), '# Plan\n');
+    // No summary files
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      '# Project State\n\n**Current Phase:** 01\n**Status:** In progress\n**Progress:** [██████████] 100%\n'
+    );
+
+    const result = runGsdTools('state update Status "Executing"', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const jsonResult = runGsdTools('state json', tmpDir);
+    assert.ok(jsonResult.success, `state json failed: ${jsonResult.error}`);
+    const output = JSON.parse(jsonResult.output);
+
+    assert.ok(output.progress, 'frontmatter must have progress object');
+    assert.strictEqual(Number(output.progress.total_plans), 1, 'total_plans must be 1 from disk');
+    assert.strictEqual(Number(output.progress.completed_plans), 0, 'completed_plans must be 0 (no summaries)');
+    assert.strictEqual(Number(output.progress.percent), 0, 'percent must be 0 (derived from disk, not stale body 100%)');
+  });
+
+  test('state json rebuilds stale frontmatter progress from disk after all plans complete', () => {
+    // Reproduces the exact scenario from #1589:
+    // Frontmatter was written early with stale counters.
+    // All summaries now exist on disk.
+    // state json must return fresh disk-derived progress.
+    const phase01Dir = path.join(tmpDir, '.planning', 'phases', '01-phase');
+    const phase02Dir = path.join(tmpDir, '.planning', 'phases', '02-phase');
+    const phase03Dir = path.join(tmpDir, '.planning', 'phases', '03-phase');
+    const phase04Dir = path.join(tmpDir, '.planning', 'phases', '04-phase');
+    fs.mkdirSync(phase01Dir, { recursive: true });
+    fs.mkdirSync(phase02Dir, { recursive: true });
+    fs.mkdirSync(phase03Dir, { recursive: true });
+    fs.mkdirSync(phase04Dir, { recursive: true });
+
+    // 4 phases, 6 total plans (as in the bug report)
+    fs.writeFileSync(path.join(phase01Dir, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase01Dir, '01-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phase02Dir, '02-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase02Dir, '02-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phase02Dir, '02-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase02Dir, '02-02-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phase03Dir, '03-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase03Dir, '03-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phase04Dir, '04-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase04Dir, '04-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phase04Dir, '04-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase04Dir, '04-02-SUMMARY.md'), '# Summary\n');
+
+    // Write STATE.md with stale frontmatter matching the bug report exactly
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `---\ngsd_state_version: '1.0'\nstatus: executing\nprogress:\n  total_phases: 4\n  completed_phases: 0\n  total_plans: 0\n  completed_plans: 4\n  percent: 0\n---\n\n# Project State\n\n**Current Phase:** 04\n**Status:** Ready to execute\n**Progress:** [░░░░░░░░░░] 0%\n`
+    );
+
+    // state json must return fresh progress derived from disk (all 6 plans complete across 4 phases)
+    const jsonResult = runGsdTools('state json', tmpDir);
+    assert.ok(jsonResult.success, `state json failed: ${jsonResult.error}`);
+    const output = JSON.parse(jsonResult.output);
+
+    assert.ok(output.progress, 'frontmatter must have progress object');
+    assert.strictEqual(Number(output.progress.total_plans), 6, 'total_plans must be 6 (not stale 0)');
+    assert.strictEqual(Number(output.progress.completed_plans), 6, 'completed_plans must be 6 (not stale 4)');
+    assert.strictEqual(Number(output.progress.total_phases), 4, 'total_phases must be 4');
+    assert.strictEqual(Number(output.progress.completed_phases), 4, 'completed_phases must be 4 (not stale 0)');
+    assert.strictEqual(Number(output.progress.percent), 100, 'percent must be 100 (not stale 0)');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // summary-extract command
 // ─────────────────────────────────────────────────────────────────────────────

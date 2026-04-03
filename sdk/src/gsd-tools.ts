@@ -10,6 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import type { InitNewProjectInfo, PhaseOpInfo, PhasePlanIndex, RoadmapAnalysis } from './types.js';
 
 // ─── Error type ──────────────────────────────────────────────────────────────
@@ -30,6 +31,9 @@ export class GSDToolsError extends Error {
 // ─── GSDTools class ──────────────────────────────────────────────────────────
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const BUNDLED_GSD_TOOLS_PATH = fileURLToPath(
+  new URL('../../get-shit-done/bin/gsd-tools.cjs', import.meta.url),
+);
 
 export class GSDTools {
   private readonly projectDir: string;
@@ -58,7 +62,7 @@ export class GSDTools {
 
     return new Promise<unknown>((resolve, reject) => {
       const child = execFile(
-        'node',
+        process.execPath,
         fullArgs,
         {
           cwd: this.projectDir,
@@ -160,7 +164,7 @@ export class GSDTools {
 
     return new Promise<string>((resolve, reject) => {
       const child = execFile(
-        'node',
+        process.execPath,
         fullArgs,
         {
           cwd: this.projectDir,
@@ -285,11 +289,15 @@ export class GSDTools {
 // ─── Path resolution ────────────────────────────────────────────────────────
 
 /**
- * Resolve gsd-tools.cjs path with repo-local fallback.
- * Probe order: repo-local → global home directory.
+ * Resolve gsd-tools.cjs path with bundled-repo fallback.
+ * Probe order: project-local → repo-bundled → global home directory.
  */
 export function resolveGsdToolsPath(projectDir: string): string {
-  const localPath = join(projectDir, '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
-  if (existsSync(localPath)) return localPath;
-  return join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+  const candidates = [
+    join(projectDir, '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs'),
+    BUNDLED_GSD_TOOLS_PATH,
+    join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs'),
+  ];
+
+  return candidates.find(candidate => existsSync(candidate)) ?? candidates[candidates.length - 1]!;
 }

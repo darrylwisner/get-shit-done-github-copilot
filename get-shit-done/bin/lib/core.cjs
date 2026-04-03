@@ -3,9 +3,29 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { execSync, execFileSync, spawnSync } = require('child_process');
 const { MODEL_PROFILES } = require('./model-profiles.cjs');
+
+const WORKSTREAM_SESSION_ENV_KEYS = [
+  'GSD_SESSION_KEY',
+  'CODEX_THREAD_ID',
+  'CLAUDE_SESSION_ID',
+  'CLAUDE_CODE_SSE_PORT',
+  'OPENCODE_SESSION_ID',
+  'GEMINI_SESSION_ID',
+  'CURSOR_SESSION_ID',
+  'WINDSURF_SESSION_ID',
+  'TERM_SESSION_ID',
+  'WT_SESSION',
+  'TMUX_PANE',
+  'ZELLIJ_SESSION_NAME',
+];
+
+let cachedControllingTtyToken = null;
+let didProbeControllingTtyToken = false;
 
 // ─── Path helpers ────────────────────────────────────────────────────────────
 
@@ -314,6 +334,7 @@ function loadConfig(cwd) {
       subagent_timeout: get('subagent_timeout', { section: 'workflow', field: 'subagent_timeout' }) ?? defaults.subagent_timeout,
       model_overrides: parsed.model_overrides || null,
       agent_skills: parsed.agent_skills || {},
+      manager: parsed.manager || {},
     };
   } catch {
     return defaults;
@@ -612,17 +633,128 @@ function planningPaths(cwd, ws) {
 
 // ─── Active Workstream Detection ─────────────────────────────────────────────
 
+function sanitizeWorkstreamSessionToken(value) {
+  if (value === null || value === undefined) return null;
+  const token = String(value).trim().replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return token ? token.slice(0, 160) : null;
+}
+
+function probeControllingTtyToken() {
+  if (didProbeControllingTtyToken) return cachedControllingTtyToken;
+  didProbeControllingTtyToken = true;
+
+  // `tty` reads stdin. When stdin is already non-interactive, spawning it only
+  // adds avoidable failures on the routing hot path and cannot reveal a stable token.
+  if (!(process.stdin && process.stdin.isTTY)) {
+    return cachedControllingTtyToken;
+  }
+
+  try {
+    const ttyPath = execFileSync('tty', [], {
+      encoding: 'utf-8',
+      stdio: ['inherit', 'pipe', 'ignore'],
+    }).trim();
+    if (ttyPath && ttyPath !== 'not a tty') {
+      const token = sanitizeWorkstreamSessionToken(ttyPath.replace(/^\/dev\//, ''));
+      if (token) cachedControllingTtyToken = `tty-${token}`;
+    }
+  } catch {}
+
+  return cachedControllingTtyToken;
+}
+
+function getControllingTtyToken() {
+  for (const envKey of ['TTY', 'SSH_TTY']) {
+    const token = sanitizeWorkstreamSessionToken(process.env[envKey]);
+    if (token) return `tty-${token.replace(/^dev_/, '')}`;
+  }
+
+  return probeControllingTtyToken();
+}
+
 /**
- * Get the active workstream name from .planning/active-workstream file.
- * Returns null if no active workstream or file doesn't exist.
+ * Resolve a deterministic session key for workstream-local routing.
+ *
+ * Order:
+ * 1. Explicit runtime/session env vars (`GSD_SESSION_KEY`, `CODEX_THREAD_ID`, etc.)
+ * 2. Terminal identity exposed via `TTY` or `SSH_TTY`
+ * 3. One best-effort `tty` probe when stdin is interactive
+ * 4. `null`, which tells callers to use the legacy shared pointer fallback
  */
-function getActiveWorkstream(cwd) {
-  const filePath = path.join(planningRoot(cwd), 'active-workstream');
+function getWorkstreamSessionKey() {
+  for (const envKey of WORKSTREAM_SESSION_ENV_KEYS) {
+    const raw = process.env[envKey];
+    const token = sanitizeWorkstreamSessionToken(raw);
+    if (token) return `${envKey.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${token}`;
+  }
+
+  return getControllingTtyToken();
+}
+
+function getSessionScopedWorkstreamFile(cwd) {
+  const sessionKey = getWorkstreamSessionKey();
+  if (!sessionKey) return null;
+
+  // Use realpathSync.native so the hash is derived from the canonical filesystem
+  // path. On Windows, path.resolve returns whatever case the caller supplied,
+  // while realpathSync.native returns the case the OS recorded — they differ on
+  // case-insensitive NTFS, producing different hashes and different tmpdir slots.
+  // Fall back to path.resolve when the directory does not yet exist.
+  let planningAbs;
+  try {
+    planningAbs = fs.realpathSync.native(planningRoot(cwd));
+  } catch {
+    planningAbs = path.resolve(planningRoot(cwd));
+  }
+  const projectId = crypto
+    .createHash('sha1')
+    .update(planningAbs)
+    .digest('hex')
+    .slice(0, 16);
+
+  const dirPath = path.join(os.tmpdir(), 'gsd-workstream-sessions', projectId);
+  return {
+    sessionKey,
+    dirPath,
+    filePath: path.join(dirPath, sessionKey),
+  };
+}
+
+function clearActiveWorkstreamPointer(filePath, cleanupDirPath) {
+  try { fs.unlinkSync(filePath); } catch {}
+
+  // Session-scoped pointers for a repo share one tmp directory. Only remove it
+  // when it is empty so clearing or self-healing one session never deletes siblings.
+  // Explicitly check remaining entries rather than relying on rmdirSync throwing
+  // ENOTEMPTY — that error is not raised reliably on Windows.
+  if (cleanupDirPath) {
+    try {
+      const remaining = fs.readdirSync(cleanupDirPath);
+      if (remaining.length === 0) {
+        fs.rmdirSync(cleanupDirPath);
+      }
+    } catch {}
+  }
+}
+
+/**
+ * Pointer files are self-healing: invalid names or deleted-workstream pointers
+ * are removed on read so the session falls back to `null` instead of carrying
+ * silent stale state forward. Session-scoped callers may also prune an empty
+ * per-project tmp directory; shared `.planning/active-workstream` callers do not.
+ */
+function readActiveWorkstreamPointer(filePath, cwd, cleanupDirPath = null) {
   try {
     const name = fs.readFileSync(filePath, 'utf-8').trim();
-    if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) return null;
+    if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+      clearActiveWorkstreamPointer(filePath, cleanupDirPath);
+      return null;
+    }
     const wsDir = path.join(planningRoot(cwd), 'workstreams', name);
-    if (!fs.existsSync(wsDir)) return null;
+    if (!fs.existsSync(wsDir)) {
+      clearActiveWorkstreamPointer(filePath, cleanupDirPath);
+      return null;
+    }
     return name;
   } catch {
     return null;
@@ -630,16 +762,48 @@ function getActiveWorkstream(cwd) {
 }
 
 /**
+ * Get the active workstream name.
+ *
+ * Resolution priority:
+ * 1. Session-scoped pointer (tmpdir) when the runtime exposes a stable session key
+ * 2. Legacy shared `.planning/active-workstream` file when no session key is available
+ *
+ * The shared file is intentionally ignored when a session key exists so multiple
+ * concurrent sessions do not overwrite each other's active workstream.
+ */
+function getActiveWorkstream(cwd) {
+  const sessionScoped = getSessionScopedWorkstreamFile(cwd);
+  if (sessionScoped) {
+    return readActiveWorkstreamPointer(sessionScoped.filePath, cwd, sessionScoped.dirPath);
+  }
+
+  const sharedFilePath = path.join(planningRoot(cwd), 'active-workstream');
+  return readActiveWorkstreamPointer(sharedFilePath, cwd);
+}
+
+/**
  * Set the active workstream. Pass null to clear.
+ *
+ * When a stable session key is available, this updates a tmpdir-backed
+ * session-scoped pointer. Otherwise it falls back to the legacy shared
+ * `.planning/active-workstream` file for backward compatibility.
  */
 function setActiveWorkstream(cwd, name) {
-  const filePath = path.join(planningRoot(cwd), 'active-workstream');
+  const sessionScoped = getSessionScopedWorkstreamFile(cwd);
+  const filePath = sessionScoped
+    ? sessionScoped.filePath
+    : path.join(planningRoot(cwd), 'active-workstream');
+
   if (!name) {
-    try { fs.unlinkSync(filePath); } catch {}
+    clearActiveWorkstreamPointer(filePath, sessionScoped ? sessionScoped.dirPath : null);
     return;
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
     throw new Error('Invalid workstream name: must be alphanumeric, hyphens, and underscores only');
+  }
+
+  if (sessionScoped) {
+    fs.mkdirSync(sessionScoped.dirPath, { recursive: true });
   }
   fs.writeFileSync(filePath, name + '\n', 'utf-8');
 }
@@ -982,9 +1146,15 @@ function getRoadmapPhaseInternal(cwd, phaseNum) {
  * gsd-tools.cjs lives at <configDir>/get-shit-done/bin/gsd-tools.cjs,
  * so agents/ is at <configDir>/agents/.
  *
+ * GSD_AGENTS_DIR env var overrides the default path. Used in tests and for
+ * installs where the agents directory is not co-located with gsd-tools.cjs.
+ *
  * @returns {string} Absolute path to the agents directory
  */
 function getAgentsDir() {
+  if (process.env.GSD_AGENTS_DIR) {
+    return process.env.GSD_AGENTS_DIR;
+  }
   // __dirname is get-shit-done/bin/lib/ → go up 3 levels to configDir
   return path.join(__dirname, '..', '..', '..', 'agents');
 }
@@ -992,6 +1162,9 @@ function getAgentsDir() {
 /**
  * Check which GSD agents are installed on disk.
  * Returns an object with installation status and details.
+ *
+ * Recognises both standard format (gsd-planner.md) and Copilot format
+ * (gsd-planner.agent.md). Copilot renames agent files during install (#1512).
  *
  * @returns {{ agents_installed: boolean, missing_agents: string[], installed_agents: string[], agents_dir: string }}
  */
@@ -1011,8 +1184,10 @@ function checkAgentsInstalled() {
   }
 
   for (const agent of expectedAgents) {
+    // Check both .md (standard) and .agent.md (Copilot) file formats.
     const agentFile = path.join(agentsDir, `${agent}.md`);
-    if (fs.existsSync(agentFile)) {
+    const agentFileCopilot = path.join(agentsDir, `${agent}.agent.md`);
+    if (fs.existsSync(agentFile) || fs.existsSync(agentFileCopilot)) {
       installed.push(agent);
     } else {
       missing.push(agent);

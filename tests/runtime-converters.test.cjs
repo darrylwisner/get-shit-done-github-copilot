@@ -1,12 +1,12 @@
 /**
- * Runtime Converter Tests — OpenCode + Gemini
+ * Runtime Converter Tests — OpenCode + Kilo + Gemini
  *
  * Tests for small runtime-specific conversion functions from install.js.
  * Larger runtime test suites (Copilot, Codex, Antigravity) have their own files.
  *
- * OpenCode: convertClaudeToOpencodeFrontmatter (agent + command modes)
- *   model: inherit is NOT added (OpenCode doesn't support it — see #1156)
- *   but mode: subagent IS added (required by OpenCode agents).
+ * OpenCode/Kilo: flat-runtime frontmatter converters (agent + command modes)
+ *   model: inherit is NOT added (runtime uses its configured default model)
+ *   but mode: subagent IS added (required by both runtimes' agents).
  * Gemini: convertClaudeToGeminiAgent (frontmatter + tool mapping + body escaping)
  */
 
@@ -16,6 +16,7 @@ const assert = require('node:assert');
 process.env.GSD_TEST_MODE = '1';
 const {
   convertClaudeToOpencodeFrontmatter,
+  convertClaudeToKiloFrontmatter,
   convertClaudeToGeminiAgent,
   neutralizeAgentReferences,
 } = require('../bin/install.js');
@@ -52,100 +53,138 @@ allowed-tools:
 
 Execute the phase plan.`;
 
-describe('OpenCode agent conversion (isAgent: true)', () => {
-  test('keeps name: field for agents', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(frontmatter.includes('name: gsd-executor'), 'name: should be preserved for agents');
-  });
+const flatRuntimeSuites = [
+  {
+    label: 'OpenCode',
+    convert: convertClaudeToOpencodeFrontmatter,
+    configDir: '.config/opencode',
+  },
+  {
+    label: 'Kilo',
+    convert: convertClaudeToKiloFrontmatter,
+    configDir: '.config/kilo',
+  },
+];
 
-  test('does not add model: inherit (OpenCode does not support it)', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(!frontmatter.includes('model: inherit'), 'model: inherit should NOT be added — OpenCode throws ProviderModelNotFoundError');
-  });
+for (const { label, convert, configDir } of flatRuntimeSuites) {
+  describe(`${label} agent conversion (isAgent: true)`, () => {
+    test('keeps name: field for agents', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(frontmatter.includes('name: gsd-executor'), 'name: should be preserved for agents');
+    });
 
-  test('adds mode: subagent', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(frontmatter.includes('mode: subagent'), 'mode: subagent should be added');
-  });
+    test('does not add model: inherit', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(!frontmatter.includes('model: inherit'), 'model: inherit should NOT be added');
+    });
 
-  test('strips tools: field', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(!frontmatter.includes('tools:'), 'tools: should be stripped for agents');
-    assert.ok(!frontmatter.includes('read: true'), 'tools object should not be generated');
-  });
+    test('adds mode: subagent', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(frontmatter.includes('mode: subagent'), 'mode: subagent should be added');
+    });
 
-  test('strips skills: array', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(!frontmatter.includes('skills:'), 'skills: should be stripped');
-    assert.ok(!frontmatter.includes('gsd-executor-workflow'), 'skill entries should be stripped');
-  });
+    test('strips tools: field', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(!frontmatter.includes('tools:'), 'tools: should be stripped for agents');
+      assert.ok(!frontmatter.includes('read: true'), 'tools object should not be generated');
 
-  test('strips color: field', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(!frontmatter.includes('color:'), 'color: should be stripped for agents');
-  });
+      if (label === 'Kilo') {
+        assert.ok(frontmatter.includes('permission:'), 'Kilo agents should emit permission block');
+        assert.ok(frontmatter.includes('read: allow'), 'Read should map to read: allow');
+        assert.ok(frontmatter.includes('edit: allow'), 'Write/Edit should map to edit: allow');
+        assert.ok(frontmatter.includes('bash: allow'), 'Bash should map to bash: allow');
+        assert.ok(frontmatter.includes('grep: allow'), 'Grep should map to grep: allow');
+        assert.ok(frontmatter.includes('glob: allow'), 'Glob should map to glob: allow');
+        assert.ok(frontmatter.includes('task: deny'), 'unspecified permissions should be denied');
+      } else {
+        assert.ok(!frontmatter.includes('permission:'), 'OpenCode agents should not emit permission block');
+      }
+    });
 
-  test('strips commented hooks block', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(!frontmatter.includes('# hooks:'), 'commented hooks should be stripped');
-    assert.ok(!frontmatter.includes('PostToolUse'), 'hook content should be stripped');
-  });
+    test('strips skills: array', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(!frontmatter.includes('skills:'), 'skills: should be stripped');
+      assert.ok(!frontmatter.includes('gsd-executor-workflow'), 'skill entries should be stripped');
+    });
 
-  test('keeps description: field', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    const frontmatter = result.split('---')[1];
-    assert.ok(frontmatter.includes('description: Executes GSD plans'), 'description should be kept');
-  });
+    test('strips color: field', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(!frontmatter.includes('color:'), 'color: should be stripped for agents');
+    });
 
-  test('preserves body content', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_AGENT, { isAgent: true });
-    assert.ok(result.includes('<role>'), 'body should be preserved');
-    assert.ok(result.includes('You are a GSD plan executor.'), 'body content should be intact');
-  });
+    test('strips commented hooks block', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(!frontmatter.includes('# hooks:'), 'commented hooks should be stripped');
+      assert.ok(!frontmatter.includes('PostToolUse'), 'hook content should be stripped');
+    });
 
-  test('applies body text replacements', () => {
-    const agentWithClaudePaths = `---
+    test('keeps description: field', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      const frontmatter = result.split('---')[1];
+      assert.ok(frontmatter.includes('description: Executes GSD plans'), 'description should be kept');
+    });
+
+    test('preserves body content', () => {
+      const result = convert(SAMPLE_AGENT, { isAgent: true });
+      assert.ok(result.includes('<role>'), 'body should be preserved');
+      assert.ok(result.includes('You are a GSD plan executor.'), 'body content should be intact');
+    });
+
+    test('applies body text replacements', () => {
+      const agentWithClaudePaths = `---
 name: test-agent
 description: Test
 tools: Read
 ---
 
 Read ~/.claude/agent-memory/ for context.
-Use $HOME/.claude/skills/ for reference.`;
+Use $HOME/.claude/skills/ for reference.
+Check .claude/skills/ and .claude/agents/ locally.
+Use ./.claude/hooks/gsd-statusline.js during local testing.
+Fallback skills live in .agents/skills/.`;
 
-    const result = convertClaudeToOpencodeFrontmatter(agentWithClaudePaths, { isAgent: true });
-    assert.ok(result.includes('~/.config/opencode/agent-memory/'), '~/.claude should be replaced');
-    assert.ok(result.includes('$HOME/.config/opencode/skills/'), '$HOME/.claude should be replaced');
-  });
-});
+      const result = convert(agentWithClaudePaths, { isAgent: true });
+      assert.ok(result.includes(`~/${configDir}/agent-memory/`), '~/.claude should be replaced');
+      assert.ok(result.includes(`$HOME/${configDir}/skills/`), '$HOME/.claude should be replaced');
 
-describe('OpenCode command conversion (isAgent: false, default)', () => {
-  test('strips name: field for commands', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_COMMAND);
-    const frontmatter = result.split('---')[1];
-    assert.ok(!frontmatter.includes('name:'), 'name: should be stripped for commands');
-  });
-
-  test('does not add model: or mode: for commands', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_COMMAND);
-    const frontmatter = result.split('---')[1];
-    assert.ok(!frontmatter.includes('model:'), 'model: should not be added for commands');
-    assert.ok(!frontmatter.includes('mode:'), 'mode: should not be added for commands');
+      if (label === 'Kilo') {
+        assert.ok(result.includes('.kilo/skills/'), '.claude/skills should be replaced for Kilo');
+        assert.ok(result.includes('.kilo/agents/'), '.claude/agents should be replaced for Kilo');
+        assert.ok(result.includes('./.kilo/hooks/'), './.claude should be replaced for Kilo');
+        assert.ok(result.includes('Fallback skills live in .kilo/skills/.'), '.agents/skills should be rewritten to Kilo skills dir');
+        assert.ok(!result.includes('.kilo/skill/'), 'singular Kilo skill dir should not be emitted');
+      }
+    });
   });
 
-  test('keeps description: for commands', () => {
-    const result = convertClaudeToOpencodeFrontmatter(SAMPLE_COMMAND);
-    const frontmatter = result.split('---')[1];
-    assert.ok(frontmatter.includes('description:'), 'description should be kept');
+  describe(`${label} command conversion (isAgent: false, default)`, () => {
+    test('strips name: field for commands', () => {
+      const result = convert(SAMPLE_COMMAND);
+      const frontmatter = result.split('---')[1];
+      assert.ok(!frontmatter.includes('name:'), 'name: should be stripped for commands');
+    });
+
+    test('does not add model: or mode: for commands', () => {
+      const result = convert(SAMPLE_COMMAND);
+      const frontmatter = result.split('---')[1];
+      assert.ok(!frontmatter.includes('model:'), 'model: should not be added for commands');
+      assert.ok(!frontmatter.includes('mode:'), 'mode: should not be added for commands');
+    });
+
+    test('keeps description: for commands', () => {
+      const result = convert(SAMPLE_COMMAND);
+      const frontmatter = result.split('---')[1];
+      assert.ok(frontmatter.includes('description:'), 'description should be kept');
+    });
   });
-});
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gemini CLI agent conversion (merged from gemini-config.test.cjs)

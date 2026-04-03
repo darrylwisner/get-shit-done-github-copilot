@@ -14,6 +14,13 @@ Configuration options for `.planning/` directory behavior.
   "phase_branch_template": "gsd/phase-{phase}-{slug}",
   "milestone_branch_template": "gsd/{milestone}-{slug}",
   "quick_branch_template": null
+},
+"manager": {
+  "flags": {
+    "discuss": "",
+    "plan": "",
+    "execute": ""
+  }
 }
 ```
 
@@ -28,6 +35,9 @@ Configuration options for `.planning/` directory behavior.
 | `git.quick_branch_template` | `null` | Optional branch template for quick-task runs |
 | `workflow.use_worktrees` | `true` | Whether executor agents run in isolated git worktrees. Set to `false` to disable worktrees — agents execute sequentially on the main working tree instead. Recommended for solo developers or when worktree merges cause issues. |
 | `workflow.subagent_timeout` | `300000` | Timeout in milliseconds for parallel subagent tasks (e.g. codebase mapping). Increase for large codebases or slower models. Default: 300000 (5 minutes). |
+| `manager.flags.discuss` | `""` | Flags passed to `/gsd:discuss-phase` when dispatched from manager (e.g. `"--auto --analyze"`) |
+| `manager.flags.plan` | `""` | Flags passed to plan workflow when dispatched from manager |
+| `manager.flags.execute` | `""` | Flags passed to execute workflow when dispatched from manager |
 </config_schema>
 
 <commit_docs_behavior>

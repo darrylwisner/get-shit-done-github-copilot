@@ -28,6 +28,7 @@ const VALID_CONFIG_KEYS = new Set([
   'workflow.subagent_timeout',
   'hooks.context_warnings',
   'project_code', 'phase_naming',
+  'manager.flags.discuss', 'manager.flags.plan', 'manager.flags.execute',
 ]);
 
 /**
