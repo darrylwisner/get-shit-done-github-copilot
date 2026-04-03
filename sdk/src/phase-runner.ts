@@ -26,6 +26,9 @@ import type { PromptFactory } from './phase-prompt.js';
 import type { ContextEngine } from './context-engine.js';
 import type { GSDLogger } from './logger.js';
 import { runPhaseStepSession, runPlanSession } from './session-runner.js';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { checkResearchGate } from './research-gate.js';
 
 // ─── Error type ──────────────────────────────────────────────────────────────
 
@@ -182,6 +185,21 @@ export class PhaseRunner {
       } else {
         const result = await this.retryOnce('research', () => this.runStep(PhaseStepType.Research, phaseNumber, sessionOpts));
         steps.push(result);
+      }
+    }
+
+    // ── Step 2.5: Research gate (#1602) ──
+    // Check RESEARCH.md for unresolved open questions before planning
+    if (!halted && phaseOp.has_research) {
+      const gateResult = await this.checkResearchGate(phaseOp);
+      if (!gateResult.pass) {
+        const questionList = gateResult.unresolvedQuestions.join(', ');
+        const error = `RESEARCH.md has unresolved open questions: ${questionList}`;
+        this.logger?.warn(error, { phase: phaseNumber });
+        const decision = await this.invokeBlockerCallback(callbacks, phaseNumber, PhaseStepType.Research, error);
+        if (decision === 'stop') {
+          halted = true;
+        }
       }
     }
 
@@ -1074,6 +1092,22 @@ export class PhaseRunner {
     if (result.success) return 'passed';
     if (result.error?.subtype === 'human_review_needed') return 'human_needed';
     return 'gaps_found';
+  }
+
+  /**
+   * Check RESEARCH.md for unresolved open questions (#1602).
+   * Returns the gate result — pass means safe to proceed to planning.
+   */
+  private async checkResearchGate(phaseOp: PhaseOpInfo): Promise<{ pass: boolean; unresolvedQuestions: string[] }> {
+    try {
+      const researchPath = phaseOp.research_path ||
+        join(phaseOp.phase_dir, `${phaseOp.padded_phase}-RESEARCH.md`);
+      const content = await readFile(researchPath, 'utf-8');
+      return checkResearchGate(content);
+    } catch {
+      // File doesn't exist or can't be read — pass (nothing to gate on)
+      return { pass: true, unresolvedQuestions: [] };
+    }
   }
 
   /**

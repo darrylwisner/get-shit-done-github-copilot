@@ -149,6 +149,11 @@ Exit workflow.
 
 **If `phase_found` is true:** Continue to check_existing.
 
+**Power mode** — If `--power` is present in ARGUMENTS:
+- Skip interactive questioning entirely
+- Read and execute @~/.claude/get-shit-done/workflows/discuss-phase-power.md end-to-end
+- Do not continue with the steps below
+
 **Auto mode** — If `--auto` is present in ARGUMENTS:
 - In `check_existing`: auto-select "Skip" (if context exists) or continue without prompting (if no context/plans)
 - In `present_gray_areas`: auto-select ALL gray areas without asking the user
@@ -160,6 +165,30 @@ Exit workflow.
 - Discussion is fully interactive (questions, gray area selection — same as default mode)
 - After discussion completes, auto-advance to plan-phase → execute-phase (same as `--auto`)
 - This is the middle ground: user controls the discuss decisions, then plan+execute run autonomously
+</step>
+
+<step name="check_blocking_antipatterns" priority="first">
+**MANDATORY — Check for blocking anti-patterns before any other work.**
+
+Look for a `.continue-here.md` in the current phase directory:
+
+```bash
+ls ${phase_dir}/.continue-here.md 2>/dev/null || true
+```
+
+If `.continue-here.md` exists, parse its "Critical Anti-Patterns" table for rows with `severity` = `blocking`.
+
+**If one or more `blocking` anti-patterns are found:**
+
+This step cannot be skipped. Before proceeding to `check_existing` or any other step, the agent must demonstrate understanding of each blocking anti-pattern by answering all three questions for each one:
+
+1. **What is this anti-pattern?** — Describe it in your own words, not by quoting the handoff.
+2. **How did it manifest?** — Explain the specific failure that caused it to be recorded.
+3. **What structural mechanism (not acknowledgment) prevents it?** — Name the concrete step, checklist item, or enforcement mechanism that stops recurrence.
+
+Write these answers inline before continuing. If a blocking anti-pattern cannot be answered from the context in `.continue-here.md`, stop and ask the user for clarification.
+
+**If no `.continue-here.md` exists, or no `blocking` rows are found:** Proceed directly to `check_existing`.
 </step>
 
 <step name="check_existing">
@@ -1110,6 +1139,21 @@ Route to `confirm_creation` step (existing behavior — show manual next steps).
 </step>
 
 </process>
+
+<power_user_mode>
+When `--power` flag is present in ARGUMENTS, skip interactive questioning and execute the power user workflow.
+
+The power user mode generates ALL questions upfront into machine-readable and human-friendly files, then waits for the user to answer at their own pace before processing all answers in a single pass.
+
+**Full step-by-step instructions:** @~/.claude/get-shit-done/workflows/discuss-phase-power.md
+
+**Summary of flow:**
+1. Run the same phase analysis (gray area identification) as standard mode
+2. Write all questions to `{phase_dir}/{padded_phase}-QUESTIONS.json` and `{phase_dir}/{padded_phase}-QUESTIONS.html`
+3. Notify user with file paths and wait for a "refresh" or "finalize" command
+4. On "refresh": read the JSON, process answered questions, update stats and HTML
+5. On "finalize": read all answers from JSON, generate CONTEXT.md in the standard format
+</power_user_mode>
 
 <success_criteria>
 - Phase validated against roadmap

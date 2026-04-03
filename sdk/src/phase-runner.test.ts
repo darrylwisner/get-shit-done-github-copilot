@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { PhaseRunner, PhaseRunnerError } from './phase-runner.js';
 import type { PhaseRunnerDeps, VerificationOutcome } from './phase-runner.js';
 import type {
@@ -419,6 +422,171 @@ describe('PhaseRunner', () => {
       // Should proceed past discuss even though no context
       const stepTypes = result.steps.map(s => s.step);
       expect(stepTypes).toContain(PhaseStepType.Research);
+      expect(stepTypes).toContain(PhaseStepType.Plan);
+    });
+  });
+
+  // ─── Research gate (#1602) ──────────────────────────────────────────────
+
+  describe('research gate (#1602)', () => {
+    let tempPhaseDir: string;
+
+    beforeEach(async () => {
+      tempPhaseDir = await mkdtemp(join(tmpdir(), 'gsd-research-gate-'));
+    });
+
+    afterEach(async () => {
+      await rm(tempPhaseDir, { recursive: true, force: true });
+    });
+
+    it('invokes onBlockerDecision when RESEARCH.md has unresolved open questions', async () => {
+      // Write a RESEARCH.md with unresolved questions
+      const researchPath = join(tempPhaseDir, '01-RESEARCH.md');
+      await writeFile(researchPath, `# Research
+
+## Key Findings
+TypeScript is the right choice.
+
+## Open Questions
+
+1. **Hash prefix** — keep or change?
+2. **Cache TTL** — what duration?
+
+## Recommendations
+Use TypeScript.`, 'utf-8');
+
+      const onBlockerDecision = vi.fn().mockResolvedValue('stop');
+      const phaseOp = makePhaseOp({
+        has_context: true,
+        has_research: true,
+        has_plans: true,
+        plan_count: 1,
+        phase_dir: tempPhaseDir,
+        research_path: researchPath,
+      });
+      const deps = makeDeps();
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      const runner = new PhaseRunner(deps);
+      const result = await runner.run('1', {
+        callbacks: { onBlockerDecision },
+      });
+
+      expect(onBlockerDecision).toHaveBeenCalled();
+      const callArg = onBlockerDecision.mock.calls[0][0];
+      expect(callArg.step).toBe(PhaseStepType.Research);
+      expect(callArg.error).toContain('unresolved open questions');
+      expect(callArg.error).toContain('Hash prefix');
+    });
+
+    it('does not block when RESEARCH.md has no open questions', async () => {
+      const researchPath = join(tempPhaseDir, '01-RESEARCH.md');
+      await writeFile(researchPath, `# Research
+
+## Key Findings
+Everything resolved.
+
+## Recommendations
+Use TypeScript.`, 'utf-8');
+
+      const onBlockerDecision = vi.fn().mockResolvedValue('stop');
+      const phaseOp = makePhaseOp({
+        has_context: true,
+        has_research: true,
+        has_plans: true,
+        plan_count: 1,
+        phase_dir: tempPhaseDir,
+        research_path: researchPath,
+      });
+      const deps = makeDeps();
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      const runner = new PhaseRunner(deps);
+      await runner.run('1', {
+        callbacks: { onBlockerDecision },
+      });
+
+      // Should NOT have been called for research step
+      const researchCalls = onBlockerDecision.mock.calls.filter(
+        (c: any[]) => c[0].step === PhaseStepType.Research,
+      );
+      expect(researchCalls).toHaveLength(0);
+    });
+
+    it('does not block when all open questions are resolved', async () => {
+      const researchPath = join(tempPhaseDir, '01-RESEARCH.md');
+      await writeFile(researchPath, `# Research
+
+## Open Questions (RESOLVED)
+
+1. **Hash prefix** — RESOLVED: Use "guest_contract:"`, 'utf-8');
+
+      const onBlockerDecision = vi.fn().mockResolvedValue('stop');
+      const phaseOp = makePhaseOp({
+        has_context: true,
+        has_research: true,
+        has_plans: true,
+        plan_count: 1,
+        phase_dir: tempPhaseDir,
+        research_path: researchPath,
+      });
+      const deps = makeDeps();
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      const runner = new PhaseRunner(deps);
+      await runner.run('1', { callbacks: { onBlockerDecision } });
+
+      const researchCalls = onBlockerDecision.mock.calls.filter(
+        (c: any[]) => c[0].step === PhaseStepType.Research,
+      );
+      expect(researchCalls).toHaveLength(0);
+    });
+
+    it('skips research gate when has_research=false', async () => {
+      const onBlockerDecision = vi.fn().mockResolvedValue('stop');
+      const phaseOp = makePhaseOp({
+        has_context: true,
+        has_research: false,
+        has_plans: true,
+        plan_count: 1,
+      });
+      const deps = makeDeps();
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      const runner = new PhaseRunner(deps);
+      await runner.run('1', { callbacks: { onBlockerDecision } });
+
+      // Research gate should not fire when there's no research
+      const researchCalls = onBlockerDecision.mock.calls.filter(
+        (c: any[]) => c[0].step === PhaseStepType.Research,
+      );
+      expect(researchCalls).toHaveLength(0);
+    });
+
+    it('auto-approves (skip) research gate when no callback registered', async () => {
+      const researchPath = join(tempPhaseDir, '01-RESEARCH.md');
+      await writeFile(researchPath, `# Research
+
+## Open Questions
+
+1. **Something** — needs decision`, 'utf-8');
+
+      const phaseOp = makePhaseOp({
+        has_context: true,
+        has_research: true,
+        has_plans: true,
+        plan_count: 1,
+        phase_dir: tempPhaseDir,
+        research_path: researchPath,
+      });
+      const deps = makeDeps();
+      (deps.tools.initPhaseOp as ReturnType<typeof vi.fn>).mockResolvedValue(phaseOp);
+
+      const runner = new PhaseRunner(deps);
+      const result = await runner.run('1'); // No callbacks
+
+      // Should proceed past research gate (auto-skip)
+      const stepTypes = result.steps.map(s => s.step);
       expect(stepTypes).toContain(PhaseStepType.Plan);
     });
   });

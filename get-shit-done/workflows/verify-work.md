@@ -86,6 +86,42 @@ Provide a phase number to start testing (e.g., /gsd:verify-work 4)
 Continue to `create_uat_file`.
 </step>
 
+<step name="automated_ui_verification">
+**Automated UI Verification (when Playwright-MCP is available)**
+
+Before running manual UAT, check whether this phase has a UI component and whether
+`mcp__playwright__*` or `mcp__puppeteer__*` tools are available in the current session.
+
+```
+UI_PHASE_FLAG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.ui_phase --raw 2>/dev/null || echo "true")
+UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
+```
+
+**If Playwright-MCP tools are available in this session (`mcp__playwright__*` tools
+respond to tool calls) AND (`UI_PHASE_FLAG` is `true` OR `UI_SPEC_FILE` is non-empty):**
+
+For each UI checkpoint listed in the phase's UI-SPEC.md (or inferred from SUMMARY.md):
+
+1. Use `mcp__playwright__navigate` (or equivalent) to open the component's URL.
+2. Use `mcp__playwright__screenshot` to capture a screenshot.
+3. Compare the screenshot visually against the spec's stated requirements
+   (dimensions, color, layout, spacing).
+4. Automatically mark checkpoints as **passed** or **needs review** based on the
+   visual comparison — no manual question required for items that clearly match.
+5. Flag items that require human judgment (subjective aesthetics, content accuracy)
+   and present only those as manual UAT questions.
+
+If automated verification is not available, fall back to the standard manual
+checkpoint questions defined in this workflow unchanged. This step is entirely
+conditional: if Playwright-MCP is not configured, behavior is unchanged from today.
+
+**Display summary line before proceeding:**
+```
+UI checkpoints: {N} auto-verified, {M} queued for manual review
+```
+
+</step>
+
 <step name="find_summaries">
 **Find what to test:**
 

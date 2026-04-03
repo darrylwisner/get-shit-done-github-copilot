@@ -146,6 +146,26 @@ Full review: {path to UI-REVIEW.md}
 ───────────────────────────────────────────────────────────────
 ```
 
+## Automated UI Verification (when Playwright-MCP is available)
+
+If `mcp__playwright__*` tools are accessible in this session:
+
+1. Navigate to each UI component described in the phase's UI-SPEC.md using
+   `mcp__playwright__navigate` (or equivalent Playwright-MCP tool).
+2. Take a screenshot of each component using `mcp__playwright__screenshot`.
+3. Compare against the spec's visual requirements — dimensions, color palette,
+   layout, spacing scale, and typography.
+4. Report any dimension, color, or layout discrepancies automatically as
+   additional findings within the relevant pillar section of UI-REVIEW.md.
+5. Flag items that require human judgment (brand feel, content tone) as
+   `needs_human_review: true` in the findings — these are surfaced to the user
+   separately after the automated pass completes.
+
+If Playwright-MCP is not available in this session, this section is skipped
+entirely. The audit falls back to the standard code-only review described above.
+No configuration change is required — the availability of `mcp__playwright__*`
+tools is detected at runtime.
+
 ## 5. Commit (if configured)
 
 ```bash
