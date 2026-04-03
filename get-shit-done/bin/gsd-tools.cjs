@@ -430,6 +430,11 @@ async function runCommand(command, args, cwd, raw) {
       break;
     }
 
+    case 'check-commit': {
+      commands.cmdCheckCommit(cwd, raw);
+      break;
+    }
+
     case 'commit-to-subrepo': {
       const message = args[1];
       const filesIndex = args.indexOf('--files');

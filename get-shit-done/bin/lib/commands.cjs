@@ -960,6 +960,39 @@ function cmdStats(cwd, format, raw) {
   }
 }
 
+/**
+ * Check whether a commit should be allowed based on commit_docs config.
+ * When commit_docs is false, rejects commits that stage .planning/ files.
+ * Intended for use as a pre-commit hook guard.
+ */
+function cmdCheckCommit(cwd, raw) {
+  const config = loadConfig(cwd);
+
+  // If commit_docs is true (or not set), allow all commits
+  if (config.commit_docs !== false) {
+    output({ allowed: true, reason: 'commit_docs_enabled' }, raw, 'allowed');
+    return;
+  }
+
+  // commit_docs is false — check if any .planning/ files are staged
+  try {
+    const staged = execSync('git diff --cached --name-only', { cwd, encoding: 'utf-8' }).trim();
+    const planningFiles = staged.split('\n').filter(f => f.startsWith('.planning/') || f.startsWith('.planning\\'));
+
+    if (planningFiles.length > 0) {
+      error(
+        `commit_docs is false but ${planningFiles.length} .planning/ file(s) are staged:\n` +
+        planningFiles.map(f => `  ${f}`).join('\n') +
+        `\n\nTo unstage: git reset HEAD ${planningFiles.join(' ')}`
+      );
+    }
+  } catch {
+    // git diff --cached failed (no staged files or not a git repo) — allow
+  }
+
+  output({ allowed: true, reason: 'no_planning_files_staged' }, raw, 'allowed');
+}
+
 module.exports = {
   cmdGenerateSlug,
   cmdCurrentTimestamp,
@@ -976,4 +1009,5 @@ module.exports = {
   cmdTodoMatchPhase,
   cmdScaffold,
   cmdStats,
+  cmdCheckCommit,
 };

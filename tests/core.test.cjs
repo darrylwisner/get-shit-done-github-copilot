@@ -30,6 +30,7 @@ const {
   findPhaseInternal,
   findProjectRoot,
   detectSubRepos,
+  planningDir,
 } = require('../get-shit-done/bin/lib/core.cjs');
 
 // ─── loadConfig ────────────────────────────────────────────────────────────────
@@ -1609,5 +1610,80 @@ describe('reapStaleTempFiles', () => {
     assert.doesNotThrow(() => {
       reapStaleTempFiles('gsd-nonexistent-prefix-xyz-', { maxAgeMs: 0 });
     });
+  });
+});
+
+// ─── planningDir ──────────────────────────────────────────────────────────────
+
+describe('planningDir', () => {
+  const cwd = '/fake/repo';
+  let savedProject, savedWorkstream;
+
+  beforeEach(() => {
+    savedProject = process.env.GSD_PROJECT;
+    savedWorkstream = process.env.GSD_WORKSTREAM;
+    delete process.env.GSD_PROJECT;
+    delete process.env.GSD_WORKSTREAM;
+  });
+
+  afterEach(() => {
+    if (savedProject !== undefined) process.env.GSD_PROJECT = savedProject;
+    else delete process.env.GSD_PROJECT;
+    if (savedWorkstream !== undefined) process.env.GSD_WORKSTREAM = savedWorkstream;
+    else delete process.env.GSD_WORKSTREAM;
+  });
+
+  test('returns .planning/ when neither project nor workstream is set', () => {
+    const result = planningDir(cwd, null, null);
+    assert.strictEqual(result, path.join(cwd, '.planning'));
+  });
+
+  test('returns .planning/{project}/ when project is set', () => {
+    const result = planningDir(cwd, null, 'my-app');
+    assert.strictEqual(result, path.join(cwd, '.planning', 'my-app'));
+  });
+
+  test('returns .planning/workstreams/{ws}/ when workstream is set', () => {
+    const result = planningDir(cwd, 'feature-x', null);
+    assert.strictEqual(result, path.join(cwd, '.planning', 'workstreams', 'feature-x'));
+  });
+
+  test('returns .planning/{project}/workstreams/{ws}/ when both are set', () => {
+    const result = planningDir(cwd, 'feature-x', 'my-app');
+    assert.strictEqual(result, path.join(cwd, '.planning', 'my-app', 'workstreams', 'feature-x'));
+  });
+
+  test('reads GSD_PROJECT from env when project param is undefined', () => {
+    process.env.GSD_PROJECT = 'env-project';
+    const result = planningDir(cwd);
+    assert.strictEqual(result, path.join(cwd, '.planning', 'env-project'));
+  });
+
+  test('rejects path traversal in project name', () => {
+    assert.throws(
+      () => planningDir(cwd, null, '../../etc'),
+      /invalid path characters/
+    );
+  });
+
+  test('rejects forward slash in project name', () => {
+    assert.throws(
+      () => planningDir(cwd, null, 'foo/bar'),
+      /invalid path characters/
+    );
+  });
+
+  test('rejects backslash in project name', () => {
+    assert.throws(
+      () => planningDir(cwd, null, 'foo\\bar'),
+      /invalid path characters/
+    );
+  });
+
+  test('rejects path traversal in workstream name', () => {
+    assert.throws(
+      () => planningDir(cwd, '../../../tmp', null),
+      /invalid path characters/
+    );
   });
 });

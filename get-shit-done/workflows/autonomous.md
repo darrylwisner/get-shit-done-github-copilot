@@ -16,7 +16,7 @@ Read all files referenced by the invoking prompt's execution_context before star
 
 ## 1. Initialize
 
-Parse `$ARGUMENTS` for `--from N` and `--only N` flags:
+Parse `$ARGUMENTS` for `--from N`, `--only N`, and `--interactive` flags:
 
 ```bash
 FROM_PHASE=""
@@ -29,9 +29,16 @@ if echo "$ARGUMENTS" | grep -qE '\-\-only\s+[0-9]'; then
   ONLY_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-only\s+[0-9]+\.?[0-9]*' | awk '{print $2}')
   FROM_PHASE="$ONLY_PHASE"
 fi
+
+INTERACTIVE=""
+if echo "$ARGUMENTS" | grep -q '\-\-interactive'; then
+  INTERACTIVE="true"
+fi
 ```
 
 When `--only` is set, also set `FROM_PHASE` to the same value so existing filter logic applies.
+
+When `--interactive` is set, discuss runs inline with questions (not auto-answered), while plan and execute are dispatched as background agents. This keeps the main context lean — only discuss conversations accumulate — while preserving user input on all design decisions.
 
 Bootstrap via milestone-level init:
 
@@ -58,6 +65,7 @@ Display startup banner:
 
 If `ONLY_PHASE` is set, display: `Single phase mode: Phase ${ONLY_PHASE}`
 Else if `FROM_PHASE` is set, display: `Starting from phase ${FROM_PHASE}`
+If `INTERACTIVE` is set, display: `Mode: Interactive (discuss inline, plan+execute in background)`
 
 </step>
 
@@ -230,18 +238,26 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(${PADDED_PHASE
 
 Proceed to 3b.
 
-**If SKIP_DISCUSS is `false` (or unset):** Execute the smart_discuss step for this phase.
+**If SKIP_DISCUSS is `false` (or unset):**
 
 **IMPORTANT — Discuss must be single-pass in autonomous mode.**
 The discuss step in `--auto` mode MUST NOT loop. If CONTEXT.md already exists after discuss completes, do NOT re-invoke discuss for the same phase. The `has_context` check below is authoritative — once true, discuss is done for this phase regardless of perceived "gaps" in the context file.
 
-After smart_discuss completes, verify context was written:
+**If `INTERACTIVE` is set:** Run the standard discuss-phase skill inline (asks interactive questions, waits for user answers). This preserves user input on all design decisions while keeping plan+execute out of the main context:
+
+```
+Skill(skill="gsd:discuss-phase", args="${PHASE_NUM}")
+```
+
+**If `INTERACTIVE` is NOT set:** Execute the smart_discuss step for this phase (batch table proposals, auto-optimized).
+
+After discuss completes (either mode), verify context was written:
 
 ```bash
 PHASE_STATE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op ${PHASE_NUM})
 ```
 
-Check `has_context`. If false → go to handle_blocker: "Smart discuss for phase ${PHASE_NUM} did not produce CONTEXT.md."
+Check `has_context`. If false → go to handle_blocker: "Discuss for phase ${PHASE_NUM} did not produce CONTEXT.md."
 
 **3a.5. UI Design Contract (Frontend Phases)**
 
@@ -284,6 +300,20 @@ UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
 
 **3b. Plan**
 
+**If `INTERACTIVE` is set:** Dispatch plan as a background agent to keep the main context lean. While plan runs, the workflow can immediately start discussing the next phase (see step 4).
+
+```
+Agent(
+  description="Plan phase ${PHASE_NUM}: ${PHASE_NAME}",
+  run_in_background=true,
+  prompt="Run plan-phase for phase ${PHASE_NUM}: Skill(skill=\"gsd:plan-phase\", args=\"${PHASE_NUM}\")"
+)
+```
+
+Store the agent task_id. After discuss for the next phase completes (or if no next phase), wait for the plan agent to finish before proceeding to execute.
+
+**If `INTERACTIVE` is NOT set (default):** Run plan inline as before.
+
 ```
 Skill(skill="gsd:plan-phase", args="${PHASE_NUM}")
 ```
@@ -292,13 +322,29 @@ Verify plan produced output — re-run `init phase-op` and check `has_plans`. If
 
 **3c. Execute**
 
+**If `INTERACTIVE` is set:** Wait for the plan agent to complete (if not already), verify plans exist, then dispatch execute as a background agent:
+
+```
+Agent(
+  description="Execute phase ${PHASE_NUM}: ${PHASE_NAME}",
+  run_in_background=true,
+  prompt="Run execute-phase for phase ${PHASE_NUM}: Skill(skill=\"gsd:execute-phase\", args=\"${PHASE_NUM} --no-transition\")"
+)
+```
+
+Store the agent task_id. The workflow can now start discussing the next phase while this phase executes in the background. Before starting post-execution routing for this phase, wait for the execute agent to complete.
+
+**If `INTERACTIVE` is NOT set (default):** Run execute inline as before.
+
 ```
 Skill(skill="gsd:execute-phase", args="${PHASE_NUM} --no-transition")
 ```
 
 **3d. Post-Execution Routing**
 
-After execute-phase returns, read the verification result:
+**If `INTERACTIVE` is set:** Wait for the execute agent to complete before reading verification results.
+
+After execute-phase returns (or the execute agent completes), read the verification result:
 
 ```bash
 VERIFY_STATUS=$(grep "^status:" "${PHASE_DIR}"/*-VERIFICATION.md 2>/dev/null | head -1 | cut -d: -f2 | tr -d ' ')
@@ -733,6 +779,13 @@ Check for blockers in the Blockers/Concerns section. If blockers are found, go t
 
 If incomplete phases remain: proceed to next phase, loop back to execute_phase.
 
+**Interactive mode overlap:** When `INTERACTIVE` is set, the iterate step enables pipeline parallelism:
+1. After discuss completes for Phase N, dispatch plan+execute as background agents
+2. Immediately start discuss for Phase N+1 (the next incomplete phase) while Phase N builds
+3. Before starting plan for Phase N+1, wait for Phase N's execute agent to complete and handle its post-execution routing (verification, gap closure, etc.)
+
+This means the user is always answering discuss questions (lightweight, interactive) while the heavy work (planning, code generation) runs in the background. The main context only accumulates discuss conversations — plan and execute contexts are isolated in their agents.
+
 If all phases complete, proceed to lifecycle step.
 
 </step>
@@ -935,4 +988,10 @@ When any phase operation fails or a blocker is detected, present 3 options via A
 - [ ] `--only N` exits cleanly after single phase completes
 - [ ] `--only N` on already-complete phase exits with message
 - [ ] `--only N` handle_blocker resume message uses --only flag
+- [ ] `--interactive` runs discuss inline via gsd:discuss-phase (asks questions, waits for user)
+- [ ] `--interactive` dispatches plan and execute as background agents (context isolation)
+- [ ] `--interactive` enables pipeline parallelism: discuss Phase N+1 while Phase N builds
+- [ ] `--interactive` main context only accumulates discuss conversations (lean)
+- [ ] `--interactive` waits for background agents before post-execution routing
+- [ ] `--interactive` compatible with `--only` and `--from` flags
 </success_criteria>

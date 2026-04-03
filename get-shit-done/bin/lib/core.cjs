@@ -195,7 +195,7 @@ function safeReadFile(filePath) {
 }
 
 function loadConfig(cwd) {
-  const configPath = path.join(cwd, '.planning', 'config.json');
+  const configPath = path.join(planningDir(cwd), 'config.json');
   const defaults = {
     model_profile: 'balanced',
     commit_docs: true,
@@ -218,6 +218,7 @@ function loadConfig(cwd) {
     context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
     phase_naming: 'sequential', // 'sequential' (default, auto-increment) or 'custom' (arbitrary string IDs)
     project_code: null, // optional short prefix for phase dirs (e.g., 'CK' → 'CK-01-foundation')
+    subagent_timeout: 300000, // 5 min default; increase for large codebases or slower models (ms)
   };
 
   try {
@@ -310,6 +311,7 @@ function loadConfig(cwd) {
       context_window: get('context_window') ?? defaults.context_window,
       phase_naming: get('phase_naming') ?? defaults.phase_naming,
       project_code: get('project_code') ?? defaults.project_code,
+      subagent_timeout: get('subagent_timeout', { section: 'workflow', field: 'subagent_timeout' }) ?? defaults.subagent_timeout,
       model_overrides: parsed.model_overrides || null,
       agent_skills: parsed.agent_skills || {},
     };
@@ -360,20 +362,44 @@ function normalizeMd(content) {
   const lines = text.split('\n');
   const result = [];
 
+  // Pre-compute fence state in a single O(n) pass instead of O(n^2) per-line scanning
+  const fenceRegex = /^```/;
+  const insideFence = new Array(lines.length);
+  let fenceOpen = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (fenceRegex.test(lines[i].trimEnd())) {
+      if (fenceOpen) {
+        // This is a closing fence — mark as NOT inside (it's the boundary)
+        insideFence[i] = false;
+        fenceOpen = false;
+      } else {
+        // This is an opening fence
+        insideFence[i] = false;
+        fenceOpen = true;
+      }
+    } else {
+      insideFence[i] = fenceOpen;
+    }
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const prev = i > 0 ? lines[i - 1] : '';
     const prevTrimmed = prev.trimEnd();
     const trimmed = line.trimEnd();
+    const isFenceLine = fenceRegex.test(trimmed);
 
     // MD022: Blank line before headings (skip first line and frontmatter delimiters)
     if (/^#{1,6}\s/.test(trimmed) && i > 0 && prevTrimmed !== '' && prevTrimmed !== '---') {
       result.push('');
     }
 
-    // MD031: Blank line before fenced code blocks
-    if (/^```/.test(trimmed) && i > 0 && prevTrimmed !== '' && !isInsideFencedBlock(lines, i)) {
-      result.push('');
+    // MD031: Blank line before fenced code blocks (opening fences only)
+    if (isFenceLine && i > 0 && prevTrimmed !== '' && !insideFence[i] && (i === 0 || !insideFence[i - 1] || isFenceLine)) {
+      // Only add blank before opening fences (not closing ones)
+      if (i === 0 || !insideFence[i - 1]) {
+        result.push('');
+      }
     }
 
     // MD032: Blank line before lists (- item, * item, N. item, - [ ] item)
@@ -394,7 +420,7 @@ function normalizeMd(content) {
     }
 
     // MD031: Blank line after closing fenced code blocks
-    if (/^```\s*$/.test(trimmed) && isClosingFence(lines, i) && i < lines.length - 1) {
+    if (/^```\s*$/.test(trimmed) && i > 0 && insideFence[i - 1] && i < lines.length - 1) {
       const next = lines[i + 1];
       if (next !== undefined && next.trimEnd() !== '') {
         result.push('');
@@ -422,24 +448,6 @@ function normalizeMd(content) {
   text = text.replace(/\n*$/, '\n');
 
   return text;
-}
-
-/** Check if line index i is inside an already-open fenced code block */
-function isInsideFencedBlock(lines, i) {
-  let fenceCount = 0;
-  for (let j = 0; j < i; j++) {
-    if (/^```/.test(lines[j].trimEnd())) fenceCount++;
-  }
-  return fenceCount % 2 === 1;
-}
-
-/** Check if a ``` line is a closing fence (odd number of fences up to and including this one) */
-function isClosingFence(lines, i) {
-  let fenceCount = 0;
-  for (let j = 0; j <= i; j++) {
-    if (/^```/.test(lines[j].trimEnd())) fenceCount++;
-  }
-  return fenceCount % 2 === 0;
 }
 
 function execGit(cwd, args) {
@@ -542,20 +550,43 @@ function withPlanningLock(cwd, fn) {
 }
 
 /**
- * Get the .planning directory path, workstream-aware.
- * When a workstream is active (via explicit ws arg or GSD_WORKSTREAM env var),
- * returns `.planning/workstreams/{ws}/`. Otherwise returns `.planning/`.
+ * Get the .planning directory path, project- and workstream-aware.
+ *
+ * Resolution order:
+ * 1. If GSD_PROJECT is set (env var or explicit `project` arg), routes to
+ *    `.planning/{project}/` — supports multi-project workspaces where several
+ *    independent projects share a single `.planning/` root directory (e.g.,
+ *    an Obsidian vault or monorepo knowledge base used as a command center).
+ * 2. If GSD_WORKSTREAM is set, routes to `.planning/workstreams/{ws}/`.
+ * 3. Otherwise returns `.planning/`.
+ *
+ * GSD_PROJECT and GSD_WORKSTREAM can be combined:
+ *   `.planning/{project}/workstreams/{ws}/`
  *
  * @param {string} cwd - project root
  * @param {string} [ws] - explicit workstream name; if omitted, checks GSD_WORKSTREAM env var
+ * @param {string} [project] - explicit project name; if omitted, checks GSD_PROJECT env var
  */
-function planningDir(cwd, ws) {
+function planningDir(cwd, ws, project) {
+  if (project === undefined) project = process.env.GSD_PROJECT || null;
   if (ws === undefined) ws = process.env.GSD_WORKSTREAM || null;
-  if (!ws) return path.join(cwd, '.planning');
-  return path.join(cwd, '.planning', 'workstreams', ws);
+
+  // Reject path separators and traversal components in project/workstream names
+  const BAD_SEGMENT = /[/\\]|\.\./;
+  if (project && BAD_SEGMENT.test(project)) {
+    throw new Error(`GSD_PROJECT contains invalid path characters: ${project}`);
+  }
+  if (ws && BAD_SEGMENT.test(ws)) {
+    throw new Error(`GSD_WORKSTREAM contains invalid path characters: ${ws}`);
+  }
+
+  let base = path.join(cwd, '.planning');
+  if (project) base = path.join(base, project);
+  if (ws) base = path.join(base, 'workstreams', ws);
+  return base;
 }
 
-/** Always returns the root .planning/ path, ignoring workstreams. For shared resources. */
+/** Always returns the root .planning/ path, ignoring workstreams and projects. For shared resources. */
 function planningRoot(cwd) {
   return path.join(cwd, '.planning');
 }

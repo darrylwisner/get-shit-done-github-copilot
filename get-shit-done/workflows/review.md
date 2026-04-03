@@ -19,6 +19,7 @@ command -v gemini >/dev/null 2>&1 && echo "gemini:available" || echo "gemini:mis
 command -v claude >/dev/null 2>&1 && echo "claude:available" || echo "claude:missing"
 command -v codex >/dev/null 2>&1 && echo "codex:available" || echo "codex:missing"
 command -v coderabbit >/dev/null 2>&1 && echo "coderabbit:available" || echo "coderabbit:missing"
+command -v opencode >/dev/null 2>&1 && echo "opencode:available" || echo "opencode:missing"
 ```
 
 Parse flags from `$ARGUMENTS`:
@@ -26,6 +27,7 @@ Parse flags from `$ARGUMENTS`:
 - `--claude` → include Claude
 - `--codex` → include Codex
 - `--coderabbit` → include CodeRabbit
+- `--opencode` → include OpenCode
 - `--all` → include all available
 - No flags → include all available
 
@@ -35,6 +37,7 @@ No external AI CLIs found. Install at least one:
 - gemini: https://github.com/google-gemini/gemini-cli
 - codex: https://github.com/openai/codex
 - claude: https://github.com/anthropics/claude-code
+- opencode: https://opencode.ai (leverages GitHub Copilot subscription models)
 
 Then run /gsd:review again.
 ```
@@ -141,6 +144,14 @@ Note: CodeRabbit reviews the current git diff/working tree — it does not accep
 coderabbit review --prompt-only 2>/dev/null > /tmp/gsd-review-coderabbit-{phase}.md
 ```
 
+**OpenCode (via GitHub Copilot):**
+```bash
+cat /tmp/gsd-review-prompt-{phase}.md | opencode run - 2>/dev/null > /tmp/gsd-review-opencode-{phase}.md
+if [ ! -s /tmp/gsd-review-opencode-{phase}.md ]; then
+  echo "OpenCode review failed or returned empty output." > /tmp/gsd-review-opencode-{phase}.md
+fi
+```
+
 If a CLI fails, log the error and continue with remaining CLIs.
 
 Display progress:
@@ -160,7 +171,7 @@ Combine all review responses into `{phase_dir}/{padded_phase}-REVIEWS.md`:
 ```markdown
 ---
 phase: {N}
-reviewers: [gemini, claude, codex, coderabbit]
+reviewers: [gemini, claude, codex, coderabbit, opencode]
 reviewed_at: {ISO timestamp}
 plans_reviewed: [{list of PLAN.md files}]
 ---
@@ -188,6 +199,12 @@ plans_reviewed: [{list of PLAN.md files}]
 ## CodeRabbit Review
 
 {coderabbit review content}
+
+---
+
+## OpenCode Review
+
+{opencode review content}
 
 ---
 
