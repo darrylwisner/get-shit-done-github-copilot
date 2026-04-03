@@ -1694,3 +1694,60 @@ describe('stats command', () => {
     assert.strictEqual(output.phases[0].status, 'Executed', 'progress should show Executed without verification');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// check-commit command (#1395)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('check-commit command', () => {
+  const { createTempGitProject } = require('./helpers.cjs');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempGitProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('allows commit when commit_docs is true', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ commit_docs: true })
+    );
+    const result = runGsdTools('check-commit', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.allowed, true);
+  });
+
+  test('allows commit when no .planning/ files staged and commit_docs is false', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ commit_docs: false })
+    );
+    // Stage a non-planning file
+    fs.writeFileSync(path.join(tmpDir, 'src.js'), 'console.log("hi")');
+    execSync('git add src.js', { cwd: tmpDir, stdio: 'pipe' });
+
+    const result = runGsdTools('check-commit', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.allowed, true);
+  });
+
+  test('blocks commit when .planning/ files staged and commit_docs is false', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ commit_docs: false })
+    );
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), '# State');
+    execSync('git add .planning/STATE.md', { cwd: tmpDir, stdio: 'pipe' });
+
+    const result = runGsdTools('check-commit', tmpDir);
+    assert.ok(!result.success, 'should block commit');
+    assert.ok(result.error.includes('.planning/'), 'error should mention .planning/ files');
+    assert.ok(result.error.includes('unstage'), 'error should suggest unstage command');
+  });
+});

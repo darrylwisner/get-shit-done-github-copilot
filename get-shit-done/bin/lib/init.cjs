@@ -780,6 +780,7 @@ function cmdInitMapCodebase(cwd, raw) {
     commit_docs: config.commit_docs,
     search_gitignored: config.search_gitignored,
     parallelization: config.parallelization,
+    subagent_timeout: config.subagent_timeout,
 
     // Paths
     codebase_dir: '.planning/codebase',
