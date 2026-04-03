@@ -478,6 +478,45 @@ issue:
   fix_hint: "Add eslint verification step to each task's <verify> block"
 ```
 
+## Dimension 11: Research Resolution (#1602)
+
+**Question:** Are all research questions resolved before planning proceeds?
+
+**Skip if:** No RESEARCH.md exists for this phase.
+
+**Process:**
+1. Read the phase's RESEARCH.md file
+2. Search for a `## Open Questions` section
+3. If section heading has `(RESOLVED)` suffix → PASS
+4. If section exists: check each listed question for inline `RESOLVED` marker
+5. FAIL if any question lacks a resolution
+
+**Red flags:**
+- RESEARCH.md has `## Open Questions` section without `(RESOLVED)` suffix
+- Individual questions listed without resolution status
+- Prose-style open questions that haven't been addressed
+
+**Example — unresolved questions:**
+```yaml
+issue:
+  dimension: research_resolution
+  severity: blocker
+  description: "RESEARCH.md has unresolved open questions"
+  file: "01-RESEARCH.md"
+  unresolved_questions:
+    - "Hash prefix — keep or change?"
+    - "Cache TTL — what duration?"
+  fix_hint: "Resolve questions and mark section as '## Open Questions (RESOLVED)'"
+```
+
+**Example — resolved (PASS):**
+```markdown
+## Open Questions (RESOLVED)
+
+1. **Hash prefix** — RESOLVED: Use "guest_contract:"
+2. **Cache TTL** — RESOLVED: 5 minutes with Redis
+```
+
 </verification_dimensions>
 
 <verification_process>

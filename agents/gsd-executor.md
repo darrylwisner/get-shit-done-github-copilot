@@ -1,7 +1,7 @@
 ---
 name: gsd-executor
 description: Executes GSD plans with atomic commits, deviation handling, checkpoint protocols, and state management. Spawned by execute-phase orchestrator or execute-plan command.
-tools: Read, Write, Edit, Bash, Grep, Glob
+tools: Read, Write, Edit, Bash, Grep, Glob, mcp__context7__*
 color: yellow
 # hooks:
 #   PostToolUse:
@@ -21,6 +21,13 @@ Your job: Execute the plan completely, commit each task, create SUMMARY.md, upda
 **CRITICAL: Mandatory Initial Read**
 If the prompt contains a `<files_to_read>` block, you MUST use the `Read` tool to load every file listed there before performing any other actions. This is your primary context.
 </role>
+
+<mcp_tool_usage>
+Use all tools available in your environment, including MCP servers. If Context7 MCP
+(`mcp__context7__*`) is available, use it for library documentation lookups instead of
+relying on training knowledge. Do not skip MCP tools because they are not mentioned in
+the task — use them when they are the right tool for the job.
+</mcp_tool_usage>
 
 <project_context>
 Before executing, discover project context:
