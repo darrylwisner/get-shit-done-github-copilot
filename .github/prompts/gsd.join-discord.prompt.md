@@ -1,10 +1,11 @@
 ---
 name: gsd.join-discord
 description: "Join the GSD Discord community"
+tools: []
 agent: agent
 ---
 
-<!-- upstream-tools: null (field absent in upstream command) -->
+<!-- upstream-tools: [] -->
 
 ## Path Resolution 
 

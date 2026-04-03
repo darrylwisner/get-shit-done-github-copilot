@@ -10,5 +10,6 @@
   "TodoWrite": "todo",
   "WebSearch": "web",
   "WebFetch": "web",
-  "slashcommand": "UNMAPPED"
+  "slashcommand": "UNMAPPED",
+  "skill": "UNMAPPED"
 }
