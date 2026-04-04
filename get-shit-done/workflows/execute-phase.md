@@ -25,6 +25,9 @@ via filesystem and git state.
 
 <required_reading>
 Read STATE.md before any operation to load project context.
+
+@~/.claude/get-shit-done/references/agent-contracts.md
+@~/.claude/get-shit-done/references/context-budget.md
 </required_reading>
 
 <available_agent_types>

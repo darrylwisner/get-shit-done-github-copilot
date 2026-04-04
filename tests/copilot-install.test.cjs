@@ -10,7 +10,7 @@
 process.env.GSD_TEST_MODE = '1';
 
 const { test, describe, beforeEach, afterEach } = require('node:test');
-const assert = require('node:assert');
+const assert = require('node:assert/strict');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -139,8 +139,8 @@ describe('Source code integration (Copilot)', () => {
     assert.ok(src.includes('--copilot'), 'help text has --copilot option');
   });
 
-  test('CLI-02: promptRuntime runtimeMap has Copilot as option 6', () => {
-    assert.ok(src.includes("'6': 'copilot'"), 'runtimeMap has 6 -> copilot');
+  test('CLI-02: promptRuntime runtimeMap has Copilot as option 5', () => {
+    assert.ok(src.includes("'5': 'copilot'"), 'runtimeMap has 5 -> copilot');
   });
 
   test('CLI-02: promptRuntime allRuntimes array includes copilot', () => {

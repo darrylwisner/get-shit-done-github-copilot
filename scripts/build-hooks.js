@@ -20,7 +20,11 @@ const HOOKS_TO_COPY = [
   'gsd-prompt-guard.js',
   'gsd-read-guard.js',
   'gsd-statusline.js',
-  'gsd-workflow-guard.js'
+  'gsd-workflow-guard.js',
+  // Community hooks (bash, opt-in via .planning/config.json hooks.community)
+  'gsd-session-state.sh',
+  'gsd-validate-commit.sh',
+  'gsd-phase-boundary.sh'
 ];
 
 /**
@@ -60,16 +64,22 @@ function build() {
       continue;
     }
 
-    // Validate syntax before copying
-    const syntaxError = validateSyntax(src);
-    if (syntaxError) {
-      console.error(`\x1b[31m✗ ${hook}: SyntaxError — ${syntaxError}\x1b[0m`);
-      hasErrors = true;
-      continue;
+    // Validate JS syntax before copying (.sh files skip — not Node.js)
+    if (hook.endsWith('.js')) {
+      const syntaxError = validateSyntax(src);
+      if (syntaxError) {
+        console.error(`\x1b[31m✗ ${hook}: SyntaxError — ${syntaxError}\x1b[0m`);
+        hasErrors = true;
+        continue;
+      }
     }
 
     console.log(`\x1b[32m✓\x1b[0m Copying ${hook}...`);
     fs.copyFileSync(src, dest);
+    // Preserve executable bit for shell scripts
+    if (hook.endsWith('.sh')) {
+      try { fs.chmodSync(dest, 0o755); } catch (e) { /* Windows */ }
+    }
   }
 
   if (hasErrors) {
