@@ -21,7 +21,7 @@
 
 ## System Overview
 
-GSD is a **meta-prompting framework** that sits between the user and AI coding agents (Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Copilot, Antigravity, Trae, Cline, Augment Code). It provides:
+GSD is a **meta-prompting framework** that sits between the user and AI coding agents (Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Copilot, Antigravity). It provides:
 
 1. **Context engineering** — Structured artifacts that give the AI everything it needs per task
 2. **Multi-agent orchestration** — Thin orchestrators that spawn specialized agents with fresh context windows
@@ -148,16 +148,6 @@ Shared knowledge documents that workflows and agents `@-reference`:
 - `tdd.md` — Test-driven development integration patterns
 - `ui-brand.md` — Visual output formatting patterns
 
-### Modular Planner Decomposition
-
-The planner agent (`agents/gsd-planner.md`) was decomposed from a single monolithic file into a core agent plus reference modules to stay under the 50K character limit imposed by some runtimes. The planner now `@-references` specialized modules:
-
-- `planner-gap-closure.md` — Gap closure mode behavior (reads VERIFICATION.md, targeted replanning)
-- `planner-reviews.md` — Cross-AI review integration (reads REVIEWS.md from `/gsd-review`)
-- `planner-revision.md` — Plan revision patterns for iterative refinement
-
-This keeps the base planner prompt under the character budget while preserving full functionality through on-demand reference loading.
-
 ### Templates (`get-shit-done/templates/`)
 
 Markdown templates for all planning artifacts. Used by `gsd-tools.cjs template fill` and `scaffold` commands to create pre-structured files:
@@ -181,8 +171,6 @@ Runtime hooks that integrate with the host AI agent:
 | `gsd-check-update.js` | `SessionStart` | Background check for new GSD versions |
 | `gsd-prompt-guard.js` | `PreToolUse` | Scans `.planning/` writes for prompt injection patterns (advisory) |
 | `gsd-workflow-guard.js` | `PreToolUse` | Detects file edits outside GSD workflow context (advisory, opt-in via `hooks.workflow_guard`) |
-| `gsd-read-before-edit.js` | `PreToolUse` | Advisory guard preventing Edit/Write on files not yet read in the session (v1.32) |
-| `gsd-commit-docs.js` | `PreToolUse` | Guard for `commit_docs` enforcement (v1.32) |
 
 ### CLI Tools (`get-shit-done/bin/`)
 
@@ -259,19 +247,10 @@ Wave Analysis:
 ```
 
 Each executor gets:
-- Fresh 200K context window (or up to 1M for models that support it)
+- Fresh 200K context window
 - The specific PLAN.md to execute
 - Project context (PROJECT.md, STATE.md)
 - Phase context (CONTEXT.md, RESEARCH.md if available)
-
-### Adaptive Context Enrichment (1M Models)
-
-When the context window is 500K+ tokens (1M-class models like Opus 4.6, Sonnet 4.6), subagent prompts are automatically enriched with additional context that would not fit in standard 200K windows:
-
-- **Executor agents** receive prior wave SUMMARY.md files and the phase CONTEXT.md/RESEARCH.md, enabling cross-plan awareness within a phase
-- **Verifier agents** receive all PLAN.md, SUMMARY.md, CONTEXT.md files plus REQUIREMENTS.md, enabling history-aware verification
-
-The orchestrator reads `context_window` from config (`gsd-tools.cjs config-get context_window`) and conditionally includes richer context when the value is >= 500,000. For standard 200K windows, prompts use truncated versions with cache-friendly ordering to maximize context efficiency.
 
 #### Parallel Commit Safety
 
@@ -323,16 +302,12 @@ ui-phase → UI-SPEC.md (design contract, optional)
     │
     ▼
 plan-phase
-    ├── Research gate (blocks if RESEARCH.md has unresolved open questions)
     ├── Phase Researcher → RESEARCH.md
-    ├── Planner (with reachability check) → PLAN.md files
+    ├── Planner → PLAN.md files
     └── Plan Checker → Verify loop (max 3x)
     │
     ▼
-state planned-phase → STATE.md (Planned/Ready to execute)
-    │
-    ▼
-execute-phase (context reduction: truncated prompts, cache-friendly ordering)
+execute-phase
     ├── Wave analysis (dependency grouping)
     ├── Executor per plan → code + atomic commits
     ├── SUMMARY.md per plan
@@ -451,7 +426,7 @@ Equivalent paths for other runtimes:
 
 The installer (`bin/install.js`, ~3,000 lines) handles:
 
-1. **Runtime detection** — Interactive prompt or CLI flags (`--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--antigravity`, `--cursor`, `--windsurf`, `--trae`, `--cline`, `--augment`, `--all`)
+1. **Runtime detection** — Interactive prompt or CLI flags (`--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--antigravity`, `--cursor`, `--windsurf`, `--trae`, `--all`)
 2. **Location selection** — Global (`--global`) or local (`--local`)
 3. **File deployment** — Copies commands, workflows, references, templates, agents, hooks
 4. **Runtime adaptation** — Transforms file content per runtime:
@@ -463,8 +438,6 @@ The installer (`bin/install.js`, ~3,000 lines) handles:
    - Gemini: Adjusts hook event names (`AfterTool` instead of `PostToolUse`)
    - Antigravity: Skills-first with Google model equivalents
    - Trae: Skills-first install to `~/.trae` / `./.trae` with no `settings.json` or hook integration
-   - Cline: Writes `.clinerules` for rule-based integration
-   - Augment Code: Skills-first with full skill conversion and config management
 5. **Path normalization** — Replaces `~/.claude/` paths with runtime-specific paths
 6. **Settings integration** — Registers hooks in runtime's `settings.json`
 7. **Patch backup** — Since v1.17, backs up locally modified files to `gsd-local-patches/` for `/gsd-reapply-patches`
@@ -546,9 +519,6 @@ GSD supports multiple AI coding runtimes through a unified command/workflow arch
 | Codex | `$gsd-command` | Skills | `~/.codex/` |
 | Copilot | `/gsd-command` | Agent delegation | `~/.github/` |
 | Antigravity | Skills | Skills | `~/.gemini/antigravity/` |
-| Trae | Skills | Skills | `~/.trae/` |
-| Cline | Rules | Rules | `.clinerules` |
-| Augment Code | Skills | Skills | Augment config |
 
 ### Abstraction Points
 

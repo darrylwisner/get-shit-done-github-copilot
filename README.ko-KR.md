@@ -4,14 +4,14 @@
 
 [English](README.md) · [Português](README.pt-BR.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · **한국어**
 
-**Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment, Trae, Cline을 위한 가볍고 강력한 메타 프롬프팅, 컨텍스트 엔지니어링, 스펙 기반 개발 시스템.**
+**Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment, Trae를 위한 가볍고 강력한 메타 프롬프팅, 컨텍스트 엔지니어링, 스펙 기반 개발 시스템.**
 
 **컨텍스트 rot를 해결합니다 — Claude의 컨텍스트 창이 채워질수록 품질이 저하되는 문제.**
 
 [![npm version](https://img.shields.io/npm/v/get-shit-done-cc?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/get-shit-done-cc)
 [![npm downloads](https://img.shields.io/npm/dm/get-shit-done-cc?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/get-shit-done-cc)
 [![Tests](https://img.shields.io/github/actions/workflow/status/gsd-build/get-shit-done/test.yml?branch=main&style=for-the-badge&logo=github&label=Tests)](https://github.com/gsd-build/get-shit-done/actions/workflows/test.yml)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/mYgfVNfA2r)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/gsd)
 [![X (Twitter)](https://img.shields.io/badge/X-@gsd__foundation-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/gsd_foundation)
 [![$GSD Token](https://img.shields.io/badge/$GSD-Dexscreener-1C1C1C?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIgZmlsbD0iIzAwRkYwMCIvPjwvc3ZnPg==&logoColor=00FF00)](https://dexscreener.com/solana/dwudwjvan7bzkw9zwlbyv6kspdlvhwzrqy6ebk8xzxkv)
 [![GitHub stars](https://img.shields.io/github/stars/gsd-build/get-shit-done?style=for-the-badge&logo=github&color=181717)](https://github.com/gsd-build/get-shit-done)
@@ -75,16 +75,6 @@ GSD가 그걸 고칩니다. Claude Code를 신뢰할 수 있게 만드는 컨텍
 
 내장 품질 게이트가 실제 문제를 잡아냅니다: 스키마 드리프트 감지는 마이그레이션 누락된 ORM 변경을 플래그하고, 보안 강제는 검증을 위협 모델에 고정시키고, 스코프 축소 감지는 플래너가 요구사항을 몰래 빠뜨리는 걸 방지합니다.
 
-### v1.32.0 하이라이트
-
-- **STATE.md 일관성 게이트** — `state validate`가 STATE.md와 파일시스템 간 드리프트를 감지, `state sync`가 실제 프로젝트 상태에서 재구성
-- **`--to N` 플래그** — 자율 실행을 특정 단계 완료 후 중지
-- **리서치 게이트** — RESEARCH.md에 미해결 질문이 있으면 기획을 차단
-- **검증 마일스톤 스코프 필터링** — 이후 단계에서 처리될 격차는 "격차"가 아닌 "지연됨"으로 표시
-- **읽기-후-편집 가드** — 비Claude 런타임에서 무한 재시도 루프를 방지하는 어드바이저리 훅
-- **컨텍스트 축소** — 마크다운 잘라내기 및 캐시 친화적 프롬프트 순서로 토큰 사용량 절감
-- **4개의 새 런타임** — Trae, Kilo, Augment, Cline (총 12개 런타임)
-
 ---
 
 ## 시작하기
@@ -94,20 +84,20 @@ npx get-shit-done-cc@latest
 ```
 
 설치 중에 다음을 선택합니다:
-1. **런타임** — Claude Code, OpenCode, Gemini, Kilo, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment, Trae, Cline, 또는 전체 (대화형 다중 선택 — 한 번에 여러 런타임 선택 가능)
+1. **런타임** — Claude Code, OpenCode, Gemini, Kilo, Codex, Copilot, Cursor, Windsurf, Antigravity, Trae, 또는 전체 (대화형 다중 선택 — 한 번에 여러 런타임 선택 가능)
 2. **위치** — 전역 (모든 프로젝트) 또는 로컬 (현재 프로젝트만)
 
 설치가 됐는지 확인하려면:
-- Claude Code / Gemini / Copilot / Antigravity: `/gsd-help`
-- OpenCode / Kilo / Augment / Trae: `/gsd-help`
+- Claude Code / Gemini: `/gsd-help`
+- OpenCode: `/gsd-help`
+- Kilo: `/gsd-help`
 - Codex: `$gsd-help`
-- Cline: GSD는 `.clinerules`를 통해 설치 — `.clinerules` 존재 여부 확인
+- Copilot: `/gsd-help`
+- Antigravity: `/gsd-help`
+- Trae: `/gsd-help`
 
 > [!NOTE]
-> Claude Code 2.1.88+와 Codex는 스킬(`skills/gsd-*/SKILL.md`)로 설치됩니다. Cline은 `.clinerules`를 사용합니다. 설치 프로그램이 모든 형식을 자동으로 처리합니다.
-
-> [!TIP]
-> 소스 기반 설치 또는 npm을 사용할 수 없는 환경은 **[docs/manual-update.md](docs/manual-update.md)**를 참조하세요.
+> Codex 설치는 커스텀 프롬프트 대신 스킬(`skills/gsd-*/SKILL.md`)을 사용합니다.
 
 ### 업데이트 유지
 
@@ -151,24 +141,16 @@ npx get-shit-done-cc --cursor --local       # ./.cursor/에 설치
 npx get-shit-done-cc --antigravity --global # ~/.gemini/antigravity/에 설치
 npx get-shit-done-cc --antigravity --local  # ./.agent/에 설치
 
-# Augment
-npx get-shit-done-cc --augment --global     # ~/.augment/에 설치
-npx get-shit-done-cc --augment --local      # ./.augment/에 설치
-
 # Trae (ByteDance, 스킬 우선)
 npx get-shit-done-cc --trae --global        # ~/.trae/에 설치
 npx get-shit-done-cc --trae --local         # ./.trae/에 설치
-
-# Cline (.clinerules 사용)
-npx get-shit-done-cc --cline --global       # ~/.cline/에 설치
-npx get-shit-done-cc --cline --local        # ./.clinerules에 설치
 
 # 전체 런타임
 npx get-shit-done-cc --all --global      # 모든 디렉터리에 설치
 ```
 
 위치 프롬프트 건너뛰기: `--global` (`-g`) 또는 `--local` (`-l`).
-런타임 프롬프트 건너뛰기: `--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--cursor`, `--windsurf`, `--antigravity`, `--augment`, `--trae`, `--cline`, 또는 `--all`.
+런타임 프롬프트 건너뛰기: `--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--cursor`, `--windsurf`, `--antigravity`, `--trae`, 또는 `--all`.
 
 </details>
 

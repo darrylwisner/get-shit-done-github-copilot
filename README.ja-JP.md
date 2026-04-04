@@ -4,14 +4,16 @@
 
 [English](README.md) · [Português](README.pt-BR.md) · [简体中文](README.zh-CN.md) · **日本語**
 
-**Claude Code、OpenCode、Gemini CLI、Kilo、Codex、Copilot、Cursor、Windsurf、Antigravity、Augment、Trae、Cline向けの軽量かつ強力なメタプロンプティング、コンテキストエンジニアリング、仕様駆動開発システム。**
+**Claude Code、OpenCode、Gemini CLI、Kilo、Codex、Copilot、Cursor、Windsurf、Antigravity、Augment、Trae向けの軽量かつ強力なメタプロンプティング、コンテキストエンジニアリング、仕様駆動開発システム。**
 
 **コンテキストロット（Claudeがコンテキストウィンドウを消費するにつれ品質が劣化する現象）を解決します。**
+
+[**English**](README.md) | [**Português**](README.pt-BR.md) | [**简体中文**](docs/zh-CN/README.md) | [**日本語**](docs/ja-JP/README.md)
 
 [![npm version](https://img.shields.io/npm/v/get-shit-done-cc?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/get-shit-done-cc)
 [![npm downloads](https://img.shields.io/npm/dm/get-shit-done-cc?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/get-shit-done-cc)
 [![Tests](https://img.shields.io/github/actions/workflow/status/gsd-build/get-shit-done/test.yml?branch=main&style=for-the-badge&logo=github&label=Tests)](https://github.com/gsd-build/get-shit-done/actions/workflows/test.yml)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/mYgfVNfA2r)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/gsd)
 [![X (Twitter)](https://img.shields.io/badge/X-@gsd__foundation-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/gsd_foundation)
 [![$GSD Token](https://img.shields.io/badge/$GSD-Dexscreener-1C1C1C?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIgZmlsbD0iIzAwRkYwMCIvPjwvc3ZnPg==&logoColor=00FF00)](https://dexscreener.com/solana/dwudwjvan7bzkw9zwlbyv6kspdlvhwzrqy6ebk8xzxkv)
 [![GitHub stars](https://img.shields.io/github/stars/gsd-build/get-shit-done?style=for-the-badge&logo=github&color=181717)](https://github.com/gsd-build/get-shit-done)
@@ -75,16 +77,6 @@ GSDはそれを解決します。Claude Codeを信頼性の高いものにする
 
 ビルトインの品質ゲートが本当の問題を検出します：スキーマドリフト検出はマイグレーション漏れのORM変更をフラグし、セキュリティ強制は検証を脅威モデルに紐付け、スコープ削減検出はプランナーが要件を暗黙的に落とすのを防止します。
 
-### v1.32.0 ハイライト
-
-- **STATE.md整合性ゲート** — `state validate`がSTATE.mdとファイルシステムの差分を検出、`state sync`が実際のプロジェクト状態から再構築
-- **`--to N`フラグ** — 自律実行を特定のフェーズ完了後に停止
-- **リサーチゲート** — RESEARCH.mdに未解決の質問がある場合、計画をブロック
-- **検証マイルストーンスコープフィルタリング** — 後のフェーズで対処されるギャップは「ギャップ」ではなく「延期」としてマーク
-- **読み取り後編集ガード** — 非Claudeランタイムでの無限リトライループを防止するアドバイザリーフック
-- **コンテキスト削減** — Markdownのトランケーションとキャッシュフレンドリーなプロンプト順序でトークン使用量を削減
-- **4つの新ランタイム** — Trae、Kilo、Augment、Cline（合計12ランタイム）
-
 ---
 
 ## はじめに
@@ -94,20 +86,20 @@ npx get-shit-done-cc@latest
 ```
 
 インストーラーが以下の選択を求めます：
-1. **ランタイム** — Claude Code、OpenCode、Gemini、Kilo、Codex、Copilot、Cursor、Windsurf、Antigravity、Augment、Trae、Cline、またはすべて（インタラクティブ複数選択 — 1回のインストールセッションで複数のランタイムを選択可能）
+1. **ランタイム** — Claude Code、OpenCode、Gemini、Kilo、Codex、Copilot、Cursor、Windsurf、Antigravity、Trae、またはすべて（インタラクティブ複数選択 — 1回のインストールセッションで複数のランタイムを選択可能）
 2. **インストール先** — グローバル（全プロジェクト）またはローカル（現在のプロジェクトのみ）
 
 確認方法：
-- Claude Code / Gemini / Copilot / Antigravity: `/gsd-help`
-- OpenCode / Kilo / Augment / Trae: `/gsd-help`
+- Claude Code / Gemini: `/gsd-help`
+- OpenCode: `/gsd-help`
+- Kilo: `/gsd-help`
 - Codex: `$gsd-help`
-- Cline: GSDは`.clinerules`経由でインストール — `.clinerules`の存在を確認
+- Copilot: `/gsd-help`
+- Antigravity: `/gsd-help`
+- Trae: `/gsd-help`
 
 > [!NOTE]
-> Claude Code 2.1.88+とCodexはスキル（`skills/gsd-*/SKILL.md`）としてインストールされます。Clineは`.clinerules`を使用します。インストーラーがすべての形式を自動的に処理します。
-
-> [!TIP]
-> ソースベースのインストールやnpmが利用できない環境については、**[docs/manual-update.md](docs/manual-update.md)**を参照してください。
+> Codexのインストールでは、カスタムプロンプトではなくスキル（`skills/gsd-*/SKILL.md`）を使用します。
 
 ### 最新の状態を保つ
 
@@ -151,24 +143,16 @@ npx get-shit-done-cc --cursor --local       # ./.cursor/ にインストール
 npx get-shit-done-cc --antigravity --global # ~/.gemini/antigravity/ にインストール
 npx get-shit-done-cc --antigravity --local  # ./.agent/ にインストール
 
-# Augment
-npx get-shit-done-cc --augment --global     # ~/.augment/ にインストール
-npx get-shit-done-cc --augment --local      # ./.augment/ にインストール
-
 # Trae（ByteDance、スキルファースト）
 npx get-shit-done-cc --trae --global        # ~/.trae/ にインストール
 npx get-shit-done-cc --trae --local         # ./.trae/ にインストール
-
-# Cline（.clinerules使用）
-npx get-shit-done-cc --cline --global       # ~/.cline/ にインストール
-npx get-shit-done-cc --cline --local        # ./.clinerules にインストール
 
 # 全ランタイム
 npx get-shit-done-cc --all --global      # すべてのディレクトリにインストール
 ```
 
 `--global`（`-g`）または `--local`（`-l`）でインストール先の質問をスキップできます。
-`--claude`、`--opencode`、`--gemini`、`--kilo`、`--codex`、`--copilot`、`--cursor`、`--windsurf`、`--antigravity`、`--augment`、`--trae`、`--cline`、または `--all` でランタイムの質問をスキップできます。
+`--claude`、`--opencode`、`--gemini`、`--kilo`、`--codex`、`--copilot`、`--cursor`、`--windsurf`、`--antigravity`、`--trae`、または `--all` でランタイムの質問をスキップできます。
 
 </details>
 
