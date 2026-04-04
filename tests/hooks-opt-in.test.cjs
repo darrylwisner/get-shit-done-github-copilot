@@ -9,7 +9,7 @@
  */
 
 const { test, describe, beforeEach, afterEach } = require('node:test');
-const assert = require('node:assert');
+const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -17,6 +17,18 @@ const { spawnSync } = require('child_process');
 
 const HOOKS_DIR = path.join(__dirname, '..', 'hooks');
 const isWindows = process.platform === 'win32';
+
+// Ensure the running node binary is on PATH so bash hooks can call `node`
+// (Claude Code shell sessions do not have `node` on PATH).
+const hookEnv = {
+  ...process.env,
+  PATH: `${path.dirname(process.execPath)}:${process.env.PATH || '/usr/local/bin:/usr/bin:/bin'}`,
+};
+
+// Wrapper that always injects hookEnv so bash hooks can find `node`.
+function spawnHook(hookPath, options) {
+  return spawnSync('bash', [hookPath], { ...options, env: hookEnv });
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -212,7 +224,7 @@ describe('opt-in gating behavior', { skip: isWindows ? 'bash hooks require unix 
       tool_input: { command: 'git commit -m "WIP save"' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -222,25 +234,22 @@ describe('opt-in gating behavior', { skip: isWindows ? 'bash hooks require unix 
     assert.strictEqual(result.status, 0, `Should be no-op when disabled, got ${result.status}`);
   });
 
-  test('validate-commit is a no-op when config.json is absent', () => {
+  test('validate-commit is a no-op when config.json is absent', (t) => {
     // No config.json at all
     const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-hook-bare-'));
+    t.after(() => { fs.rmSync(bareDir, { recursive: true, force: true }); });
     const hookPath = path.join(HOOKS_DIR, 'gsd-validate-commit.sh');
     const input = JSON.stringify({
       tool_input: { command: 'git commit -m "WIP save"' }
     });
 
-    try {
-      const result = spawnSync('bash', [hookPath], {
-        input,
-        encoding: 'utf-8',
-        cwd: bareDir,
-      });
+    const result = spawnHook(hookPath, {
+      input,
+      encoding: 'utf-8',
+      cwd: bareDir,
+    });
 
-      assert.strictEqual(result.status, 0, `Should be no-op without config.json, got ${result.status}`);
-    } finally {
-      fs.rmSync(bareDir, { recursive: true, force: true });
-    }
+    assert.strictEqual(result.status, 0, `Should be no-op without config.json, got ${result.status}`);
   });
 
   test('session-state is a no-op when hooks.community is false', () => {
@@ -248,7 +257,7 @@ describe('opt-in gating behavior', { skip: isWindows ? 'bash hooks require unix 
     writeMinimalStateMd(tmpDir);
     const hookPath = path.join(HOOKS_DIR, 'gsd-session-state.sh');
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input: '',
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -269,7 +278,7 @@ describe('opt-in gating behavior', { skip: isWindows ? 'bash hooks require unix 
       tool_input: { file_path: '.planning/STATE.md' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -305,7 +314,7 @@ describe('hook execution when enabled', { skip: isWindows ? 'bash hooks require 
       tool_input: { command: 'git commit -m "fix(core): add locking mechanism"' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -320,7 +329,7 @@ describe('hook execution when enabled', { skip: isWindows ? 'bash hooks require 
       tool_input: { command: 'git commit -m "WIP save"' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -337,7 +346,7 @@ describe('hook execution when enabled', { skip: isWindows ? 'bash hooks require 
       tool_input: { command: 'git push origin main' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -350,7 +359,7 @@ describe('hook execution when enabled', { skip: isWindows ? 'bash hooks require 
     writeMinimalStateMd(tmpDir);
     const hookPath = path.join(HOOKS_DIR, 'gsd-session-state.sh');
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input: '',
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -363,28 +372,25 @@ describe('hook execution when enabled', { skip: isWindows ? 'bash hooks require 
     );
   });
 
-  test('session-state exits 0 without .planning/ (in enabled project)', () => {
+  test('session-state exits 0 without .planning/ (in enabled project)', (t) => {
     // Create a dir with config but no STATE.md
     const noStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-hook-nostate-'));
+    t.after(() => { fs.rmSync(noStateDir, { recursive: true, force: true }); });
     fs.mkdirSync(path.join(noStateDir, '.planning'), { recursive: true });
     writeConfigWithHooks(noStateDir, true);
     const hookPath = path.join(HOOKS_DIR, 'gsd-session-state.sh');
 
-    try {
-      const result = spawnSync('bash', [hookPath], {
-        input: '',
-        encoding: 'utf-8',
-        cwd: noStateDir,
-      });
+    const result = spawnHook(hookPath, {
+      input: '',
+      encoding: 'utf-8',
+      cwd: noStateDir,
+    });
 
-      assert.strictEqual(result.status, 0, `Should exit 0: ${result.stderr}`);
-      assert.ok(
-        result.stdout.includes('No .planning/ found') || result.stdout.includes('Project State'),
-        `Should handle missing STATE.md gracefully: ${result.stdout}`
-      );
-    } finally {
-      fs.rmSync(noStateDir, { recursive: true, force: true });
-    }
+    assert.strictEqual(result.status, 0, `Should exit 0: ${result.stderr}`);
+    assert.ok(
+      result.stdout.includes('No .planning/ found') || result.stdout.includes('Project State'),
+      `Should handle missing STATE.md gracefully: ${result.stdout}`
+    );
   });
 
   test('phase-boundary detects .planning/ writes when enabled', () => {
@@ -393,7 +399,7 @@ describe('hook execution when enabled', { skip: isWindows ? 'bash hooks require 
       tool_input: { file_path: '.planning/STATE.md' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -429,7 +435,7 @@ describe('hook security tests', { skip: isWindows ? 'bash hooks require unix she
       tool_input: { command: 'git commit -m "$(rm -rf /)"' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -445,7 +451,7 @@ describe('hook security tests', { skip: isWindows ? 'bash hooks require unix she
       tool_input: { command: 'git commit -m "`whoami`"' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -461,7 +467,7 @@ describe('hook security tests', { skip: isWindows ? 'bash hooks require unix she
       tool_input: { command: 'git commit -m "fix(api/v2): handle edge case"' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -474,7 +480,7 @@ describe('hook security tests', { skip: isWindows ? 'bash hooks require unix she
     const hookPath = path.join(HOOKS_DIR, 'gsd-phase-boundary.sh');
     const input = 'not json at all';
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,
@@ -495,7 +501,7 @@ describe('hook security tests', { skip: isWindows ? 'bash hooks require unix she
       tool_input: { command: 'git commit -m "WIP save"' }
     });
 
-    const result = spawnSync('bash', [hookPath], {
+    const result = spawnHook(hookPath, {
       input,
       encoding: 'utf-8',
       cwd: tmpDir,

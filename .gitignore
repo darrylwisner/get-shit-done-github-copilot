@@ -62,3 +62,4 @@ vendor/
 *.log
 .cache/
 tmp/
+.worktrees
