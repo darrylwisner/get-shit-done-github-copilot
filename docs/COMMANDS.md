@@ -101,7 +101,6 @@ Capture implementation decisions before planning.
 | `--auto` | Auto-select recommended defaults for all questions |
 | `--batch` | Group questions for batch intake instead of one-by-one |
 | `--analyze` | Add trade-off analysis during discussion |
-| `--power` | File-based bulk question answering from a prepared answers file |
 
 **Prerequisites:** `.planning/ROADMAP.md` exists
 **Produces:** `{phase}-CONTEXT.md`, `{phase}-DISCUSSION-LOG.md` (audit trail)
@@ -111,7 +110,6 @@ Capture implementation decisions before planning.
 /gsd-discuss-phase 3 --auto         # Auto-select defaults for phase 3
 /gsd-discuss-phase --batch          # Batch mode for current phase
 /gsd-discuss-phase 2 --analyze      # Discussion with trade-off analysis
-/gsd-discuss-phase 1 --power        # Bulk answers from file
 ```
 
 ---
@@ -150,7 +148,6 @@ Research, plan, and verify a phase.
 | `--skip-verify` | Skip plan checker verification loop |
 | `--prd <file>` | Use a PRD file instead of discuss-phase for context |
 | `--reviews` | Replan with cross-AI review feedback from REVIEWS.md |
-| `--validate` | Run state validation before planning begins |
 
 **Prerequisites:** `.planning/ROADMAP.md` exists
 **Produces:** `{phase}-RESEARCH.md`, `{phase}-{N}-PLAN.md`, `{phase}-VALIDATION.md`
@@ -159,7 +156,6 @@ Research, plan, and verify a phase.
 /gsd-plan-phase 1                   # Research + plan + verify phase 1
 /gsd-plan-phase 3 --skip-research   # Plan without research (familiar domain)
 /gsd-plan-phase --auto              # Non-interactive planning
-/gsd-plan-phase 2 --validate        # Validate state before planning
 ```
 
 ---
@@ -172,7 +168,6 @@ Execute all plans in a phase with wave-based parallelization, or run a specific 
 |----------|----------|-------------|
 | `N` | **Yes** | Phase number to execute |
 | `--wave N` | No | Execute only Wave `N` in the phase |
-| `--validate` | No | Run state validation before execution begins |
 
 **Prerequisites:** Phase has PLAN.md files
 **Produces:** per-plan `{phase}-{N}-SUMMARY.md`, git commits, and `{phase}-VERIFICATION.md` when the phase is fully complete
@@ -180,7 +175,6 @@ Execute all plans in a phase with wave-based parallelization, or run a specific 
 ```bash
 /gsd-execute-phase 1                # Execute phase 1
 /gsd-execute-phase 1 --wave 2       # Execute only Wave 2
-/gsd-execute-phase 1 --validate     # Validate state before execution
 ```
 
 ---
@@ -506,26 +500,9 @@ Interactive command center for managing multiple phases from one terminal.
 - Recommends optimal next actions based on dependencies and progress
 - Dispatches work: discuss runs inline, plan/execute run as background agents
 - Designed for power users parallelizing work across phases from one terminal
-- Supports per-step passthrough flags via `manager.flags` config (see [Configuration](CONFIGURATION.md#manager-passthrough-flags))
 
 ```bash
 /gsd-manager                        # Open command center dashboard
-```
-
-**Manager Passthrough Flags:**
-
-Configure per-step flags in `.planning/config.json` under `manager.flags`. These flags are appended to each dispatched command:
-
-```json
-{
-  "manager": {
-    "flags": {
-      "discuss": "--auto",
-      "plan": "--skip-research",
-      "execute": "--validate"
-    }
-  }
-}
 ```
 
 ---
@@ -568,14 +545,10 @@ Run all remaining phases autonomously.
 | Flag | Description |
 |------|-------------|
 | `--from N` | Start from a specific phase number |
-| `--to N` | Stop after completing a specific phase number |
-| `--interactive` | Lean context with user input |
 
 ```bash
 /gsd-autonomous                     # Run all remaining phases
 /gsd-autonomous --from 3            # Start from phase 3
-/gsd-autonomous --to 5              # Run up to and including phase 5
-/gsd-autonomous --from 3 --to 5     # Run phases 3 through 5
 ```
 
 ### `/gsd-do`
@@ -614,13 +587,8 @@ Systematic debugging with persistent state.
 |----------|----------|-------------|
 | `description` | No | Description of the bug |
 
-| Flag | Description |
-|------|-------------|
-| `--diagnose` | Diagnosis-only mode — investigate without attempting fixes |
-
 ```bash
 /gsd-debug "Login button not responding on mobile Safari"
-/gsd-debug --diagnose "Intermittent 500 errors on /api/users"
 ```
 
 ### `/gsd-add-todo`
@@ -864,7 +832,6 @@ Cross-AI peer review of phase plans from external AI CLIs.
 | `--claude` | Include Claude CLI review (separate session) |
 | `--codex` | Include Codex CLI review |
 | `--coderabbit` | Include CodeRabbit review |
-| `--opencode` | Include OpenCode review (via GitHub Copilot) |
 | `--all` | Include all available CLIs |
 
 **Produces:** `{phase}-REVIEWS.md` — consumable by `/gsd-plan-phase --reviews`
@@ -976,75 +943,7 @@ Threads are lightweight cross-session knowledge stores for work that spans multi
 
 ---
 
-## State Management Commands
-
-### `state validate`
-
-Detect drift between STATE.md and the actual filesystem.
-
-**Prerequisites:** `.planning/STATE.md` exists
-**Produces:** Validation report showing any drift between STATE.md fields and filesystem reality
-
-```bash
-node gsd-tools.cjs state validate
-```
-
----
-
-### `state sync [--verify]`
-
-Reconstruct STATE.md from actual project state on disk.
-
-| Flag | Description |
-|------|-------------|
-| `--verify` | Dry-run mode — show proposed changes without writing |
-
-**Prerequisites:** `.planning/` directory exists
-**Produces:** Updated `STATE.md` reflecting filesystem reality
-
-```bash
-node gsd-tools.cjs state sync             # Reconstruct STATE.md from disk
-node gsd-tools.cjs state sync --verify    # Dry-run: show changes without writing
-```
-
----
-
-### `state planned-phase`
-
-Record state transition after plan-phase completes (Planned/Ready to execute).
-
-| Flag | Description |
-|------|-------------|
-| `--phase N` | Phase number that was planned |
-| `--plans N` | Number of plans generated |
-
-**Prerequisites:** Phase has been planned
-**Produces:** Updated `STATE.md` with post-planning state
-
-```bash
-node gsd-tools.cjs state planned-phase --phase 3 --plans 2
-```
-
----
-
 ## Community Commands
-
-### Community Hooks
-
-Optional git and session hooks gated behind `hooks.community: true` in `.planning/config.json`. All are no-ops unless explicitly enabled.
-
-| Hook | Purpose |
-|------|---------|
-| `gsd-validate-commit.sh` | Enforce Conventional Commits format on git commit messages |
-| `gsd-session-state.sh` | Track session state transitions |
-| `gsd-phase-boundary.sh` | Enforce phase boundary checks |
-
-Enable with:
-```json
-{ "hooks": { "community": true } }
-```
-
----
 
 ### `/gsd-join-discord`
 
