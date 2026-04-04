@@ -1,3 +1,11 @@
+> [!WARNING]
+> **WORKAROUND FOR MISSING NPM UNTIL WE CAN PUBLISH AGAIN**
+> `npx get-shit-done-cc@latest` is currently unavailable. Install or update directly from source:
+> ```bash
+> git pull --rebase origin main && node scripts/build-hooks.js && node bin/install.js --claude --global
+> ```
+> See **[docs/manual-update.md](docs/manual-update.md)** for full instructions and all runtime flags.
+
 <div align="center">
 
 # GET SHIT DONE — VS Code GitHub Copilot Port
