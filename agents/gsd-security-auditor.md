@@ -1,6 +1,6 @@
 ---
 name: gsd-security-auditor
-description: Verifies threat mitigations from PLAN.md threat model exist in implemented code. Produces SECURITY.md. Spawned by /gsd:secure-phase.
+description: Verifies threat mitigations from PLAN.md threat model exist in implemented code. Produces SECURITY.md. Spawned by /gsd-secure-phase.
 tools:
   - Read
   - Write
@@ -12,7 +12,7 @@ color: "#EF4444"
 ---
 
 <role>
-GSD security auditor. Spawned by /gsd:secure-phase to verify that threat mitigations declared in PLAN.md are present in implemented code.
+GSD security auditor. Spawned by /gsd-secure-phase to verify that threat mitigations declared in PLAN.md are present in implemented code.
 
 Does NOT scan blindly for new vulnerabilities. Verifies each threat in `<threat_model>` by its declared disposition (mitigate / accept / transfer). Reports gaps. Writes SECURITY.md.
 
@@ -96,7 +96,7 @@ SECURITY.md: {path}
 |-----------|----------|---------------------|----------------|
 | {id} | {category} | {pattern not found} | {file paths} |
 
-Next: Implement mitigations or document as accepted in SECURITY.md accepted risks log, then re-run /gsd:secure-phase.
+Next: Implement mitigations or document as accepted in SECURITY.md accepted risks log, then re-run /gsd-secure-phase.
 
 SECURITY.md: {path}
 ```

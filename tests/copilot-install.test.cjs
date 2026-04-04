@@ -659,7 +659,7 @@ describe('copyCommandsAsCopilotSkills', () => {
     assert.ok(skillContent.includes('description: Run all remaining phases autonomously'),
       'description preserved');
     // argument-hint present and double-quoted
-    assert.ok(skillContent.includes('argument-hint: "[--from N] [--only N] [--interactive]"'), 'argument-hint present and quoted');
+    assert.ok(skillContent.includes('argument-hint: "[--from N] [--to N] [--only N] [--interactive]"'), 'argument-hint present and quoted');
     // allowed-tools comma-separated
     assert.ok(skillContent.includes('allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, Task'),
       'allowed-tools is comma-separated');
@@ -1081,7 +1081,7 @@ describe('Copilot manifest and patches fixes', () => {
       assert.ok(!output.includes('/gsd:reapply-patches'), 'does not use colon format');
     });
 
-    test('reportLocalPatches shows /gsd:reapply-patches for Claude (unchanged)', () => {
+    test('reportLocalPatches shows /gsd-reapply-patches for Claude', () => {
       // Create patches directory with metadata
       const patchesDir = path.join(tmpDir, 'gsd-local-patches');
       fs.mkdirSync(patchesDir, { recursive: true });
@@ -1094,7 +1094,8 @@ describe('Copilot manifest and patches fixes', () => {
 
       assert.ok(result.length > 0, 'returns patched files list');
       const output = logs.join('\n');
-      assert.ok(output.includes('/gsd:reapply-patches'), 'uses colon format for Claude');
+      assert.ok(output.includes('/gsd-reapply-patches'), 'uses hyphen format for Claude');
+      assert.ok(!output.includes('/gsd:reapply-patches'), 'does not use colon format for Claude');
     });
   });
 });

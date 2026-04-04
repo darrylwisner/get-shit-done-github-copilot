@@ -19,7 +19,7 @@
 |------|-----------|---------------|
 | Normal | > 35% | 경고 없음 |
 | WARNING | <= 35% | 현재 작업 마무리, 새로운 복잡한 작업 시작 금지 |
-| CRITICAL | <= 25% | 즉시 중단 후 상태 저장 (`/gsd:pause-work`) |
+| CRITICAL | <= 25% | 즉시 중단 후 상태 저장 (`/gsd-pause-work`) |
 
 ## Debounce
 
@@ -56,7 +56,7 @@ additionalContext -> 에이전트가 경고를 받음
 
 ## GSD와의 통합
 
-GSD의 `/gsd:pause-work` 명령어는 실행 상태를 저장합니다. WARNING 메시지는 해당 명령어 사용을 권장하며 CRITICAL 메시지는 즉각적인 상태 저장을 지시합니다.
+GSD의 `/gsd-pause-work` 명령어는 실행 상태를 저장합니다. WARNING 메시지는 해당 명령어 사용을 권장하며 CRITICAL 메시지는 즉각적인 상태 저장을 지시합니다.
 
 ## 설정
 

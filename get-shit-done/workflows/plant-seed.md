@@ -1,6 +1,6 @@
 <purpose>
 Capture a forward-looking idea as a structured seed file with trigger conditions.
-Seeds auto-surface during /gsd:new-milestone when trigger conditions match the
+Seeds auto-surface during /gsd-new-milestone when trigger conditions match the
 new milestone's scope.
 
 Seeds beat deferred items because they:
@@ -117,7 +117,7 @@ scope: {$SCOPE}
 
 **Trigger:** {$TRIGGER}
 
-This seed should be presented during `/gsd:new-milestone` when the milestone
+This seed should be presented during `/gsd-new-milestone` when the milestone
 scope matches any of these conditions:
 - {trigger condition 1}
 - {trigger condition 2}
@@ -153,7 +153,7 @@ Trigger: {$TRIGGER}
 Scope: {$SCOPE}
 File: .planning/seeds/SEED-{PADDED}-{slug}.md
 
-This seed will surface automatically when you run /gsd:new-milestone
+This seed will surface automatically when you run /gsd-new-milestone
 and the milestone scope matches the trigger condition.
 ```
 </step>

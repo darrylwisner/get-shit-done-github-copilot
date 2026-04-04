@@ -399,6 +399,14 @@ async function runCommand(command, args, cwd, raw) {
         state.cmdSignalWaiting(cwd, type, question, options, p, raw);
       } else if (subcommand === 'signal-resume') {
         state.cmdSignalResume(cwd, raw);
+      } else if (subcommand === 'planned-phase') {
+        const { phase: p, name, plans } = parseNamedArgs(args, ['phase', 'name', 'plans']);
+        state.cmdStatePlannedPhase(cwd, p, plans !== null ? parseInt(plans, 10) : null, raw);
+      } else if (subcommand === 'validate') {
+        state.cmdStateValidate(cwd, raw);
+      } else if (subcommand === 'sync') {
+        const { verify } = parseNamedArgs(args, [], ['verify']);
+        state.cmdStateSync(cwd, { verify }, raw);
       } else {
         state.cmdStateLoad(cwd, raw);
       }
@@ -727,12 +735,16 @@ async function runCommand(command, args, cwd, raw) {
     case 'init': {
       const workflow = args[1];
       switch (workflow) {
-        case 'execute-phase':
-          init.cmdInitExecutePhase(cwd, args[2], raw);
+        case 'execute-phase': {
+          const { validate: epValidate } = parseNamedArgs(args, [], ['validate']);
+          init.cmdInitExecutePhase(cwd, args[2], raw, { validate: epValidate });
           break;
-        case 'plan-phase':
-          init.cmdInitPlanPhase(cwd, args[2], raw);
+        }
+        case 'plan-phase': {
+          const { validate: ppValidate } = parseNamedArgs(args, [], ['validate']);
+          init.cmdInitPlanPhase(cwd, args[2], raw, { validate: ppValidate });
           break;
+        }
         case 'new-project':
           init.cmdInitNewProject(cwd, raw);
           break;

@@ -18,6 +18,7 @@ const HOOKS_TO_COPY = [
   'gsd-check-update.js',
   'gsd-context-monitor.js',
   'gsd-prompt-guard.js',
+  'gsd-read-guard.js',
   'gsd-statusline.js',
   'gsd-workflow-guard.js'
 ];

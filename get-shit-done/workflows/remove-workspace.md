@@ -21,7 +21,7 @@ Parse JSON for: `workspace_name`, `workspace_path`, `has_manifest`, `strategy`, 
 
 **If no workspace name provided:**
 
-First run `/gsd:list-workspaces` to show available workspaces, then ask:
+First run `/gsd-list-workspaces` to show available workspaces, then ask:
 
 Use AskUserQuestion:
 - header: "Remove Workspace"

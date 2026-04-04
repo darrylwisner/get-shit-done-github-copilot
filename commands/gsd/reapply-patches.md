@@ -115,7 +115,7 @@ Read `backup-meta.json` from the patches directory.
 ```
 No local patches found. Nothing to reapply.
 
-Local patches are automatically saved when you run /gsd:update
+Local patches are automatically saved when you run /gsd-update
 after modifying any GSD workflow, command, or agent files.
 ```
 Exit.

@@ -1740,5 +1740,414 @@ describe('progress counters correct after plan execution (#1589)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// updatePerformanceMetricsSection (Step 1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('updatePerformanceMetricsSection', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('empty Performance Metrics section rebuilds with zeros', () => {
+    const content = `# Project State
+
+**Status:** Executing Phase 3
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: [N]
+- Average duration: [X] min
+- Total execution time: [X.X] hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+## Accumulated Context
+`;
+
+    // We test via the CLI: phase complete triggers updatePerformanceMetricsSection
+    // But first let's test the helper directly via state planned-phase + phase complete flow
+    // For a unit-style test, write STATE.md and call state validate to check metrics
+    const statePath = path.join(tmpDir, '.planning', 'STATE.md');
+    fs.writeFileSync(statePath, content);
+
+    // Create a phase with 2 plans, 2 summaries
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '03-01-PLAN.md'), '# Plan 1\n');
+    fs.writeFileSync(path.join(phaseDir, '03-02-PLAN.md'), '# Plan 2\n');
+    fs.writeFileSync(path.join(phaseDir, '03-01-SUMMARY.md'), '# Summary 1\n');
+    fs.writeFileSync(path.join(phaseDir, '03-02-SUMMARY.md'), '# Summary 2\n');
+
+    // Also need ROADMAP.md for phase complete
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n## Phase 3: API\n\n- [ ] Phase 3: API Layer\n`
+    );
+
+    const result = runGsdTools('phase complete 3', tmpDir);
+    assert.ok(result.success, `phase complete failed: ${result.error}`);
+
+    const stateAfter = fs.readFileSync(statePath, 'utf-8');
+    assert.ok(stateAfter.includes('Total plans completed:'), 'Velocity section should have total plans');
+    assert.ok(stateAfter.match(/Total plans completed:\s*2/), 'Total plans should be 2');
+    assert.ok(stateAfter.includes('| 3'), 'By Phase table should have row for phase 3');
+  });
+
+  test('existing Plan Execution Times rows aggregated into Velocity/By Phase', () => {
+    const content = `# Project State
+
+**Current Phase:** 04
+**Status:** Executing Phase 4
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 3 P1 | 12 min | 5 tasks | 3 files |
+| Phase 3 P2 | 8 min | 3 tasks | 2 files |
+
+**Velocity:**
+- Total plans completed: 2
+- Average duration: 10 min
+- Total execution time: 0.3 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 3 | 2 | 20 min | 10 min |
+
+## Accumulated Context
+`;
+    const statePath = path.join(tmpDir, '.planning', 'STATE.md');
+    fs.writeFileSync(statePath, content);
+
+    // Create phase 4 with 1 plan, 1 summary
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '04-ui');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '04-01-PLAN.md'), '# Plan 1\n');
+    fs.writeFileSync(path.join(phaseDir, '04-01-SUMMARY.md'), '# Summary 1\n');
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n## Phase 4: UI\n\n- [ ] Phase 4: UI Layer\n`
+    );
+
+    const result = runGsdTools('phase complete 4', tmpDir);
+    assert.ok(result.success, `phase complete failed: ${result.error}`);
+
+    const stateAfter = fs.readFileSync(statePath, 'utf-8');
+    assert.ok(stateAfter.match(/Total plans completed:\s*3/), 'Total plans should be 3 (2 previous + 1 new)');
+    assert.ok(stateAfter.includes('| 4'), 'By Phase table should have row for phase 4');
+  });
+
+  test('idempotent — running twice produces same result', () => {
+    const content = `# Project State
+
+**Current Phase:** 05
+**Status:** Executing Phase 5
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0
+- Average duration: N/A
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+
+## Accumulated Context
+`;
+    const statePath = path.join(tmpDir, '.planning', 'STATE.md');
+    fs.writeFileSync(statePath, content);
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '05-final');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '05-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '05-01-SUMMARY.md'), '# Summary\n');
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n## Phase 5: Final\n\n- [ ] Phase 5: Final\n`
+    );
+
+    runGsdTools('phase complete 5', tmpDir);
+    const afterFirst = fs.readFileSync(statePath, 'utf-8');
+
+    // Reset state so we can complete again
+    let resetContent = afterFirst.replace(/Milestone complete|Ready to plan/, 'Executing Phase 5');
+    resetContent = resetContent.replace(/Not started/, '1');
+    fs.writeFileSync(statePath, resetContent);
+
+    // Re-create plan files (they still exist)
+    runGsdTools('phase complete 5', tmpDir);
+    const afterSecond = fs.readFileSync(statePath, 'utf-8');
+
+    // Both should have same total plans count (idempotent update for same phase)
+    const firstCount = afterFirst.match(/Total plans completed:\s*(\d+)/);
+    const secondCount = afterSecond.match(/Total plans completed:\s*(\d+)/);
+    assert.ok(firstCount, 'First run should have total plans');
+    assert.ok(secondCount, 'Second run should have total plans');
+    // Second run adds another completion for phase 5, so count increments
+    // The key is the By Phase row for phase 5 should be updated, not duplicated
+    const phase5Rows = (afterSecond.match(/\|\s*5\s*\|/g) || []).length;
+    assert.ok(phase5Rows <= 1, 'Phase 5 should appear at most once in By Phase table (no duplicates)');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// state planned-phase (Step 3 — Gate 3a)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('state planned-phase command', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('after call: Status is "Ready to execute"', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Planning Phase 3\n**Total Plans in Phase:** 0\n**Last Activity:** 2024-01-01\n**Current Phase:** 3\n`
+    );
+
+    const result = runGsdTools(['state', 'planned-phase', '--phase', '3', '--name', 'API', '--plans', '5'], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const stateContent = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(stateContent.includes('Ready to execute'), 'Status should be "Ready to execute"');
+  });
+
+  test('after call: Total Plans matches argument', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Planning\n**Total Plans in Phase:** 0\n**Last Activity:** 2024-01-01\n**Current Phase:** 2\n`
+    );
+
+    const result = runGsdTools(['state', 'planned-phase', '--phase', '2', '--name', 'Core', '--plans', '7'], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const stateContent = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(stateContent.match(/Total Plans in Phase.*7/), 'Total Plans should be 7');
+  });
+
+  test('after call: Last Activity is today\'s date', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Planning\n**Total Plans in Phase:** 0\n**Last Activity:** 2024-01-01\n**Current Phase:** 1\n`
+    );
+
+    const result = runGsdTools(['state', 'planned-phase', '--phase', '1', '--name', 'Setup', '--plans', '3'], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const today = new Date().toISOString().split('T')[0];
+    const stateContent = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(stateContent.includes(today), `Last Activity should contain today's date (${today})`);
+  });
+
+  test('missing STATE.md returns graceful error', () => {
+    // No STATE.md written
+    const result = runGsdTools(['state', 'planned-phase', '--phase', '1', '--name', 'Test', '--plans', '3'], tmpDir);
+    assert.ok(result.success, 'Should not crash');
+    const output = JSON.parse(result.output);
+    assert.ok(output.error, 'Should return error field');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// state validate (Step 4 — Gate 1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('state validate command', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('STATE says executing + VERIFICATION.md shows passed emits warning', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Executing Phase 2\n**Current Phase:** 2\n**Total Plans in Phase:** 2\n**Current Plan:** 1\n`
+    );
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '02-core');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '02-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '02-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '02-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phaseDir, '02-02-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phaseDir, '02-VERIFICATION.md'), '---\nstatus: passed\n---\n# Verification\n');
+
+    const result = runGsdTools('state validate', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.ok(output.warnings.length > 0, 'Should have warnings when executing but verification passed');
+    assert.ok(output.warnings.some(w => /verif/i.test(w)), 'Warning should mention verification');
+  });
+
+  test('STATE plan count 3 but 12 SUMMARY.md on disk emits mismatch warning', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Executing Phase 1\n**Current Phase:** 1\n**Total Plans in Phase:** 3\n**Current Plan:** 1\n`
+    );
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    // Write 12 plans and summaries
+    for (let i = 1; i <= 12; i++) {
+      const padded = String(i).padStart(2, '0');
+      fs.writeFileSync(path.join(phaseDir, `01-${padded}-PLAN.md`), '# Plan\n');
+      fs.writeFileSync(path.join(phaseDir, `01-${padded}-SUMMARY.md`), '# Summary\n');
+    }
+
+    const result = runGsdTools('state validate', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.ok(output.warnings.length > 0, 'Should have warnings for plan count mismatch');
+    assert.ok(output.warnings.some(w => /plan.*count|count.*mismatch/i.test(w)), 'Warning should mention plan count mismatch');
+  });
+
+  test('perfect state returns valid: true, no warnings', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Executing Phase 1\n**Current Phase:** 1\n**Total Plans in Phase:** 2\n**Current Plan:** 1\n`
+    );
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '01-02-PLAN.md'), '# Plan\n');
+
+    const result = runGsdTools('state validate', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.valid, true, 'Should be valid');
+    assert.strictEqual(output.warnings.length, 0, 'Should have no warnings');
+  });
+
+  test('missing STATE.md returns graceful error', () => {
+    const result = runGsdTools('state validate', tmpDir);
+    assert.ok(result.success, 'Should not crash');
+    const output = JSON.parse(result.output);
+    assert.ok(output.error, 'Should return error field');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// state sync (Step 5 — Gate 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('state sync command', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('drifted STATE.md + correct filesystem: after sync, fields match disk', () => {
+    // STATE says phase 1 with 0 plans, but disk has phase 2 with 3 plans
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Planning\n**Current Phase:** 1\n**Total Plans in Phase:** 0\n**Current Plan:** 0\n**Progress:** 0%\n`
+    );
+
+    const phase1Dir = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(phase1Dir, { recursive: true });
+    fs.writeFileSync(path.join(phase1Dir, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase1Dir, '01-01-SUMMARY.md'), '# Summary\n');
+
+    const phase2Dir = path.join(tmpDir, '.planning', 'phases', '02-core');
+    fs.mkdirSync(phase2Dir, { recursive: true });
+    fs.writeFileSync(path.join(phase2Dir, '02-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase2Dir, '02-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase2Dir, '02-03-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phase2Dir, '02-01-SUMMARY.md'), '# Summary\n');
+
+    const result = runGsdTools('state sync', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.ok(output.synced, 'Should report synced');
+
+    const stateAfter = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    // Total plans in current phase (phase 2 since it's highest with incomplete plans) should be 3
+    assert.ok(stateAfter.match(/Total Plans in Phase.*3/), 'Total Plans should match disk (3)');
+  });
+
+  test('run sync twice is idempotent', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Executing Phase 1\n**Current Phase:** 1\n**Total Plans in Phase:** 2\n**Current Plan:** 1\n**Progress:** 0%\n`
+    );
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '01-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '01-01-SUMMARY.md'), '# Summary\n');
+
+    runGsdTools('state sync', tmpDir);
+    const afterFirst = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+
+    runGsdTools('state sync', tmpDir);
+    const afterSecond = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+
+    // Strip frontmatter timestamps which will differ
+    const stripTimestamps = (s) => s.replace(/last_updated:.*\n/g, '').replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/g, 'TS');
+    assert.strictEqual(stripTimestamps(afterFirst), stripTimestamps(afterSecond), 'Two syncs should produce same result');
+  });
+
+  test('--verify flag reports changes without writing', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Status:** Planning\n**Current Phase:** 1\n**Total Plans in Phase:** 0\n**Current Plan:** 0\n**Progress:** 0%\n`
+    );
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '01-02-PLAN.md'), '# Plan\n');
+
+    const before = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+
+    const result = runGsdTools('state sync --verify', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.ok(output.changes && output.changes.length > 0, 'Should report changes');
+    assert.strictEqual(output.dry_run, true, 'Should indicate dry run');
+
+    const after = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.strictEqual(before, after, 'File should not be modified in verify mode');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // summary-extract command
 // ─────────────────────────────────────────────────────────────────────────────

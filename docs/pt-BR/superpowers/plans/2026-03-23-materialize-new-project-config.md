@@ -7,7 +7,7 @@ Fonte canônica: `docs/superpowers/plans/2026-03-18-materialize-new-project-conf
 
 ## Contexto
 
-Este plano formaliza a materialização explícita da configuração do projeto durante `/gsd:new-project`, garantindo que escolhas feitas na inicialização sejam persistidas de forma determinística em `.planning/config.json`.
+Este plano formaliza a materialização explícita da configuração do projeto durante `/gsd-new-project`, garantindo que escolhas feitas na inicialização sejam persistidas de forma determinística em `.planning/config.json`.
 
 ## Objetivos
 
@@ -37,7 +37,7 @@ Não inclui:
 
 ## Critérios de aceitação
 
-- após `/gsd:new-project`, `config.json` reflete as escolhas feitas
+- após `/gsd-new-project`, `config.json` reflete as escolhas feitas
 - rerun não duplica nem corrompe campos
 - comandos subsequentes observam os valores persistidos
 

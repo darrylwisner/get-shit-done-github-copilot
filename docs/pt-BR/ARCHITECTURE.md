@@ -16,7 +16,7 @@ Para detalhes de implementação linha a linha, consulte [ARCHITECTURE.md em ing
 ## Componentes centrais
 
 1. **Camada de comando**  
-   Recebe entrada do usuário (`/gsd:*`) e roteia fluxo.
+   Recebe entrada do usuário (`/gsd-*`) e roteia fluxo.
 
 2. **Camada de orquestração**  
    Coordena pesquisadores, planejadores, executores e verificadores.
@@ -33,7 +33,7 @@ Para detalhes de implementação linha a linha, consulte [ARCHITECTURE.md em ing
 ## Fluxo arquitetural (alto nível)
 
 ```text
-Entrada (/gsd:comando)
+Entrada (/gsd-comando)
   -> Orquestrador
   -> Subagentes especializados
   -> Artefatos em .planning/

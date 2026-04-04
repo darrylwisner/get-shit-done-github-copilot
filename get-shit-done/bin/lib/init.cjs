@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, planningPaths, planningDir, planningRoot, toPosixPath, output, error, checkAgentsInstalled } = require('./core.cjs');
+const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, planningPaths, planningDir, planningRoot, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
 
 function getLatestCompletedMilestone(cwd) {
   const milestonesPath = path.join(planningRoot(cwd), 'MILESTONES.md');
@@ -37,10 +37,17 @@ function withProjectRoot(cwd, result) {
   const agentStatus = checkAgentsInstalled();
   result.agents_installed = agentStatus.agents_installed;
   result.missing_agents = agentStatus.missing_agents;
+  // Inject response_language into all init outputs (#1399).
+  // Workflows propagate this to subagent prompts so user-facing questions
+  // stay in the configured language across phase boundaries.
+  const config = loadConfig(cwd);
+  if (config.response_language) {
+    result.response_language = config.response_language;
+  }
   return result;
 }
 
-function cmdInitExecutePhase(cwd, phase, raw) {
+function cmdInitExecutePhase(cwd, phase, raw, options = {}) {
   if (!phase) {
     error('phase required for init execute-phase');
   }
@@ -132,10 +139,38 @@ function cmdInitExecutePhase(cwd, phase, raw) {
     config_path: toPosixPath(path.relative(cwd, path.join(planningDir(cwd), 'config.json'))),
   };
 
+  // Optional --validate: run state validation and include warnings (#1627)
+  if (options.validate) {
+    try {
+      const { cmdStateValidate } = require('./state.cjs');
+      // Capture validate output by temporarily redirecting
+      const statePath = path.join(planningDir(cwd), 'STATE.md');
+      if (fs.existsSync(statePath)) {
+        const stateContent = fs.readFileSync(statePath, 'utf-8');
+        const { stateExtractField } = require('./state.cjs');
+        const status = stateExtractField(stateContent, 'Status') || '';
+        result.state_validation_ran = true;
+        // Simple inline validation — check for obvious drift
+        const warnings = [];
+        const phasesPath = planningPaths(cwd).phases;
+        if (phaseInfo && phaseInfo.directory && fs.existsSync(path.join(cwd, phaseInfo.directory))) {
+          const files = fs.readdirSync(path.join(cwd, phaseInfo.directory));
+          const diskPlans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
+          const totalPlansRaw = stateExtractField(stateContent, 'Total Plans in Phase');
+          const totalPlansInPhase = totalPlansRaw ? parseInt(totalPlansRaw, 10) : null;
+          if (totalPlansInPhase !== null && diskPlans !== totalPlansInPhase) {
+            warnings.push(`Plan count mismatch: STATE.md says ${totalPlansInPhase}, disk has ${diskPlans}`);
+          }
+        }
+        result.state_warnings = warnings;
+      }
+    } catch { /* intentionally empty */ }
+  }
+
   output(withProjectRoot(cwd, result), raw);
 }
 
-function cmdInitPlanPhase(cwd, phase, raw) {
+function cmdInitPlanPhase(cwd, phase, raw, options = {}) {
   if (!phase) {
     error('phase required for init plan-phase');
   }
@@ -232,6 +267,25 @@ function cmdInitPlanPhase(cwd, phase, raw) {
       const reviewsFile = files.find(f => f.endsWith('-REVIEWS.md') || f === 'REVIEWS.md');
       if (reviewsFile) {
         result.reviews_path = toPosixPath(path.join(phaseInfo.directory, reviewsFile));
+      }
+    } catch { /* intentionally empty */ }
+  }
+
+  // Optional --validate: run state validation and include warnings (#1627)
+  if (options.validate) {
+    try {
+      const statePath = path.join(planningDir(cwd), 'STATE.md');
+      if (fs.existsSync(statePath)) {
+        const { stateExtractField } = require('./state.cjs');
+        const stateContent = fs.readFileSync(statePath, 'utf-8');
+        const warnings = [];
+        result.state_validation_ran = true;
+        const totalPlansRaw = stateExtractField(stateContent, 'Total Plans in Phase');
+        const totalPlansInPhase = totalPlansRaw ? parseInt(totalPlansRaw, 10) : null;
+        if (totalPlansInPhase !== null && phaseInfo && totalPlansInPhase !== (phaseInfo.plans?.length || 0)) {
+          warnings.push(`Plan count mismatch: STATE.md says ${totalPlansInPhase}, disk has ${phaseInfo.plans?.length || 0}`);
+        }
+        result.state_warnings = warnings;
       }
     } catch { /* intentionally empty */ }
   }
@@ -806,10 +860,10 @@ function cmdInitManager(cwd, raw) {
 
   // Validate prerequisites
   if (!fs.existsSync(paths.roadmap)) {
-    error('No ROADMAP.md found. Run /gsd:new-milestone first.');
+    error('No ROADMAP.md found. Run /gsd-new-milestone first.');
   }
   if (!fs.existsSync(paths.state)) {
-    error('No STATE.md found. Run /gsd:new-milestone first.');
+    error('No STATE.md found. Run /gsd-new-milestone first.');
   }
   const rawContent = fs.readFileSync(paths.roadmap, 'utf-8');
   const content = extractCurrentMilestone(rawContent, cwd);
@@ -848,7 +902,7 @@ function cmdInitManager(cwd, raw) {
     try {
       const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
       const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).filter(isDirInMilestone);
-      const dirMatch = dirs.find(d => d.startsWith(normalized + '-') || d === normalized);
+      const dirMatch = dirs.find(d => phaseTokenMatches(d, normalized));
 
       if (dirMatch) {
         const fullDir = path.join(phasesDir, dirMatch);
@@ -968,7 +1022,7 @@ function cmdInitManager(cwd, raw) {
         phase_name: phase.name,
         action: 'execute',
         reason: `${phase.plan_count} plans ready, dependencies met`,
-        command: `/gsd:execute-phase ${phase.number}`,
+        command: `/gsd-execute-phase ${phase.number}`,
       });
     } else if (phase.disk_status === 'discussed' || phase.disk_status === 'researched') {
       recommendedActions.push({
@@ -976,7 +1030,7 @@ function cmdInitManager(cwd, raw) {
         phase_name: phase.name,
         action: 'plan',
         reason: 'Context gathered, ready for planning',
-        command: `/gsd:plan-phase ${phase.number}`,
+        command: `/gsd-plan-phase ${phase.number}`,
       });
     } else if ((phase.disk_status === 'empty' || phase.disk_status === 'no_directory') && phase.is_next_to_discuss) {
       recommendedActions.push({
@@ -984,7 +1038,7 @@ function cmdInitManager(cwd, raw) {
         phase_name: phase.name,
         action: 'discuss',
         reason: 'Unblocked, ready to gather context',
-        command: `/gsd:discuss-phase ${phase.number}`,
+        command: `/gsd-discuss-phase ${phase.number}`,
       });
     }
   }
