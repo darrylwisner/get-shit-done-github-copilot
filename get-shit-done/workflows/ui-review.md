@@ -42,7 +42,7 @@ UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
 UI_REVIEW_FILE=$(ls "${PHASE_DIR}"/*-UI-REVIEW.md 2>/dev/null | head -1)
 ```
 
-**If `SUMMARY_FILES` empty:** Exit — "Phase {N} not executed. Run /gsd:execute-phase {N} first."
+**If `SUMMARY_FILES` empty:** Exit — "Phase {N} not executed. Run /gsd-execute-phase {N} first."
 
 **If `UI_REVIEW_FILE` non-empty:** Use AskUserQuestion:
 - header: "Existing UI Review"
@@ -142,6 +142,9 @@ Full review: {path to UI-REVIEW.md}
 
 - `/gsd:verify-work {N}` — UAT testing
 - `/gsd:plan-phase {N+1}` — plan next phase
+
+- `/gsd-verify-work {N}` — UAT testing
+- `/gsd-plan-phase {N+1}` — plan next phase
 
 ───────────────────────────────────────────────────────────────
 ```

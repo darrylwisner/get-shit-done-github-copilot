@@ -85,18 +85,11 @@ describe('execute-phase worktree: shared artifact ownership (#1571)', () => {
     );
   });
 
-  test('post-wave orchestrator runs state update-position after completing a wave in worktree mode', () => {
+  test('ghost state update-position command removed from post-wave section (#1627)', () => {
     const content = fs.readFileSync(WORKFLOW_PATH, 'utf-8');
     assert.ok(
-      content.includes('state update-position'),
-      'post-wave section should contain orchestrator-owned state update-position command'
-    );
-    // Confirm it appears after the worktree agent block
-    const stateUpdateIdx = content.lastIndexOf('state update-position');
-    const worktreeAgentEnd = content.indexOf('**Sequential mode**');
-    assert.ok(
-      stateUpdateIdx > worktreeAgentEnd,
-      'state update-position must appear after the worktree agent block (orchestrator-owned, post-wave)'
+      !content.includes('state update-position'),
+      'state update-position was a ghost reference (command never existed in CLI dispatcher) — should be removed'
     );
   });
 

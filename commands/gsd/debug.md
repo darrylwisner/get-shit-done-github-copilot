@@ -117,13 +117,13 @@ Task(
 - Display root cause, confidence level, files involved, and suggested fix strategies
 - Offer options:
   - "Fix now" — spawn a continuation agent with `goal: find_and_fix` to apply the fix (see step 5)
-  - "Plan fix" — suggest `/gsd:plan-phase --gaps`
+  - "Plan fix" — suggest `/gsd-plan-phase --gaps`
   - "Manual fix" — done
 
 **If `## DEBUG COMPLETE` (find_and_fix mode):**
 - Display root cause and fix summary
 - Offer options:
-  - "Plan fix" — suggest `/gsd:plan-phase --gaps` if further work needed
+  - "Plan fix" — suggest `/gsd-plan-phase --gaps` if further work needed
   - "Done" — mark resolved
 
 **If `## CHECKPOINT REACHED`:**

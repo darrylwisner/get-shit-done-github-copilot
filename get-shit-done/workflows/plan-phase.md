@@ -32,11 +32,13 @@ CONTEXT_WINDOW=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get
 
 When `CONTEXT_WINDOW >= 500000`, the planner prompt includes prior phase CONTEXT.md files so cross-phase decisions are consistent (e.g., "use library X for all data fetching" from Phase 2 is visible to Phase 5's planner).
 
-Parse JSON for: `researcher_model`, `planner_model`, `checker_model`, `research_enabled`, `plan_checker_enabled`, `nyquist_validation_enabled`, `commit_docs`, `text_mode`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded_phase`, `has_research`, `has_context`, `has_reviews`, `has_plans`, `plan_count`, `planning_exists`, `roadmap_exists`, `phase_req_ids`.
+Parse JSON for: `researcher_model`, `planner_model`, `checker_model`, `research_enabled`, `plan_checker_enabled`, `nyquist_validation_enabled`, `commit_docs`, `text_mode`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded_phase`, `has_research`, `has_context`, `has_reviews`, `has_plans`, `plan_count`, `planning_exists`, `roadmap_exists`, `phase_req_ids`, `response_language`.
+
+**If `response_language` is set:** Include `response_language: {value}` in all spawned subagent prompts so any user-facing output stays in the configured language.
 
 **File paths (for <files_to_read> blocks):** `state_path`, `roadmap_path`, `requirements_path`, `context_path`, `research_path`, `verification_path`, `uat_path`, `reviews_path`. These are null if files don't exist.
 
-**If `planning_exists` is false:** Error — run `/gsd:new-project` first.
+**If `planning_exists` is false:** Error — run `/gsd-new-project` first.
 
 ## 2. Parse and Normalize Arguments
 
@@ -67,9 +69,9 @@ Error:
 ```
 No REVIEWS.md found for Phase {N}. Run reviews first:
 
-/gsd:review --phase {N}
+/gsd-review --phase {N}
 
-Then re-run /gsd:plan-phase {N} --reviews
+Then re-run /gsd-plan-phase {N} --reviews
 ```
 Exit workflow.
 
@@ -229,9 +231,9 @@ If "Run discuss-phase first":
   does not work correctly in nested subcontexts (#1009). Instead, display the command
   and exit so the user runs it as a top-level command:
   ```
-  Run this command first, then re-run /gsd:plan-phase {X} ${GSD_WS}:
+  Run this command first, then re-run /gsd-plan-phase {X} ${GSD_WS}:
 
-  /gsd:discuss-phase {X} ${GSD_WS}
+  /gsd-discuss-phase {X} ${GSD_WS}
   ```
   **Exit the plan-phase workflow. Do not continue.**
 
@@ -299,7 +301,7 @@ Answer: "What do I need to know to PLAN this phase well?"
 </objective>
 
 <files_to_read>
-- {context_path} (USER DECISIONS from /gsd:discuss-phase)
+- {context_path} (USER DECISIONS from /gsd-discuss-phase)
 - {requirements_path} (Project requirements)
 - {state_path} (Project decisions and history)
 </files_to_read>
@@ -419,11 +421,31 @@ UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
 
 **If UI-SPEC.md missing AND `UI_GATE_CFG` is `true`:**
 
+Read auto-chain state:
+```bash
+AUTO_CHAIN=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow._auto_chain_active 2>/dev/null || echo "false")
+```
+
+**If `AUTO_CHAIN` is `true` (running inside a `--chain` or `--auto` pipeline):**
+
+Auto-generate UI-SPEC without prompting:
+```
+Skill(skill="gsd-ui-phase", args="${PHASE} --auto ${GSD_WS}")
+```
+After `gsd-ui-phase` returns, re-read:
+```bash
+UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
+UI_SPEC_PATH="${UI_SPEC_FILE}"
+```
+Continue to step 6.
+
+**If `AUTO_CHAIN` is `false` (manual invocation):**
+
 If `TEXT_MODE` is true, present as a plain-text numbered list:
 ```
 Phase {N} has frontend indicators but no UI-SPEC.md. Generate a design contract before planning?
 
-1. Generate UI-SPEC first — Run /gsd:ui-phase {N} then re-run /gsd:plan-phase {N}
+1. Generate UI-SPEC first — Run /gsd-ui-phase {N} then re-run /gsd-plan-phase {N}
 2. Continue without UI-SPEC
 3. Not a frontend phase
 
@@ -434,7 +456,7 @@ Otherwise use AskUserQuestion:
 - header: "UI Design Contract"
 - question: "Phase {N} has frontend indicators but no UI-SPEC.md. Generate a design contract before planning?"
 - options:
-  - "Generate UI-SPEC first" → Display: "Run `/gsd:ui-phase {N} ${GSD_WS}` then re-run `/gsd:plan-phase {N} ${GSD_WS}`". Exit workflow.
+  - "Generate UI-SPEC first" → Display: "Run `/gsd-ui-phase {N} ${GSD_WS}` then re-run `/gsd-plan-phase {N} ${GSD_WS}`". Exit workflow.
   - "Continue without UI-SPEC" → Continue to step 6.
   - "Not a frontend phase" → Continue to step 6.
 
@@ -544,7 +566,7 @@ VALIDATION_EXISTS=$(ls "${PHASE_DIR}"/*-VALIDATION.md 2>/dev/null | head -1)
 ```
 
 If missing and Nyquist is still enabled/applicable — ask user:
-1. Re-run: `/gsd:plan-phase {PHASE} --research ${GSD_WS}`
+1. Re-run: `/gsd-plan-phase {PHASE} --research ${GSD_WS}`
 2. Disable Nyquist with the exact command:
    `node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow.nyquist_validation false`
 3. Continue anyway (plans fail Dimension 8)
@@ -573,7 +595,7 @@ Planner prompt:
 - {state_path} (Project State)
 - {roadmap_path} (Roadmap)
 - {requirements_path} (Requirements)
-- {context_path} (USER DECISIONS from /gsd:discuss-phase)
+- {context_path} (USER DECISIONS from /gsd-discuss-phase)
 - {research_path} (Technical Research)
 - {verification_path} (Verification Gaps - if --gaps)
 - {uat_path} (UAT Gaps - if --gaps)
@@ -596,7 +618,7 @@ ${AGENT_SKILLS_PLANNER}
 </planning_context>
 
 <downstream_consumer>
-Output consumed by /gsd:execute-phase. Plans need:
+Output consumed by /gsd-execute-phase. Plans need:
 - Frontmatter (wave, depends_on, files_modified, autonomous)
 - Tasks in XML format with read_first and acceptance_criteria fields (MANDATORY on every task)
 - Verification criteria
@@ -689,7 +711,7 @@ rest become a follow-up phase
 
 Use AskUserQuestion with these 3 options.
 
-**If "Split":** Use `/gsd:insert-phase` to create the sub-phases, then replan each.
+**If "Split":** Use `/gsd-insert-phase` to create the sub-phases, then replan each.
 **If "Proceed":** Return to planner with instruction to attempt all decisions at full fidelity, accepting more plans/tasks.
 **If "Prioritize":** Use AskUserQuestion (multiSelect) to let user pick which D-XX are "now" vs "later". Create CONTEXT.md for each sub-phase with the selected decisions.
 
@@ -715,7 +737,7 @@ Checker prompt:
 - {PHASE_DIR}/*-PLAN.md (Plans to verify)
 - {roadmap_path} (Roadmap)
 - {requirements_path} (Requirements)
-- {context_path} (USER DECISIONS from /gsd:discuss-phase)
+- {context_path} (USER DECISIONS from /gsd-discuss-phase)
 - {research_path} (Technical Research — includes Validation Architecture)
 </files_to_read>
 
@@ -764,7 +786,7 @@ Revision prompt:
 
 <files_to_read>
 - {PHASE_DIR}/*-PLAN.md (Existing plans)
-- {context_path} (USER DECISIONS from /gsd:discuss-phase)
+- {context_path} (USER DECISIONS from /gsd-discuss-phase)
 </files_to_read>
 
 ${AGENT_SKILLS_PLANNER}
@@ -847,6 +869,16 @@ Options:
 
 If `TEXT_MODE` is true, present as a plain-text numbered list (options already shown in the block above). Otherwise use AskUserQuestion to present the options.
 
+## 13b. Record Planning Completion in STATE.md
+
+After plans pass all gates, record that planning is complete so STATE.md reflects the new phase status:
+
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state planned-phase --phase "${PHASE_NUMBER}" --name "${PHASE_NAME}" --plans "${PLAN_COUNT}"
+```
+
+This updates STATUS to "Ready to execute", sets the correct plan count, and timestamps Last Activity.
+
 ## 14. Present Final Status
 
 Route to `<offer_next>` OR `auto_advance` depending on flags/config.
@@ -888,7 +920,7 @@ Plans ready. Launching execute-phase...
 
 Launch execute-phase using the Skill tool to avoid nested Task sessions (which cause runtime freezes due to deep agent nesting):
 ```
-Skill(skill="gsd:execute-phase", args="${PHASE} --auto --no-transition ${GSD_WS}")
+Skill(skill="gsd-execute-phase", args="${PHASE} --auto --no-transition ${GSD_WS}")
 ```
 
 The `--no-transition` flag tells execute-phase to return status after verification instead of chaining further. This keeps the auto-advance chain flat — each phase runs at the same nesting level rather than spawning deeper Task agents.
@@ -902,14 +934,14 @@ The `--no-transition` flag tells execute-phase to return status after verificati
 
   Auto-advance pipeline finished.
 
-  Next: /gsd:discuss-phase ${NEXT_PHASE} --auto ${GSD_WS}
+  Next: /gsd-discuss-phase ${NEXT_PHASE} --auto ${GSD_WS}
   ```
 - **GAPS FOUND / VERIFICATION FAILED** → Display result, stop chain:
   ```
   Auto-advance stopped: Execution needs review.
 
   Review the output above and continue manually:
-  /gsd:execute-phase ${PHASE} ${GSD_WS}
+  /gsd-execute-phase ${PHASE} ${GSD_WS}
   ```
 
 **If neither `--auto` nor config enabled:**
@@ -942,15 +974,15 @@ Verification: {Passed | Passed with override | Skipped}
 
 /clear then:
 
-/gsd:execute-phase {X} ${GSD_WS}
+/gsd-execute-phase {X} ${GSD_WS}
 
 ───────────────────────────────────────────────────────────────
 
 **Also available:**
 - cat .planning/phases/{phase-dir}/*-PLAN.md — review plans
-- /gsd:plan-phase {X} --research — re-research first
-- /gsd:review --phase {X} --all — peer review plans with external AIs
-- /gsd:plan-phase {X} --reviews — replan incorporating review feedback
+- /gsd-plan-phase {X} --research — re-research first
+- /gsd-review --phase {X} --all — peer review plans with external AIs
+- /gsd-plan-phase {X} --reviews — replan incorporating review feedback
 
 ───────────────────────────────────────────────────────────────
 </offer_next>
@@ -971,11 +1003,11 @@ stdio deadlocks with MCP servers — see Claude Code issue anthropics/claude-cod
    Remove-Item -Recurse -Force "$env:USERPROFILE\.claude\tasks\*" -ErrorAction SilentlyContinue
    ```
 4. **Reduce MCP server count:** Temporarily disable non-essential MCP servers in settings.json
-5. **Retry:** Restart Claude Code and run `/gsd:plan-phase` again
+5. **Retry:** Restart Claude Code and run `/gsd-plan-phase` again
 
 If freezes persist, try `--skip-research` to reduce the agent chain from 3 to 2 agents:
 ```
-/gsd:plan-phase N --skip-research
+/gsd-plan-phase N --skip-research
 ```
 </windows_troubleshooting>
 

@@ -77,7 +77,7 @@ Parse JSON for: `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phas
 ```
 Phase [X] not found in roadmap.
 
-Use /gsd:progress to see available phases.
+Use /gsd-progress to see available phases.
 ```
 Exit workflow.
 
@@ -599,13 +599,13 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 
 `/clear` then:
 
-`/gsd:plan-phase ${PHASE}`
+`/gsd-plan-phase ${PHASE}`
 
 ---
 
 **Also available:**
-- `/gsd:plan-phase ${PHASE} --skip-research` — plan without research
-- `/gsd:ui-phase ${PHASE}` — generate UI design contract (if frontend work)
+- `/gsd-plan-phase ${PHASE} --skip-research` — plan without research
+- `/gsd-ui-phase ${PHASE}` — generate UI design contract (if frontend work)
 - Review/edit CONTEXT.md before continuing
 
 ---
@@ -644,7 +644,7 @@ Display banner:
 Context captured (assumptions mode). Launching plan-phase...
 ```
 
-Launch: `Skill(skill="gsd:plan-phase", args="${PHASE} --auto")`
+Launch: `Skill(skill="gsd-plan-phase", args="${PHASE} --auto")`
 
 Handle return: PHASE COMPLETE / PLANNING COMPLETE / INCONCLUSIVE / GAPS FOUND
 (identical handling to discuss-phase.md auto_advance step)

@@ -27,9 +27,10 @@ const runtimeMap = {
   '7': 'antigravity',
   '8': 'cursor',
   '9': 'windsurf',
-  '10': 'augment'
+  '10': 'augment',
+  '11': 'trae'
 };
-const allRuntimes = ['claude', 'kilo', 'opencode', 'gemini', 'codex', 'copilot', 'antigravity', 'cursor', 'windsurf', 'augment'];
+const allRuntimes = ['claude', 'kilo', 'opencode', 'gemini', 'codex', 'copilot', 'antigravity', 'cursor', 'windsurf', 'augment', 'trae'];
 
 /**
  * Simulate the parsing logic from promptRuntime without requiring readline.
@@ -38,7 +39,7 @@ const allRuntimes = ['claude', 'kilo', 'opencode', 'gemini', 'codex', 'copilot',
 function parseRuntimeInput(input) {
   input = input.trim() || '1';
 
-  if (input === '11') {
+  if (input === '12') {
     return allRuntimes;
   }
 
@@ -88,8 +89,12 @@ describe('multi-runtime selection parsing', () => {
     assert.deepStrictEqual(parseRuntimeInput('10'), ['augment']);
   });
 
-  test('choice 11 returns all runtimes', () => {
-    assert.deepStrictEqual(parseRuntimeInput('11'), allRuntimes);
+  test('single choice for trae', () => {
+    assert.deepStrictEqual(parseRuntimeInput('11'), ['trae']);
+  });
+
+  test('choice 12 returns all runtimes', () => {
+    assert.deepStrictEqual(parseRuntimeInput('12'), allRuntimes);
   });
 
   test('empty input defaults to claude', () => {
@@ -98,13 +103,13 @@ describe('multi-runtime selection parsing', () => {
   });
 
   test('invalid choices are ignored, falls back to claude if all invalid', () => {
-    assert.deepStrictEqual(parseRuntimeInput('12'), ['claude']);
+    assert.deepStrictEqual(parseRuntimeInput('13'), ['claude']);
     assert.deepStrictEqual(parseRuntimeInput('0'), ['claude']);
     assert.deepStrictEqual(parseRuntimeInput('abc'), ['claude']);
   });
 
   test('invalid choices mixed with valid are filtered out', () => {
-    assert.deepStrictEqual(parseRuntimeInput('1,11,5'), ['claude', 'codex']);
+    assert.deepStrictEqual(parseRuntimeInput('1,13,5'), ['claude', 'codex']);
     assert.deepStrictEqual(parseRuntimeInput('abc 3 xyz'), ['opencode']);
   });
 
@@ -137,21 +142,21 @@ describe('install.js source contains multi-select support', () => {
     }
   });
 
-  test('all shortcut uses option 11', () => {
+  test('all shortcut uses option 12', () => {
     assert.ok(
-      installSrc.includes("if (input === '11')"),
-      'all shortcut uses option 11'
+      installSrc.includes("if (input === '12')"),
+      'all shortcut uses option 12'
     );
   });
 
-  test('prompt lists Augment as option 10 and All as option 11', () => {
+  test('prompt lists Augment as option 10 and All as option 12', () => {
     assert.ok(
       installSrc.includes('10${reset}) Augment'),
       'prompt lists Augment as option 10'
     );
     assert.ok(
-      installSrc.includes('11${reset}) All'),
-      'prompt lists All as option 11'
+      installSrc.includes('12${reset}) All'),
+      'prompt lists All as option 12'
     );
   });
 

@@ -4,9 +4,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, loadConfig, normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, toPosixPath, planningDir, withPlanningLock, output, error, readSubdirectories } = require('./core.cjs');
+const { escapeRegex, loadConfig, normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, toPosixPath, planningDir, withPlanningLock, output, error, readSubdirectories, phaseTokenMatches } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
-const { writeStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback } = require('./state.cjs');
+const { writeStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback, updatePerformanceMetricsSection } = require('./state.cjs');
 
 function cmdPhasesList(cwd, options, raw) {
   const phasesDir = path.join(planningDir(cwd), 'phases');
@@ -41,7 +41,7 @@ function cmdPhasesList(cwd, options, raw) {
     // If filtering by phase number
     if (phase) {
       const normalized = normalizePhaseName(phase);
-      const match = dirs.find(d => d.startsWith(normalized));
+      const match = dirs.find(d => phaseTokenMatches(d, normalized));
       if (!match) {
         output({ files: [], count: 0, phase_dir: null, error: 'Phase not found' }, raw, '');
         return;
@@ -108,7 +108,7 @@ function cmdPhaseNextDecimal(cwd, basePhase, raw) {
     const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
 
     // Check if base phase exists
-    const baseExists = dirs.some(d => d.startsWith(normalized + '-') || d === normalized);
+    const baseExists = dirs.some(d => phaseTokenMatches(d, normalized));
 
     // Find existing decimal phases for this base
     const decimalPattern = new RegExp(`^${normalized}\\.(\\d+)`);
@@ -163,14 +163,7 @@ function cmdFindPhase(cwd, phase, raw) {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
     const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
 
-    const match = dirs.find(d => {
-      if (d.startsWith(normalized)) return true;
-      if (d.toUpperCase().startsWith(normalized.toUpperCase())) return true;
-      // Strip optional project_code prefix (e.g., 'CK-01-name' → '01-name') and retry
-      const stripped = d.replace(/^[A-Z]{1,6}-/, '');
-      if (stripped.startsWith(normalized)) return true;
-      return false;
-    });
+    const match = dirs.find(d => phaseTokenMatches(d, normalized));
     if (!match) {
       output(notFound, raw, '');
       return;
@@ -221,7 +214,7 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
   try {
     const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
     const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort((a, b) => comparePhaseNum(a, b));
-    const match = dirs.find(d => d.startsWith(normalized));
+    const match = dirs.find(d => phaseTokenMatches(d, normalized));
     if (match) {
       phaseDir = path.join(phasesDir, match);
       phaseDirName = match;
@@ -370,7 +363,7 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
 
     // Build phase entry
     const dependsOn = config.phase_naming === 'custom' ? '' : `\n**Depends on:** Phase ${typeof _newPhaseId === 'number' ? _newPhaseId - 1 : 'TBD'}`;
-    const phaseEntry = `\n### Phase ${_newPhaseId}: ${description}\n\n**Goal:** [To be planned]\n**Requirements**: TBD${dependsOn}\n**Plans:** 0 plans\n\nPlans:\n- [ ] TBD (run /gsd:plan-phase ${_newPhaseId} to break down)\n`;
+    const phaseEntry = `\n### Phase ${_newPhaseId}: ${description}\n\n**Goal:** [To be planned]\n**Requirements**: TBD${dependsOn}\n**Plans:** 0 plans\n\nPlans:\n- [ ] TBD (run /gsd-plan-phase ${_newPhaseId} to break down)\n`;
 
     // Find insertion point: before last "---" or at end
     let updatedContent;
@@ -452,7 +445,7 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
     fs.writeFileSync(path.join(dirPath, '.gitkeep'), '');
 
     // Build phase entry
-    const phaseEntry = `\n### Phase ${_decimalPhase}: ${description} (INSERTED)\n\n**Goal:** [Urgent work - to be planned]\n**Requirements**: TBD\n**Depends on:** Phase ${afterPhase}\n**Plans:** 0 plans\n\nPlans:\n- [ ] TBD (run /gsd:plan-phase ${_decimalPhase} to break down)\n`;
+    const phaseEntry = `\n### Phase ${_decimalPhase}: ${description} (INSERTED)\n\n**Goal:** [Urgent work - to be planned]\n**Requirements**: TBD\n**Depends on:** Phase ${afterPhase}\n**Plans:** 0 plans\n\nPlans:\n- [ ] TBD (run /gsd-plan-phase ${_decimalPhase} to break down)\n`;
 
     // Insert after the target phase section
     const headerPattern = new RegExp(`(#{2,4}\\s*Phase\\s+0*${afterPhaseEscaped}:[^\\n]*\\n)`, 'i');
@@ -605,7 +598,7 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
 
   // Find target directory
   const targetDir = readSubdirectories(phasesDir, true)
-    .find(d => d.startsWith(normalized + '-') || d === normalized) || null;
+    .find(d => phaseTokenMatches(d, normalized)) || null;
 
   // Guard against removing executed work
   if (targetDir && !force) {
@@ -901,6 +894,9 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
         }
       }
     }
+
+    // Gate 4: Update Performance Metrics section (#1627)
+    stateContent = updatePerformanceMetricsSection(stateContent, cwd, phaseNum, planCount, summaryCount);
 
     writeStateMd(statePath, stateContent, cwd);
   }

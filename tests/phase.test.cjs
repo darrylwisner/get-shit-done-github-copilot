@@ -2019,6 +2019,170 @@ describe('phase complete milestone-scoped next-phase', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// exact token matching (no prefix collisions)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('phase resolution uses exact token matching', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('1009 must NOT match 1009A-feature-consistency when 1009 dir is absent', () => {
+    const phasesDir = path.join(tmpDir, '.planning', 'phases');
+    fs.mkdirSync(path.join(phasesDir, '1009A-feature-consistency'));
+    fs.writeFileSync(path.join(phasesDir, '1009A-feature-consistency', 'PLAN.md'), '# Plan');
+
+    const result = runGsdTools('find-phase 1009', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.found, false, 'should NOT find phase 1009 when only 1009A exists');
+  });
+
+  test('1009 matches 1009-pipeline-accuracy-fix when both exist', () => {
+    const phasesDir = path.join(tmpDir, '.planning', 'phases');
+    fs.mkdirSync(path.join(phasesDir, '1009-pipeline-accuracy-fix'));
+    fs.mkdirSync(path.join(phasesDir, '1009A-feature-consistency'));
+    fs.writeFileSync(path.join(phasesDir, '1009-pipeline-accuracy-fix', 'PLAN.md'), '# Plan');
+
+    const result = runGsdTools('find-phase 1009', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.found, true, 'should find phase 1009');
+    assert.ok(
+      output.directory.includes('1009-pipeline-accuracy-fix'),
+      `should match 1009-pipeline-accuracy-fix, got: ${output.directory}`
+    );
+  });
+
+  test('999.6 must NOT match 999.60-episode-processing when 999.6 dir is absent', () => {
+    const phasesDir = path.join(tmpDir, '.planning', 'phases');
+    fs.mkdirSync(path.join(phasesDir, '999.60-episode-processing'));
+    fs.writeFileSync(path.join(phasesDir, '999.60-episode-processing', 'PLAN.md'), '# Plan');
+
+    const result = runGsdTools('find-phase 999.6', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.found, false, 'should NOT find phase 999.6 when only 999.60 exists');
+  });
+
+  test('999.6 matches 999.6-ground-truth-dataset when both exist', () => {
+    const phasesDir = path.join(tmpDir, '.planning', 'phases');
+    fs.mkdirSync(path.join(phasesDir, '999.6-ground-truth-dataset'));
+    fs.mkdirSync(path.join(phasesDir, '999.60-episode-processing'));
+    fs.writeFileSync(path.join(phasesDir, '999.6-ground-truth-dataset', 'PLAN.md'), '# Plan');
+
+    const result = runGsdTools('find-phase 999.6', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.found, true, 'should find phase 999.6');
+    assert.ok(
+      output.directory.includes('999.6-ground-truth-dataset'),
+      `should match 999.6-ground-truth-dataset, got: ${output.directory}`
+    );
+  });
+
+  test('normal non-colliding phases still resolve', () => {
+    const phasesDir = path.join(tmpDir, '.planning', 'phases');
+    fs.mkdirSync(path.join(phasesDir, '01-foundation'));
+    fs.mkdirSync(path.join(phasesDir, '02-implementation'));
+    fs.writeFileSync(path.join(phasesDir, '01-foundation', 'PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(phasesDir, '02-implementation', 'PLAN.md'), '# Plan');
+
+    const r1 = runGsdTools('find-phase 1', tmpDir);
+    assert.ok(r1.success, `Command failed for phase 1: ${r1.error}`);
+    const o1 = JSON.parse(r1.output);
+    assert.strictEqual(o1.found, true, 'should find phase 1');
+    assert.ok(o1.directory.includes('01-foundation'), `should match 01-foundation, got: ${o1.directory}`);
+
+    const r2 = runGsdTools('find-phase 2', tmpDir);
+    assert.ok(r2.success, `Command failed for phase 2: ${r2.error}`);
+    const o2 = JSON.parse(r2.output);
+    assert.strictEqual(o2.found, true, 'should find phase 2');
+    assert.ok(o2.directory.includes('02-implementation'), `should match 02-implementation, got: ${o2.directory}`);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// phase complete — Performance Metrics gate (Step 2 — Gate 4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('phase complete updates Performance Metrics', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('after cmdPhaseComplete: Performance Metrics has updated total plans count', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Current Phase:** 2\n**Status:** Executing Phase 2\n**Total Plans in Phase:** 3\n**Current Plan:** 3\n**Completed Phases:** 0\n**Total Phases:** 3\n**Progress:** 0%\n\n## Performance Metrics\n\n**Velocity:**\n- Total plans completed: 0\n- Average duration: N/A\n- Total execution time: 0 hours\n\n**By Phase:**\n\n| Phase | Plans | Total | Avg/Plan |\n|-------|-------|-------|----------|\n\n## Accumulated Context\n`
+    );
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '02-core');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '02-01-PLAN.md'), '# Plan 1\n');
+    fs.writeFileSync(path.join(phaseDir, '02-02-PLAN.md'), '# Plan 2\n');
+    fs.writeFileSync(path.join(phaseDir, '02-03-PLAN.md'), '# Plan 3\n');
+    fs.writeFileSync(path.join(phaseDir, '02-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phaseDir, '02-02-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phaseDir, '02-03-SUMMARY.md'), '# Summary\n');
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n## Phase 2: Core\n\n- [ ] Phase 2: Core Systems\n`
+    );
+
+    const result = runGsdTools('phase complete 2', tmpDir);
+    assert.ok(result.success, `phase complete failed: ${result.error}`);
+
+    const stateAfter = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(stateAfter.match(/Total plans completed:\s*3/), 'Total plans completed should be 3');
+  });
+
+  test('after cmdPhaseComplete: By Phase table has row for completed phase', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# Project State\n\n**Current Phase:** 1\n**Status:** Executing Phase 1\n**Total Plans in Phase:** 2\n**Current Plan:** 2\n**Completed Phases:** 0\n**Total Phases:** 2\n**Progress:** 0%\n\n## Performance Metrics\n\n**Velocity:**\n- Total plans completed: 0\n- Average duration: N/A\n- Total execution time: 0 hours\n\n**By Phase:**\n\n| Phase | Plans | Total | Avg/Plan |\n|-------|-------|-------|----------|\n\n## Accumulated Context\n`
+    );
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '01-02-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '01-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phaseDir, '01-02-SUMMARY.md'), '# Summary\n');
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n## Phase 1: Setup\n\n- [ ] Phase 1: Setup\n`
+    );
+
+    const result = runGsdTools('phase complete 1', tmpDir);
+    assert.ok(result.success, `phase complete failed: ${result.error}`);
+
+    const stateAfter = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(stateAfter.match(/\|\s*1\s*\|\s*2\s*\|/), 'By Phase table should have row for phase 1 with 2 plans');
+    // Row must appear BEFORE the next section, not after it (regression: empty table body regex)
+    const rowIdx = stateAfter.indexOf('| 1 |');
+    const accIdx = stateAfter.indexOf('## Accumulated Context');
+    if (accIdx !== -1) {
+      assert.ok(rowIdx < accIdx, 'By Phase row must appear before ## Accumulated Context section');
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // milestone complete command
 // ─────────────────────────────────────────────────────────────────────────────
 

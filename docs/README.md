@@ -21,7 +21,7 @@ Language versions: [English](README.md) · [Português (pt-BR)](pt-BR/README.md)
 ## Quick Links
 
 - **What's new in v1.28:** Forensics, milestone summary, workstreams, assumptions mode, UI auto-detect, manager dashboard
-- **Getting started:** [README](../README.md) → install → `/gsd:new-project`
+- **Getting started:** [README](../README.md) → install → `/gsd-new-project`
 - **Full workflow walkthrough:** [User Guide](USER-GUIDE.md)
 - **All commands at a glance:** [Command Reference](COMMANDS.md)
 - **Configuring GSD:** [Configuration Reference](CONFIGURATION.md)

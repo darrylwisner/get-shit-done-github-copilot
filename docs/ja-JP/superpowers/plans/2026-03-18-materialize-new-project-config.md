@@ -2,7 +2,7 @@
 
 > **エージェント型ワーカー向け:** 必須サブスキル: superpowers:subagent-driven-development（推奨）または superpowers:executing-plans を使用して、このプランをタスクごとに実装してください。各ステップはチェックボックス（`- [ ]`）構文で進捗を追跡します。
 
-**目標:** `/gsd:new-project` が `.planning/config.json` を作成する際、ユーザーが選択した6つのキーだけでなく、すべての有効なデフォルト値を含むファイルを生成する。これにより、開発者はソースコードを読まなくてもすべての設定を確認できるようになる。
+**目標:** `/gsd-new-project` が `.planning/config.json` を作成する際、ユーザーが選択した6つのキーだけでなく、すべての有効なデフォルト値を含むファイルを生成する。これにより、開発者はソースコードを読まなくてもすべての設定を確認できるようになる。
 
 **アーキテクチャ:** `config.cjs` に単一の JS 関数 `buildNewProjectConfig(cwd, userChoices)` を追加し、新規プロジェクトの完全な設定の唯一の信頼できる情報源とする。これを CLI コマンド `config-new-project` として公開する。`new-project.md` ワークフローを更新し、部分的な JSON をインラインで書き込む代わりにこのコマンドを呼び出すようにする。
 
@@ -316,7 +316,7 @@ function buildNewProjectConfig(cwd, userChoices) {
 /**
  * コマンド: 新規プロジェクト用の完全展開された .planning/config.json を作成する。
  *
- * ユーザーが選択した設定を JSON 文字列として受け取る（/gsd:new-project 時に
+ * ユーザーが選択した設定を JSON 文字列として受け取る（/gsd-new-project 時に
  * ユーザーが明示的に設定したキー）。残りのキーはハードコードされたデフォルトと
  * オプションの ~/.gsd/defaults.json から補完される。
  *
@@ -661,7 +661,7 @@ node --test tests/ 2>&1 | grep -E "pass|fail|error" | tail -5
 feat: materialize all config defaults at new-project initialization
 
 **問題:**
-`/gsd:new-project` はオンボーディング時にユーザーが明示的に選択した6つのキーのみで
+`/gsd-new-project` はオンボーディング時にユーザーが明示的に選択した6つのキーのみで
 `.planning/config.json` を作成する。5つの追加キー
 （`search_gitignored`、`brave_search`、`git.branching_strategy`、
 `git.phase_branch_template`、`git.milestone_branch_template`）は実行時に
@@ -670,7 +670,7 @@ feat: materialize all config defaults at new-project initialization
 これにより2つの問題が生じる:
 1. **発見可能性**: ユーザーがソースコードを読まない限り `git.branching_strategy` を
    確認・理解できない — 設定ファイルに表示されない。
-2. **暗黙的な拡張**: `/gsd:settings` や `config-set` が初めて設定に書き込む際にも、
+2. **暗黙的な拡張**: `/gsd-settings` や `config-set` が初めて設定に書き込む際にも、
    これらのキーは追加されない。設定ファイルは実効設定のごく一部しか反映しない。
 
 **解決策:**

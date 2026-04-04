@@ -461,11 +461,38 @@ Classify status using this decision tree IN ORDER (most restrictive first):
 
 **Score:** `verified_truths / total_truths`
 
+## Step 9b: Filter Deferred Items
+
+Before reporting gaps, check if any identified gaps are explicitly addressed in later phases of the current milestone. This prevents false-positive gap reports for items intentionally scheduled for future work.
+
+**Load the full milestone roadmap:**
+
+```bash
+ROADMAP_DATA=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze --raw)
+```
+
+Parse the JSON to extract all phases. Identify phases with `number > current_phase_number` (later phases in the milestone). For each later phase, extract its `goal` and `success_criteria`.
+
+**For each potential gap identified in Step 9:**
+
+1. Check if the gap's failed truth or missing item is covered by a later phase's goal or success criteria
+2. **Match criteria:** The gap's concern appears in a later phase's goal text, success criteria text, or the later phase's name clearly suggests it covers this area of work
+3. If a match is found → move the gap to the `deferred` list, recording which phase addresses it and the matching evidence (goal text or success criterion)
+4. If the gap does not match any later phase → keep it as a real `gap`
+
+**Important:** Be conservative when matching. Only defer a gap when there is clear, specific evidence in a later phase's roadmap section. Vague or tangential matches should NOT cause a gap to be deferred — when in doubt, keep it as a real gap.
+
+**Deferred items do NOT affect the status determination.** After filtering, recalculate:
+
+- If the gaps list is now empty and no human verification items exist → `passed`
+- If the gaps list is now empty but human verification items exist → `human_needed`
+- If the gaps list still has items → `gaps_found`
+
 ## Step 10: Structure Gap Output (If Gaps Found)
 
 Before writing VERIFICATION.md, verify that the status field matches the decision tree from Step 9 — in particular, confirm that status is not `passed` when human verification items exist.
 
-Structure gaps in YAML frontmatter for `/gsd:plan-phase --gaps`:
+Structure gaps in YAML frontmatter for `/gsd-plan-phase --gaps`:
 
 ```yaml
 gaps:
@@ -484,6 +511,17 @@ gaps:
 - `reason`: Brief explanation
 - `artifacts`: Files with issues
 - `missing`: Specific things to add/fix
+
+If Step 9b identified deferred items, add a `deferred` section after `gaps`:
+
+```yaml
+deferred:  # Items addressed in later phases — not actionable gaps
+  - truth: "Observable truth not yet met"
+    addressed_in: "Phase 5"
+    evidence: "Phase 5 success criteria: 'Implement RuntimeConfigC FFI bindings'"
+```
+
+Deferred items are informational only — they do not require closure plans.
 
 **Group related gaps by concern** — if multiple truths fail from the same root cause, note this to help the planner create focused plans.
 
@@ -519,6 +557,10 @@ gaps: # Only if status: gaps_found
         issue: "What's wrong"
     missing:
       - "Specific thing to add/fix"
+deferred: # Only if deferred items exist (Step 9b)
+  - truth: "Observable truth addressed in a later phase"
+    addressed_in: "Phase N"
+    evidence: "Matching goal or success criteria text"
 human_verification: # Only if status: human_needed
   - test: "What to do"
     expected: "What should happen"
@@ -542,6 +584,15 @@ human_verification: # Only if status: human_needed
 | 2   | {truth} | ✗ FAILED   | {what's wrong} |
 
 **Score:** {N}/{M} truths verified
+
+### Deferred Items
+
+Items not yet met but explicitly addressed in later milestone phases.
+Only include this section if deferred items exist (from Step 9b).
+
+| # | Item | Addressed In | Evidence |
+|---|------|-------------|----------|
+| 1 | {truth} | Phase {N} | {matching goal or success criteria} |
 
 ### Required Artifacts
 
@@ -610,7 +661,7 @@ All must-haves verified. Phase goal achieved. Ready to proceed.
 1. **{Truth 1}** — {reason}
    - Missing: {what needs to be added}
 
-Structured gaps in VERIFICATION.md frontmatter for `/gsd:plan-phase --gaps`.
+Structured gaps in VERIFICATION.md frontmatter for `/gsd-plan-phase --gaps`.
 
 {If human_needed:}
 ### Human Verification Required
@@ -631,7 +682,7 @@ Automated checks passed. Awaiting human verification.
 
 **DO NOT skip key link verification.** 80% of stubs hide here — pieces exist but aren't connected.
 
-**Structure gaps in YAML frontmatter** for `/gsd:plan-phase --gaps`.
+**Structure gaps in YAML frontmatter** for `/gsd-plan-phase --gaps`.
 
 **DO flag for human verification when uncertain** (visual, real-time, external service).
 
@@ -706,7 +757,9 @@ return <div>No messages</div>  // Always shows "no messages"
 - [ ] Behavioral spot-checks run on runnable code (or skipped with reason)
 - [ ] Human verification items identified
 - [ ] Overall status determined
+- [ ] Deferred items filtered against later milestone phases (Step 9b)
 - [ ] Gaps structured in YAML frontmatter (if gaps_found)
+- [ ] Deferred items structured in YAML frontmatter (if deferred items exist)
 - [ ] Re-verification metadata included (if previous existed)
 - [ ] VERIFICATION.md created with complete report
 - [ ] Results returned to orchestrator (NOT committed)

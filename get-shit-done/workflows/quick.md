@@ -142,7 +142,7 @@ Parse JSON for: `planner_model`, `executor_model`, `checker_model`, `verifier_mo
 USE_WORKTREES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.use_worktrees 2>/dev/null || echo "true")
 ```
 
-**If `roadmap_exists` is false:** Error — Quick mode requires an active project with ROADMAP.md. Run `/gsd:new-project` first.
+**If `roadmap_exists` is false:** Error — Quick mode requires an active project with ROADMAP.md. Run `/gsd-new-project` first.
 
 Quick tasks can run mid-phase - validation only checks ROADMAP.md exists, not phase status.
 
@@ -765,7 +765,7 @@ Commit: ${commit_hash}
 
 ---
 
-Ready for next task: /gsd:quick ${GSD_WS}
+Ready for next task: /gsd-quick ${GSD_WS}
 ```
 
 **If NOT `$VALIDATE_MODE`:**
@@ -782,7 +782,7 @@ Commit: ${commit_hash}
 
 ---
 
-Ready for next task: /gsd:quick ${GSD_WS}
+Ready for next task: /gsd-quick ${GSD_WS}
 ```
 
 </process>

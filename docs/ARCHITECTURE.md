@@ -31,7 +31,7 @@ GSD is a **meta-prompting framework** that sits between the user and AI coding a
 ```
 ┌──────────────────────────────────────────────────────┐
 │                      USER                            │
-│            /gsd:command [args]                        │
+│            /gsd-command [args]                        │
 └─────────────────────┬────────────────────────────────┘
                       │
 ┌─────────────────────▼────────────────────────────────┐
@@ -107,10 +107,10 @@ Multiple layers prevent common failure modes:
 ### Commands (`commands/gsd/*.md`)
 
 User-facing entry points. Each file contains YAML frontmatter (name, description, allowed-tools) and a prompt body that bootstraps the workflow. Commands are installed as:
-- **Claude Code:** Custom slash commands (`/gsd:command-name`)
+- **Claude Code:** Custom slash commands (`/gsd-command-name`)
 - **OpenCode / Kilo:** Slash commands (`/gsd-command-name`)
 - **Codex:** Skills (`$gsd-command-name`)
-- **Copilot:** Slash commands (`/gsd:command-name`)
+- **Copilot:** Slash commands (`/gsd-command-name`)
 - **Antigravity:** Skills
 
 **Total commands:** 44
@@ -378,13 +378,13 @@ Equivalent paths for other runtimes:
 ├── STATE.md                # Living memory: position, decisions, blockers, metrics
 ├── config.json             # Workflow configuration
 ├── MILESTONES.md           # Completed milestone archive
-├── research/               # Domain research from /gsd:new-project
+├── research/               # Domain research from /gsd-new-project
 │   ├── SUMMARY.md
 │   ├── STACK.md
 │   ├── FEATURES.md
 │   ├── ARCHITECTURE.md
 │   └── PITFALLS.md
-├── codebase/               # Brownfield mapping (from /gsd:map-codebase)
+├── codebase/               # Brownfield mapping (from /gsd-map-codebase)
 │   ├── STACK.md
 │   ├── ARCHITECTURE.md
 │   ├── CONVENTIONS.md
@@ -410,13 +410,13 @@ Equivalent paths for other runtimes:
 ├── todos/
 │   ├── pending/            # Captured ideas
 │   └── done/               # Completed todos
-├── threads/               # Persistent context threads (from /gsd:thread)
-├── seeds/                 # Forward-looking ideas (from /gsd:plant-seed)
+├── threads/               # Persistent context threads (from /gsd-thread)
+├── seeds/                 # Forward-looking ideas (from /gsd-plant-seed)
 ├── debug/                  # Active debug sessions
 │   ├── *.md                # Active sessions
 │   ├── resolved/           # Archived sessions
 │   └── knowledge-base.md   # Persistent debug learnings
-├── ui-reviews/             # Screenshots from /gsd:ui-review (gitignored)
+├── ui-reviews/             # Screenshots from /gsd-ui-review (gitignored)
 └── continue-here.md        # Context handoff (from pause-work)
 ```
 
@@ -426,7 +426,7 @@ Equivalent paths for other runtimes:
 
 The installer (`bin/install.js`, ~3,000 lines) handles:
 
-1. **Runtime detection** — Interactive prompt or CLI flags (`--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--antigravity`, `--all`)
+1. **Runtime detection** — Interactive prompt or CLI flags (`--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--antigravity`, `--cursor`, `--windsurf`, `--trae`, `--all`)
 2. **Location selection** — Global (`--global`) or local (`--local`)
 3. **File deployment** — Copies commands, workflows, references, templates, agents, hooks
 4. **Runtime adaptation** — Transforms file content per runtime:
@@ -437,9 +437,10 @@ The installer (`bin/install.js`, ~3,000 lines) handles:
    - Copilot: Maps tool names (Read→read, Bash→execute, etc.)
    - Gemini: Adjusts hook event names (`AfterTool` instead of `PostToolUse`)
    - Antigravity: Skills-first with Google model equivalents
+   - Trae: Skills-first install to `~/.trae` / `./.trae` with no `settings.json` or hook integration
 5. **Path normalization** — Replaces `~/.claude/` paths with runtime-specific paths
 6. **Settings integration** — Registers hooks in runtime's `settings.json`
-7. **Patch backup** — Since v1.17, backs up locally modified files to `gsd-local-patches/` for `/gsd:reapply-patches`
+7. **Patch backup** — Since v1.17, backs up locally modified files to `gsd-local-patches/` for `/gsd-reapply-patches`
 8. **Manifest tracking** — Writes `gsd-file-manifest.json` for clean uninstall
 9. **Uninstall mode** — `--uninstall` removes all GSD files, hooks, and settings
 
@@ -499,8 +500,8 @@ Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→
 
 **Workflow Guard** (`gsd-workflow-guard.js`):
 - Triggers on Write/Edit to non-`.planning/` files
-- Detects edits outside GSD workflow context (no active `/gsd:` command or Task subagent)
-- Advises using `/gsd:quick` or `/gsd:fast` for state-tracked changes
+- Detects edits outside GSD workflow context (no active `/gsd-` command or Task subagent)
+- Advises using `/gsd-quick` or `/gsd-fast` for state-tracked changes
 - Opt-in via `hooks.workflow_guard: true` (default: false)
 
 ---
@@ -511,12 +512,12 @@ GSD supports multiple AI coding runtimes through a unified command/workflow arch
 
 | Runtime | Command Format | Agent System | Config Location |
 |---------|---------------|--------------|-----------------|
-| Claude Code | `/gsd:command` | Task spawning | `~/.claude/` |
+| Claude Code | `/gsd-command` | Task spawning | `~/.claude/` |
 | OpenCode | `/gsd-command` | Subagent mode | `~/.config/opencode/` |
 | Kilo | `/gsd-command` | Subagent mode | `~/.config/kilo/` |
-| Gemini CLI | `/gsd:command` | Task spawning | `~/.gemini/` |
+| Gemini CLI | `/gsd-command` | Task spawning | `~/.gemini/` |
 | Codex | `$gsd-command` | Skills | `~/.codex/` |
-| Copilot | `/gsd:command` | Agent delegation | `~/.github/` |
+| Copilot | `/gsd-command` | Agent delegation | `~/.github/` |
 | Antigravity | Skills | Skills | `~/.gemini/antigravity/` |
 
 ### Abstraction Points

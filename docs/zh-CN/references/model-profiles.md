@@ -66,7 +66,7 @@
 
 ## 切换配置
 
-运行时：`/gsd:set-profile <profile>`
+运行时：`/gsd-set-profile <profile>`
 
 项目默认值：在 `.planning/config.json` 中设置：
 ```json

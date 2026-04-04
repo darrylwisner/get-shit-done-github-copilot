@@ -21,7 +21,7 @@ Get Shit Done (GSD) 프레임워크의 종합 문서입니다. GSD는 AI 코딩 
 ## 빠른 링크
 
 - **v1.28의 새로운 기능:** Forensics, milestone 요약, workstream, assumptions 모드, UI 자동 감지, manager 대시보드
-- **시작하기:** [README](../README.md) → 설치 → `/gsd:new-project`
+- **시작하기:** [README](../README.md) → 설치 → `/gsd-new-project`
 - **전체 워크플로우 안내:** [User Guide](USER-GUIDE.md)
 - **모든 명령어 한눈에 보기:** [Command Reference](COMMANDS.md)
 - **GSD 설정하기:** [Configuration Reference](CONFIGURATION.md)

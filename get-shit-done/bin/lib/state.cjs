@@ -1054,11 +1054,283 @@ function cmdSignalResume(cwd, raw) {
   output({ resumed: true, removed }, raw, removed ? 'true' : 'false');
 }
 
+// ─── Gate Functions (STATE.md consistency enforcement) ────────────────────────
+
+/**
+ * Update the ## Performance Metrics section in STATE.md content.
+ * Increments Velocity totals and upserts a By Phase table row.
+ * Returns modified content string.
+ */
+function updatePerformanceMetricsSection(content, cwd, phaseNum, planCount, summaryCount) {
+  // Update Velocity: Total plans completed
+  const totalMatch = content.match(/Total plans completed:\s*(\d+|\[N\])/);
+  const prevTotal = totalMatch && totalMatch[1] !== '[N]' ? parseInt(totalMatch[1], 10) : 0;
+  const newTotal = prevTotal + summaryCount;
+  content = content.replace(
+    /Total plans completed:\s*(\d+|\[N\])/,
+    `Total plans completed: ${newTotal}`
+  );
+
+  // Update By Phase table — upsert row for this phase
+  const byPhaseTablePattern = /(\|\s*Phase\s*\|\s*Plans\s*\|\s*Total\s*\|\s*Avg\/Plan\s*\|[ \t]*\n\|(?:[- :\t]+\|)+[ \t]*\n)((?:[ \t]*\|[^\n]*\n)*)(?=\n|$)/i;
+  const byPhaseMatch = content.match(byPhaseTablePattern);
+  if (byPhaseMatch) {
+    let tableBody = byPhaseMatch[2].trim();
+    const phaseRowPattern = new RegExp(`^\\|\\s*${escapeRegex(String(phaseNum))}\\s*\\|.*$`, 'm');
+    const newRow = `| ${phaseNum} | ${summaryCount} | - | - |`;
+
+    if (phaseRowPattern.test(tableBody)) {
+      // Update existing row
+      tableBody = tableBody.replace(phaseRowPattern, newRow);
+    } else {
+      // Remove placeholder row and add new row
+      tableBody = tableBody.replace(/^\|\s*-\s*\|\s*-\s*\|\s*-\s*\|\s*-\s*\|$/m, '').trim();
+      tableBody = tableBody ? tableBody + '\n' + newRow : newRow;
+    }
+
+    content = content.replace(byPhaseTablePattern, `$1${tableBody}\n`);
+  }
+
+  return content;
+}
+
+/**
+ * Gate 3a: Record state after plan-phase completes.
+ * Updates Status to "Ready to execute", Total Plans, Last Activity.
+ */
+function cmdStatePlannedPhase(cwd, phaseNumber, planCount, raw) {
+  const statePath = planningPaths(cwd).state;
+  if (!fs.existsSync(statePath)) {
+    output({ error: 'STATE.md not found' }, raw);
+    return;
+  }
+
+  let content = fs.readFileSync(statePath, 'utf-8');
+  const today = new Date().toISOString().split('T')[0];
+  const updated = [];
+
+  // Update Status
+  let result = stateReplaceField(content, 'Status', 'Ready to execute');
+  if (result) { content = result; updated.push('Status'); }
+
+  // Update Total Plans in Phase
+  if (planCount !== null && planCount !== undefined) {
+    result = stateReplaceField(content, 'Total Plans in Phase', String(planCount));
+    if (result) { content = result; updated.push('Total Plans in Phase'); }
+  }
+
+  // Update Last Activity
+  result = stateReplaceField(content, 'Last Activity', today);
+  if (result) { content = result; updated.push('Last Activity'); }
+
+  // Update Last Activity Description
+  result = stateReplaceField(content, 'Last Activity Description', `Phase ${phaseNumber} planning complete — ${planCount || '?'} plans ready`);
+  if (result) { content = result; updated.push('Last Activity Description'); }
+
+  // Update Current Position section
+  content = updateCurrentPositionFields(content, {
+    status: 'Ready to execute',
+    lastActivity: `${today} -- Phase ${phaseNumber} planning complete`,
+  });
+
+  if (updated.length > 0) {
+    writeStateMd(statePath, content, cwd);
+  }
+
+  output({ updated, phase: phaseNumber, plan_count: planCount }, raw, updated.length > 0 ? 'true' : 'false');
+}
+
+/**
+ * Gate 1: Validate STATE.md against filesystem.
+ * Returns { valid, warnings, drift } JSON.
+ */
+function cmdStateValidate(cwd, raw) {
+  const statePath = planningPaths(cwd).state;
+  if (!fs.existsSync(statePath)) {
+    output({ error: 'STATE.md not found' }, raw);
+    return;
+  }
+
+  const content = fs.readFileSync(statePath, 'utf-8');
+  const warnings = [];
+  const drift = {};
+
+  const status = stateExtractField(content, 'Status') || '';
+  const currentPhase = stateExtractField(content, 'Current Phase');
+  const totalPlansRaw = stateExtractField(content, 'Total Plans in Phase');
+  const totalPlansInPhase = totalPlansRaw ? parseInt(totalPlansRaw, 10) : null;
+
+  const phasesDir = planningPaths(cwd).phases;
+
+  // Scan disk for current phase
+  if (currentPhase && fs.existsSync(phasesDir)) {
+    const normalized = currentPhase.replace(/\s+of\s+\d+.*/, '').trim();
+    try {
+      const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
+      const phaseDir = entries.find(e => e.isDirectory() && e.name.startsWith(normalized.replace(/^0+/, '').padStart(2, '0')));
+      if (phaseDir) {
+        const phaseDirPath = path.join(phasesDir, phaseDir.name);
+        const files = fs.readdirSync(phaseDirPath);
+        const diskPlans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
+        const diskSummaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+
+        // Check plan count mismatch
+        if (totalPlansInPhase !== null && diskPlans !== totalPlansInPhase) {
+          warnings.push(`Plan count mismatch: STATE.md says ${totalPlansInPhase} plans, disk has ${diskPlans}`);
+          drift.plan_count = { state: totalPlansInPhase, disk: diskPlans };
+        }
+
+        // Check for VERIFICATION.md
+        const verificationFiles = files.filter(f => f.includes('VERIFICATION') && f.endsWith('.md'));
+        for (const vf of verificationFiles) {
+          try {
+            const vContent = fs.readFileSync(path.join(phaseDirPath, vf), 'utf-8');
+            if (/status:\s*passed/i.test(vContent) && /executing/i.test(status)) {
+              warnings.push(`Status drift: STATE.md says "${status}" but ${vf} shows verification passed — phase may be complete`);
+              drift.verification_status = { state_status: status, verification: 'passed' };
+            }
+          } catch { /* intentionally empty */ }
+        }
+
+        // Check if all plans have summaries but status still says executing
+        if (diskPlans > 0 && diskSummaries >= diskPlans && /executing/i.test(status)) {
+          // Only warn if no verification exists (if verification passed, the above warning covers it)
+          if (verificationFiles.length === 0) {
+            warnings.push(`All ${diskPlans} plans have summaries but status is still "${status}" — phase may be ready for verification`);
+          }
+        }
+      }
+    } catch { /* intentionally empty */ }
+  }
+
+  const valid = warnings.length === 0;
+  output({ valid, warnings, drift }, raw);
+}
+
+/**
+ * Gate 2: Sync STATE.md from filesystem ground truth.
+ * Scans phase dirs, reconstructs counters, progress, metrics.
+ * Supports --verify for dry-run mode.
+ */
+function cmdStateSync(cwd, options, raw) {
+  const statePath = planningPaths(cwd).state;
+  if (!fs.existsSync(statePath)) {
+    output({ error: 'STATE.md not found' }, raw);
+    return;
+  }
+
+  const verify = options && options.verify;
+  const content = fs.readFileSync(statePath, 'utf-8');
+  const changes = [];
+  let modified = content;
+  const today = new Date().toISOString().split('T')[0];
+
+  const phasesDir = planningPaths(cwd).phases;
+  if (!fs.existsSync(phasesDir)) {
+    output({ synced: true, changes: [], dry_run: !!verify }, raw);
+    return;
+  }
+
+  // Scan all phases
+  let entries;
+  try {
+    entries = fs.readdirSync(phasesDir, { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name)
+      .sort();
+  } catch {
+    output({ synced: true, changes: [], dry_run: !!verify }, raw);
+    return;
+  }
+
+  let totalDiskPlans = 0;
+  let totalDiskSummaries = 0;
+  let highestIncompletePhase = null;
+  let highestIncompletePhaseNum = null;
+  let highestIncompletePhaseplanCount = 0;
+  let highestIncompletePhaseSummaryCount = 0;
+
+  for (const dir of entries) {
+    const dirPath = path.join(phasesDir, dir);
+    const files = fs.readdirSync(dirPath);
+    const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
+    const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+    totalDiskPlans += plans;
+    totalDiskSummaries += summaries;
+
+    // Track the highest phase with incomplete plans (or any plans)
+    const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+    if (phaseMatch && plans > 0) {
+      if (summaries < plans) {
+        // Incomplete phase — this is likely the current one
+        highestIncompletePhase = dir;
+        highestIncompletePhaseNum = phaseMatch[1];
+        highestIncompletePhaseplanCount = plans;
+        highestIncompletePhaseSummaryCount = summaries;
+      } else if (!highestIncompletePhase) {
+        // All complete, track as potential current
+        highestIncompletePhase = dir;
+        highestIncompletePhaseNum = phaseMatch[1];
+        highestIncompletePhaseplanCount = plans;
+        highestIncompletePhaseSummaryCount = summaries;
+      }
+    }
+  }
+
+  // Sync Total Plans in Phase
+  if (highestIncompletePhase) {
+    const currentPlansField = stateExtractField(modified, 'Total Plans in Phase');
+    if (currentPlansField && parseInt(currentPlansField, 10) !== highestIncompletePhaseplanCount) {
+      changes.push(`Total Plans in Phase: ${currentPlansField} -> ${highestIncompletePhaseplanCount}`);
+      const result = stateReplaceField(modified, 'Total Plans in Phase', String(highestIncompletePhaseplanCount));
+      if (result) modified = result;
+    }
+  }
+
+  // Sync Progress
+  const percent = totalDiskPlans > 0 ? Math.min(100, Math.round(totalDiskSummaries / totalDiskPlans * 100)) : 0;
+  const currentProgress = stateExtractField(modified, 'Progress');
+  if (currentProgress) {
+    const currentPercent = parseInt(currentProgress.replace(/[^\d]/g, ''), 10);
+    if (currentPercent !== percent) {
+      const barWidth = 10;
+      const filled = Math.round(percent / 100 * barWidth);
+      const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barWidth - filled);
+      const progressStr = `[${bar}] ${percent}%`;
+      changes.push(`Progress: ${currentProgress} -> ${progressStr}`);
+      const result = stateReplaceField(modified, 'Progress', progressStr);
+      if (result) modified = result;
+    }
+  }
+
+  // Sync Last Activity
+  const result = stateReplaceField(modified, 'Last Activity', today);
+  if (result) {
+    const oldActivity = stateExtractField(modified, 'Last Activity');
+    if (oldActivity !== today) {
+      changes.push(`Last Activity: ${oldActivity} -> ${today}`);
+    }
+    modified = result;
+  }
+
+  if (verify) {
+    output({ synced: false, changes, dry_run: true }, raw);
+    return;
+  }
+
+  if (changes.length > 0 || modified !== content) {
+    writeStateMd(statePath, modified, cwd);
+  }
+
+  output({ synced: true, changes, dry_run: false }, raw);
+}
+
 module.exports = {
   stateExtractField,
   stateReplaceField,
   stateReplaceFieldWithFallback,
   writeStateMd,
+  updatePerformanceMetricsSection,
   cmdStateLoad,
   cmdStateGet,
   cmdStatePatch,
@@ -1073,6 +1345,9 @@ module.exports = {
   cmdStateSnapshot,
   cmdStateJson,
   cmdStateBeginPhase,
+  cmdStatePlannedPhase,
+  cmdStateValidate,
+  cmdStateSync,
   cmdSignalWaiting,
   cmdSignalResume,
 };

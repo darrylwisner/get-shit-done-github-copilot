@@ -2,7 +2,7 @@
 
 > **에이전트 작업자를 위한 안내:** 필수 하위 기술: superpowers:subagent-driven-development(권장) 또는 superpowers:executing-plans를 사용하여 이 계획을 작업 단위로 구현하세요. 단계는 체크박스(`- [ ]`) 형식으로 진행 상황을 추적합니다.
 
-**목표:** `/gsd:new-project`가 `.planning/config.json`을 생성할 때, 파일에 사용자가 선택한 6개 키만이 아닌 모든 유효한 기본값이 포함되도록 하여 개발자가 소스 코드를 읽지 않고도 모든 설정을 확인할 수 있게 합니다.
+**목표:** `/gsd-new-project`가 `.planning/config.json`을 생성할 때, 파일에 사용자가 선택한 6개 키만이 아닌 모든 유효한 기본값이 포함되도록 하여 개발자가 소스 코드를 읽지 않고도 모든 설정을 확인할 수 있게 합니다.
 
 **아키텍처:** 새 프로젝트의 전체 config에 대한 단일 진실 공급원으로서 `config.cjs`에 단일 JS 함수 `buildNewProjectConfig(cwd, userChoices)`를 추가합니다. CLI 명령어 `config-new-project`로 노출합니다. 부분적인 JSON을 인라인으로 작성하는 대신 이 명령어를 호출하도록 `new-project.md` 워크플로우를 업데이트합니다.
 
@@ -316,7 +316,7 @@ function buildNewProjectConfig(cwd, userChoices) {
 /**
  * 명령어: 새 프로젝트를 위한 완전히 구체화된 .planning/config.json을 생성합니다.
  *
- * 사용자가 선택한 설정을 JSON 문자열로 받습니다(/gsd:new-project 중 명시적으로
+ * 사용자가 선택한 설정을 JSON 문자열로 받습니다(/gsd-new-project 중 명시적으로
  * 구성한 키들). 나머지 키들은 하드코딩된 기본값과 선택적 ~/.gsd/defaults.json에서 채워집니다.
  *
  * 멱등성: config.json이 이미 존재하면 { created: false }를 반환합니다.
@@ -660,7 +660,7 @@ node --test tests/ 2>&1 | grep -E "pass|fail|error" | tail -5
 feat: materialize all config defaults at new-project initialization
 
 **문제:**
-`/gsd:new-project`는 온보딩 중 사용자가 명시적으로 선택한 6개 키만으로
+`/gsd-new-project`는 온보딩 중 사용자가 명시적으로 선택한 6개 키만으로
 `.planning/config.json`을 생성합니다. 5개의 추가 키
 (`search_gitignored`, `brave_search`, `git.branching_strategy`,
 `git.phase_branch_template`, `git.milestone_branch_template`)는
@@ -669,7 +669,7 @@ feat: materialize all config defaults at new-project initialization
 이로 인해 두 가지 문제가 발생합니다:
 1. **발견성**: 소스 코드를 읽지 않고는 `git.branching_strategy`를
    확인하거나 이해할 수 없습니다 — config에 표시되지 않습니다.
-2. **암묵적 확장**: `/gsd:settings` 또는 `config-set`이 처음으로 config에
+2. **암묵적 확장**: `/gsd-settings` 또는 `config-set`이 처음으로 config에
    기록할 때도 해당 키들이 추가되지 않습니다. config는 유효한 구성의
    일부만 반영합니다.
 

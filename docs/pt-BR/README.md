@@ -20,7 +20,7 @@ Documentação abrangente do framework Get Shit Done (GSD) — um sistema de met
 
 ## Links rápidos
 
-- **Começar rápido:** [README principal](../../README.pt-BR.md) -> instalação -> `/gsd:new-project`
+- **Começar rápido:** [README principal](../../README.pt-BR.md) -> instalação -> `/gsd-new-project`
 - **Fluxo completo:** [Guia do usuário](USER-GUIDE.md)
 - **Comandos:** [Referência de comandos](COMMANDS.md)
 - **Configuração:** [Referência de configuração](CONFIGURATION.md)

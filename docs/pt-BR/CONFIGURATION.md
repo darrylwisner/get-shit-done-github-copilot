@@ -66,7 +66,7 @@ Esta versão resume os parâmetros principais em Português. Para schema complet
 | `git.branching_strategy` | `none`, `phase`, `milestone` | `none` | Estratégia de criação de branches |
 | `git.phase_branch_template` | string | `gsd/phase-{phase}-{slug}` | Nome para branch por fase |
 | `git.milestone_branch_template` | string | `gsd/{milestone}-{slug}` | Nome para branch de milestone |
-| `git.quick_branch_template` | string ou `null` | `null` | Branch opcional para `/gsd:quick` |
+| `git.quick_branch_template` | string ou `null` | `null` | Branch opcional para `/gsd-quick` |
 
 ## Perfis de modelo
 
@@ -80,5 +80,5 @@ Esta versão resume os parâmetros principais em Português. Para schema complet
 Troca rápida:
 
 ```bash
-/gsd:set-profile budget
+/gsd-set-profile budget
 ```
