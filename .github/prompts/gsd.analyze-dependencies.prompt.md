@@ -1,12 +1,11 @@
 ---
-name: gsd.do
-description: "Route freeform text to the right GSD command automatically"
-argument-hint: "<description of what you want to do>"
-tools: ['execute', 'read', 'vscode/askQuestions']
+name: gsd.analyze-dependencies
+description: "Analyze phase dependencies and suggest Depends on entries for ROADMAP.md"
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Bash","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion"] -->
 
 ## Path Resolution 
 
@@ -35,23 +34,25 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Analyze freeform natural language input and dispatch to the most appropriate GSD command.
+Analyze the phase dependency graph for the current milestone. For each phase pair, determine if there is a dependency relationship based on:
+- File overlap (phases that modify the same files must be ordered)
+- Semantic dependencies (a phase that uses an API built by another phase)
+- Data flow (a phase that consumes output from another phase)
 
-Acts as a smart dispatcher — never does the work itself. Matches intent to the best GSD command using routing rules, confirms the match, then hands off.
-
-Use when you know what you want but don't know which `/gsd-*` command to run.
+Then suggest `Depends on` updates to ROADMAP.md.
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/do.md
-- Read file at: ./.claude/get-shit-done/references/ui-brand.md
+- Read file at: ./.claude/get-shit-done/workflows/analyze-dependencies.md
 </execution_context>
 
 <context>
-$ARGUMENTS
+No arguments required. Requires an active milestone with ROADMAP.md.
+
+Run this command BEFORE `/gsd:manager` to fill in missing `Depends on` fields and prevent merge conflicts from unordered parallel execution.
 </context>
 
 <process>
-Execute the do workflow from @./.claude/get-shit-done/workflows/do.md end-to-end.
-Route user intent to the best GSD command and invoke it.
+Execute the analyze-dependencies workflow from @./.claude/get-shit-done/workflows/analyze-dependencies.md end-to-end.
+Present dependency suggestions clearly and apply confirmed updates to ROADMAP.md.
 </process>

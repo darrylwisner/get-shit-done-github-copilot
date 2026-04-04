@@ -1,10 +1,11 @@
 ---
 name: gsd.help
 description: "Show available GSD commands and usage guide"
+tools: ['read']
 agent: agent
 ---
 
-<!-- upstream-tools: null (field absent in upstream command) -->
+<!-- upstream-tools: ["Read"] -->
 
 ## Path Resolution 
 
