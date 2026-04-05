@@ -1,7 +1,7 @@
 /**
  * GSD Workspace Tests
  *
- * Tests for /gsd:new-workspace, /gsd:list-workspaces, /gsd:remove-workspace
+ * Tests for /gsd-new-workspace, /gsd-list-workspaces, /gsd-remove-workspace
  * init functions and integration with gsd-tools routing.
  */
 

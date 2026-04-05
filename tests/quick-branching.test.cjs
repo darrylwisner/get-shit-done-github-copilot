@@ -1,7 +1,7 @@
 /**
  * Quick task branching tests
  *
- * Validates that /gsd:quick exposes branch_name from init and that the
+ * Validates that /gsd-quick exposes branch_name from init and that the
  * workflow checks out a dedicated quick-task branch when configured.
  */
 

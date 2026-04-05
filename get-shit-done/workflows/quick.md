@@ -603,7 +603,41 @@ After executor returns:
    for WT in $WORKTREES; do
      WT_BRANCH=$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)
      if [ -n "$WT_BRANCH" ] && [ "$WT_BRANCH" != "HEAD" ]; then
-       git merge "$WT_BRANCH" --no-edit -m "chore: merge quick task worktree ($WT_BRANCH)" 2>&1 || echo "⚠ Merge conflict — resolve manually"
+       # --- Orchestrator file protection (#1756) ---
+       # Backup STATE.md and ROADMAP.md before merge (main always wins)
+       STATE_BACKUP=$(mktemp)
+       ROADMAP_BACKUP=$(mktemp)
+       git show HEAD:.planning/STATE.md > "$STATE_BACKUP" 2>/dev/null || true
+       git show HEAD:.planning/ROADMAP.md > "$ROADMAP_BACKUP" 2>/dev/null || true
+
+       # Snapshot files on main to detect resurrections
+       PRE_MERGE_FILES=$(git ls-files .planning/)
+
+       git merge "$WT_BRANCH" --no-edit -m "chore: merge quick task worktree ($WT_BRANCH)" 2>&1 || {
+         echo "⚠ Merge conflict — resolve manually"
+         rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
+         continue
+       }
+
+       # Restore orchestrator-owned files
+       if [ -s "$STATE_BACKUP" ]; then cp "$STATE_BACKUP" .planning/STATE.md; fi
+       if [ -s "$ROADMAP_BACKUP" ]; then cp "$ROADMAP_BACKUP" .planning/ROADMAP.md; fi
+       rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
+
+       # Remove files deleted on main but re-added by worktree
+       DELETED_FILES=$(git diff --diff-filter=A --name-only HEAD~1 -- .planning/ 2>/dev/null || true)
+       for RESURRECTED in $DELETED_FILES; do
+         if ! echo "$PRE_MERGE_FILES" | grep -qxF "$RESURRECTED"; then
+           git rm -f "$RESURRECTED" 2>/dev/null || true
+         fi
+       done
+
+       if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
+          [ -n "$DELETED_FILES" ]; then
+         git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
+         git commit --amend --no-edit 2>/dev/null || true
+       fi
+
        git worktree remove "$WT" --force 2>/dev/null || true
        git branch -D "$WT_BRANCH" 2>/dev/null || true
      fi

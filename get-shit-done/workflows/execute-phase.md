@@ -485,11 +485,50 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
      if [ -n "$WT_BRANCH" ] && [ "$WT_BRANCH" != "HEAD" ]; then
        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
+       # --- Orchestrator file protection (#1756) ---
+       # Snapshot orchestrator-owned files BEFORE merge. If the worktree
+       # branch outlived a milestone transition, its versions of STATE.md
+       # and ROADMAP.md are stale. Main always wins for these files.
+       STATE_BACKUP=$(mktemp)
+       ROADMAP_BACKUP=$(mktemp)
+       git show HEAD:.planning/STATE.md > "$STATE_BACKUP" 2>/dev/null || true
+       git show HEAD:.planning/ROADMAP.md > "$ROADMAP_BACKUP" 2>/dev/null || true
+
+       # Snapshot list of files on main BEFORE merge to detect resurrections
+       PRE_MERGE_FILES=$(git ls-files .planning/)
+
        # Merge the worktree branch into the current branch
        git merge "$WT_BRANCH" --no-edit -m "chore: merge executor worktree ($WT_BRANCH)" 2>&1 || {
          echo "⚠ Merge conflict from worktree $WT_BRANCH — resolve manually"
+         rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
          continue
        }
+
+       # Restore orchestrator-owned files (main always wins)
+       if [ -s "$STATE_BACKUP" ]; then
+         cp "$STATE_BACKUP" .planning/STATE.md
+       fi
+       if [ -s "$ROADMAP_BACKUP" ]; then
+         cp "$ROADMAP_BACKUP" .planning/ROADMAP.md
+       fi
+       rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
+
+       # Detect files deleted on main but re-added by worktree merge
+       # (e.g., archived phase directories that were intentionally removed)
+       DELETED_FILES=$(git diff --diff-filter=A --name-only HEAD~1 -- .planning/ 2>/dev/null || true)
+       for RESURRECTED in $DELETED_FILES; do
+         # Check if this file was NOT in main's pre-merge tree
+         if ! echo "$PRE_MERGE_FILES" | grep -qxF "$RESURRECTED"; then
+           git rm -f "$RESURRECTED" 2>/dev/null || true
+         fi
+       done
+
+       # Amend merge commit with restored files if any changed
+       if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
+          [ -n "$DELETED_FILES" ]; then
+         git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
+         git commit --amend --no-edit 2>/dev/null || true
+       fi
 
        # Remove the worktree
        git worktree remove "$WT" --force 2>/dev/null || true

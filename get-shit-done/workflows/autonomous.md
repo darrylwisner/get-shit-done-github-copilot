@@ -784,7 +784,7 @@ Decisions captured: {count} across {area_count} areas
  Completed through phase ${TO_PHASE} as requested.
  Remaining phases were not executed.
 
- Resume with: /gsd:autonomous --from ${next_incomplete_phase}
+ Resume with: /gsd-autonomous --from ${next_incomplete_phase}
 ```
 
 Proceed directly to lifecycle step (which handles partial completion — skips audit/complete/cleanup since not all phases are done). Exit cleanly.

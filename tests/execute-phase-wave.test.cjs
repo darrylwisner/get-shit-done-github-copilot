@@ -1,7 +1,7 @@
 /**
  * Execute-phase wave filter tests
  *
- * Validates the /gsd:execute-phase --wave feature contract:
+ * Validates the /gsd-execute-phase --wave feature contract:
  * - Command frontmatter advertises --wave
  * - Workflow parses WAVE_FILTER
  * - Workflow enforces lower-wave safety
