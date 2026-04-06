@@ -125,21 +125,21 @@ npx get-shit-done-cc@latest
 npx get-shit-done-cc --claude --global   # ~/.claude/에 설치
 npx get-shit-done-cc --claude --local    # ./.claude/에 설치
 
-# OpenCode
+# OpenCode (오픈소스, 무료 모델)
 npx get-shit-done-cc --opencode --global # ~/.config/opencode/에 설치
 
 # Gemini CLI
 npx get-shit-done-cc --gemini --global   # ~/.gemini/에 설치
 
-# Kilo
+# Kilo (OpenCode 포크)
 npx get-shit-done-cc --kilo --global     # ~/.config/kilo/에 설치
 npx get-shit-done-cc --kilo --local      # ./.kilo/에 설치
 
-# Codex
+# Codex (스킬 우선)
 npx get-shit-done-cc --codex --global    # ~/.codex/에 설치
 npx get-shit-done-cc --codex --local     # ./.codex/에 설치
 
-# Copilot
+# Copilot (GitHub Copilot CLI)
 npx get-shit-done-cc --copilot --global  # ~/.github/에 설치
 npx get-shit-done-cc --copilot --local   # ./.github/에 설치
 
@@ -147,7 +147,7 @@ npx get-shit-done-cc --copilot --local   # ./.github/에 설치
 npx get-shit-done-cc --cursor --global      # ~/.cursor/에 설치
 npx get-shit-done-cc --cursor --local       # ./.cursor/에 설치
 
-# Antigravity
+# Antigravity (Google, 스킬 우선, Gemini 기반)
 npx get-shit-done-cc --antigravity --global # ~/.gemini/antigravity/에 설치
 npx get-shit-done-cc --antigravity --local  # ./.agent/에 설치
 
@@ -155,11 +155,11 @@ npx get-shit-done-cc --antigravity --local  # ./.agent/에 설치
 npx get-shit-done-cc --augment --global     # ~/.augment/에 설치
 npx get-shit-done-cc --augment --local      # ./.augment/에 설치
 
-# Trae
+# Trae (ByteDance, 스킬 우선)
 npx get-shit-done-cc --trae --global        # ~/.trae/에 설치
 npx get-shit-done-cc --trae --local         # ./.trae/에 설치
 
-# Cline
+# Cline (.clinerules 사용)
 npx get-shit-done-cc --cline --global       # ~/.cline/에 설치
 npx get-shit-done-cc --cline --local        # ./.clinerules에 설치
 
