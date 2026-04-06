@@ -19,7 +19,7 @@ function detectConfigDir(baseDir) {
   if (envDir && fs.existsSync(path.join(envDir, 'get-shit-done', 'VERSION'))) {
     return envDir;
   }
-  for (const dir of ['.config/kilo', '.kilo', '.config/opencode', '.opencode', '.gemini', '.claude']) {
+  for (const dir of ['.claude', '.gemini', '.config/kilo', '.kilo', '.config/opencode', '.opencode']) {
     if (fs.existsSync(path.join(baseDir, dir, 'get-shit-done', 'VERSION'))) {
       return path.join(baseDir, dir);
     }

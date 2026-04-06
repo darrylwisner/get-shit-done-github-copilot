@@ -6,9 +6,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.34.1] - 2026-04-06
+
+### Fixed
+- **npm publish catchup** — v1.33.0 and v1.34.0 were tagged but never published to npm; this release makes all changes available via `npx get-shit-done-cc@latest`
+- Removed npm v1.32.0 stuck notice from README
+
+## [1.34.0] - 2026-04-06
+
+### Added
+- **Gates taxonomy reference** — 4 canonical gate types (pre-flight, revision, escalation, abort) with phase matrix wired into plan-checker and verifier agents (#1781)
+- **Post-merge hunk verification** — `reapply-patches` now detects silently dropped hunks after three-way merge (#1775)
+- **Execution context profiles** — Three context profiles (`dev`, `research`, `review`) for mode-specific agent output guidance (#1807)
+
+### Fixed
+- **Shell hooks missing from npm package** — `hooks/*.sh` files excluded from tarball due to `hooks/dist` allowlist; changed to `hooks` (#1852 #1862)
+- **detectConfigDir priority** — `.claude` now searched first so Claude Code users don't see false update warnings when multiple runtimes are installed (#1860)
+- **Milestone backlog preservation** — `phases clear` no longer wipes 999.x backlog phases (#1858)
+
 ## [1.33.0] - 2026-04-05
 
 ### Added
+- **Queryable codebase intelligence system** -- Persistent `.planning/intel/` store with structured JSON files (files, exports, symbols, patterns, dependencies). Query via `gsd-tools intel` subcommands. Incremental updates via `gsd-intel-updater` agent. Opt-in; projects without intel store are unaffected. (#1688)
 - **Shared behavioral references** — Add questioning, domain-probes, and UI-brand reference docs wired into workflows (#1658)
 - **Chore / Maintenance issue template** — Structured template for internal maintenance tasks (#1689)
 - **Typed contribution templates** — Separate Bug, Enhancement, and Feature issue/PR templates with approval gates (#1673)
@@ -153,7 +172,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [1.29.0] - 2026-03-25
 
 ### Added
-- **Windsurf runtime support** — Full installation and command conversion for Windsurf (Codeium)
+- **Windsurf runtime support** — Full installation and command conversion for Windsurf
 - **Agent skill injection** — Inject project-specific skills into subagents via `agent_skills` config section
 - **UI-phase and UI-review steps** in autonomous workflow
 - **Security scanning CI** — Prompt injection, base64, and secret scanning workflows
@@ -1840,7 +1859,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.30.0...HEAD
+[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.34.1...HEAD
+[1.34.1]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.34.1
+[1.34.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.34.0
+[1.33.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.33.0
 [1.30.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.30.0
 [1.29.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.29.0
 [1.28.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.28.0
