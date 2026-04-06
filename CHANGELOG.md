@@ -6,13 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
-- **Execution context profiles** — Three context profiles (`dev`, `research`, `review`) for mode-specific agent output guidance (#1807)
-
 ## [1.33.0] - 2026-04-05
 
 ### Added
-- **Queryable codebase intelligence system** -- Persistent `.planning/intel/` store with structured JSON files (files, exports, symbols, patterns, dependencies). Query via `gsd-tools intel` subcommands. Incremental updates via `gsd-intel-updater` agent. Opt-in; projects without intel store are unaffected. (#1688)
 - **Shared behavioral references** — Add questioning, domain-probes, and UI-brand reference docs wired into workflows (#1658)
 - **Chore / Maintenance issue template** — Structured template for internal maintenance tasks (#1689)
 - **Typed contribution templates** — Separate Bug, Enhancement, and Feature issue/PR templates with approval gates (#1673)
@@ -157,7 +153,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [1.29.0] - 2026-03-25
 
 ### Added
-- **Windsurf runtime support** — Full installation and command conversion for Windsurf
+- **Windsurf runtime support** — Full installation and command conversion for Windsurf (Codeium)
 - **Agent skill injection** — Inject project-specific skills into subagents via `agent_skills` config section
 - **UI-phase and UI-review steps** in autonomous workflow
 - **Security scanning CI** — Prompt injection, base64, and secret scanning workflows

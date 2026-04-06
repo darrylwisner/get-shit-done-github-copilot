@@ -1,11 +1,11 @@
 ---
-name: gsd.analyze-dependencies
-description: "Analyze phase dependencies and suggest Depends on entries for ROADMAP.md"
-tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+name: gsd.explore
+description: "Socratic ideation and idea routing — think through ideas before committing to plans"
+tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Grep","Glob","Task","AskUserQuestion"] -->
 
 ## Path Resolution 
 
@@ -34,25 +34,17 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Analyze the phase dependency graph for the current milestone. For each phase pair, determine if there is a dependency relationship based on:
-- File overlap (phases that modify the same files must be ordered)
-- Semantic dependencies (a phase that uses an API built by another phase)
-- Data flow (a phase that consumes output from another phase)
+Open-ended Socratic ideation session. Guides the developer through exploring an idea via
+probing questions, optionally spawns research, then routes outputs to the appropriate GSD
+artifacts (notes, todos, seeds, research questions, requirements, or new phases).
 
-Then suggest `Depends on` updates to ROADMAP.md.
+Accepts an optional topic argument: `/gsd-explore authentication strategy`
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/analyze-dependencies.md
+- Read file at: ./.claude/get-shit-done/workflows/explore.md
 </execution_context>
 
-<context>
-No arguments required. Requires an active milestone with ROADMAP.md.
-
-Run this command BEFORE `/gsd:manager` to fill in missing `Depends on` fields and prevent merge conflicts from unordered parallel execution.
-</context>
-
 <process>
-Execute the analyze-dependencies workflow from @./.claude/get-shit-done/workflows/analyze-dependencies.md end-to-end.
-Present dependency suggestions clearly and apply confirmed updates to ROADMAP.md.
+Execute the explore workflow from @./.claude/get-shit-done/workflows/explore.md end-to-end.
 </process>

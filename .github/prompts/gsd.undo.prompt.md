@@ -1,11 +1,12 @@
 ---
-name: gsd.analyze-dependencies
-description: "Analyze phase dependencies and suggest Depends on entries for ROADMAP.md"
-tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+name: gsd.undo
+description: "Safe git revert. Roll back phase or plan commits using the phase manifest with dependency checks."
+argument-hint: "--last N | --phase NN | --plan NN-MM"
+tools: ['execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Bash","Glob","Grep","AskUserQuestion"] -->
 
 ## Path Resolution 
 
@@ -34,25 +35,24 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Analyze the phase dependency graph for the current milestone. For each phase pair, determine if there is a dependency relationship based on:
-- File overlap (phases that modify the same files must be ordered)
-- Semantic dependencies (a phase that uses an API built by another phase)
-- Data flow (a phase that consumes output from another phase)
+Safe git revert — roll back GSD phase or plan commits using the phase manifest, with dependency checks and a confirmation gate before execution.
 
-Then suggest `Depends on` updates to ROADMAP.md.
+Three modes:
+- **--last N**: Show recent GSD commits for interactive selection
+- **--phase NN**: Revert all commits for a phase (manifest + git log fallback)
+- **--plan NN-MM**: Revert all commits for a specific plan
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/analyze-dependencies.md
+- Read file at: ./.claude/get-shit-done/workflows/undo.md
+- Read file at: ./.claude/get-shit-done/references/ui-brand.md
+- Read file at: ./.claude/get-shit-done/references/gate-prompts.md
 </execution_context>
 
 <context>
-No arguments required. Requires an active milestone with ROADMAP.md.
-
-Run this command BEFORE `/gsd:manager` to fill in missing `Depends on` fields and prevent merge conflicts from unordered parallel execution.
+$ARGUMENTS
 </context>
 
 <process>
-Execute the analyze-dependencies workflow from @./.claude/get-shit-done/workflows/analyze-dependencies.md end-to-end.
-Present dependency suggestions clearly and apply confirmed updates to ROADMAP.md.
+Execute the undo workflow from @./.claude/get-shit-done/workflows/undo.md end-to-end.
 </process>

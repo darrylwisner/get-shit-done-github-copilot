@@ -1,11 +1,12 @@
 ---
-name: gsd.analyze-dependencies
-description: "Analyze phase dependencies and suggest Depends on entries for ROADMAP.md"
+name: gsd.scan
+description: "Rapid codebase assessment — lightweight alternative to /gsd-map-codebase"
 tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Grep","Glob","Agent","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 
@@ -34,25 +35,16 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Analyze the phase dependency graph for the current milestone. For each phase pair, determine if there is a dependency relationship based on:
-- File overlap (phases that modify the same files must be ordered)
-- Semantic dependencies (a phase that uses an API built by another phase)
-- Data flow (a phase that consumes output from another phase)
+Run a focused codebase scan for a single area, producing targeted documents in `.planning/codebase/`.
+Accepts an optional `--focus` flag: `tech`, `arch`, `quality`, `concerns`, or `tech+arch` (default).
 
-Then suggest `Depends on` updates to ROADMAP.md.
+Lightweight alternative to `/gsd-map-codebase` — spawns one mapper agent instead of four parallel ones.
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/analyze-dependencies.md
+- Read file at: ./.claude/get-shit-done/workflows/scan.md
 </execution_context>
 
-<context>
-No arguments required. Requires an active milestone with ROADMAP.md.
-
-Run this command BEFORE `/gsd:manager` to fill in missing `Depends on` fields and prevent merge conflicts from unordered parallel execution.
-</context>
-
 <process>
-Execute the analyze-dependencies workflow from @./.claude/get-shit-done/workflows/analyze-dependencies.md end-to-end.
-Present dependency suggestions clearly and apply confirmed updates to ROADMAP.md.
+Execute the scan workflow from @./.claude/get-shit-done/workflows/scan.md end-to-end.
 </process>
