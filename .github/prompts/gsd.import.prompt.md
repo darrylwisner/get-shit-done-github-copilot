@@ -1,11 +1,12 @@
 ---
-name: gsd.analyze-dependencies
-description: "Analyze phase dependencies and suggest Depends on entries for ROADMAP.md"
-tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+name: gsd.import
+description: "Ingest external plans with conflict detection against project decisions before writing anything."
+argument-hint: "--from <filepath>"
+tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","AskUserQuestion","Task"] -->
 
 ## Path Resolution 
 
@@ -34,25 +35,23 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Analyze the phase dependency graph for the current milestone. For each phase pair, determine if there is a dependency relationship based on:
-- File overlap (phases that modify the same files must be ordered)
-- Semantic dependencies (a phase that uses an API built by another phase)
-- Data flow (a phase that consumes output from another phase)
+Import external plan files into the GSD planning system with conflict detection against PROJECT.md decisions.
 
-Then suggest `Depends on` updates to ROADMAP.md.
+- **--from**: Import an external plan file, detect conflicts, write as GSD PLAN.md, validate via gsd-plan-checker.
+
+Future: `--prd` mode for PRD extraction is planned for a follow-up PR.
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/analyze-dependencies.md
+- Read file at: ./.claude/get-shit-done/workflows/import.md
+- Read file at: ./.claude/get-shit-done/references/ui-brand.md
+- Read file at: ./.claude/get-shit-done/references/gate-prompts.md
 </execution_context>
 
 <context>
-No arguments required. Requires an active milestone with ROADMAP.md.
-
-Run this command BEFORE `/gsd:manager` to fill in missing `Depends on` fields and prevent merge conflicts from unordered parallel execution.
+$ARGUMENTS
 </context>
 
 <process>
-Execute the analyze-dependencies workflow from @./.claude/get-shit-done/workflows/analyze-dependencies.md end-to-end.
-Present dependency suggestions clearly and apply confirmed updates to ROADMAP.md.
+Execute the import workflow end-to-end.
 </process>
