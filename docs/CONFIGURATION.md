@@ -220,6 +220,29 @@ node gsd-tools.cjs config-set agent_skills.gsd-executor '["skills/my-skill"]'
 
 ---
 
+## Feature Flags
+
+Toggle optional capabilities via the `features.*` config namespace. Feature flags default to `false` (disabled) — enabling a flag opts into new behavior without affecting existing workflows.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `features.thinking_partner` | boolean | `false` | Enable thinking partner analysis at workflow decision points |
+| `features.global_learnings` | boolean | `false` | Enable cross-project learnings pipeline (auto-copy at phase completion, planner injection) |
+
+### Usage
+
+```bash
+# Enable a feature
+node gsd-tools.cjs config-set features.global_learnings true
+
+# Disable a feature
+node gsd-tools.cjs config-set features.thinking_partner false
+```
+
+The `features.*` namespace is a dynamic key pattern — new feature flags can be added without modifying `VALID_CONFIG_KEYS`. Any key matching `features.<name>` is accepted by the config system.
+
+---
+
 ## Parallelization Settings
 
 | Setting | Type | Default | Description |
