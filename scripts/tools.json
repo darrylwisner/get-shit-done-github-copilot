@@ -11,5 +11,6 @@
   "WebSearch": "web",
   "WebFetch": "web",
   "slashcommand": "UNMAPPED",
-  "skill": "UNMAPPED"
+  "skill": "UNMAPPED",
+  "agent": "UNMAPPED"
 }
