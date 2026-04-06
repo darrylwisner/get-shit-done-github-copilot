@@ -526,8 +526,12 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
        # Amend merge commit with restored files if any changed
        if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
           [ -n "$DELETED_FILES" ]; then
-         git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
-         git commit --amend --no-edit 2>/dev/null || true
+         # Only amend the commit with .planning/ files if commit_docs is enabled (#1783)
+         COMMIT_DOCS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get commit_docs 2>/dev/null || echo "true")
+         if [ "$COMMIT_DOCS" != "false" ]; then
+           git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
+           git commit --amend --no-edit 2>/dev/null || true
+         fi
        fi
 
        # Remove the worktree
@@ -734,6 +738,39 @@ Selected wave finished successfully. This phase still has incomplete plans, so p
 **If no incomplete plans remain after the selected wave finishes:**
 - continue with the normal phase-level verification and completion flow below
 - this means the selected wave happened to be the last remaining work in the phase
+</step>
+
+<step name="code_review_gate" required="true">
+**This step is REQUIRED and must not be skipped.** Auto-invoke code review on the phase's source changes. Advisory only — never blocks execution flow.
+
+**Config gate:**
+```bash
+CODE_REVIEW_ENABLED=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.code_review 2>/dev/null || echo "true")
+```
+
+If `CODE_REVIEW_ENABLED` is `"false"`: display "Code review skipped (workflow.code_review=false)" and proceed to next step.
+
+**Invoke review:**
+```
+Skill(skill="gsd:code-review", args="${PHASE_NUMBER}")
+```
+
+**Check results using deterministic path (not glob):**
+```bash
+PADDED=$(printf "%02d" "${PHASE_NUMBER}")
+REVIEW_FILE="${PHASE_DIR}/${PADDED}-REVIEW.md"
+REVIEW_STATUS=$(sed -n '/^---$/,/^---$/p' "$REVIEW_FILE" | grep "^status:" | head -1 | cut -d: -f2 | tr -d ' ')
+```
+
+If REVIEW_STATUS is not "clean" and not "skipped" and not empty, display:
+```
+Code review found issues. Consider running:
+/gsd-code-review-fix ${PHASE_NUMBER}
+```
+
+**Error handling:** If the Skill invocation fails or throws, catch the error, display "Code review encountered an error (non-blocking): {error}" and proceed to next step. Review failures must never block execution.
+
+Regardless of review result, ALWAYS proceed to close_parent_artifacts → regression_gate → verify_phase_goal.
 </step>
 
 <step name="close_parent_artifacts">
@@ -1074,6 +1111,29 @@ These items are tracked and will appear in `/gsd-progress` and `/gsd-audit-uat`.
 ```bash
 node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(phase-{X}): complete phase execution" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md {phase_dir}/*-VERIFICATION.md
 ```
+</step>
+
+<step name="auto_copy_learnings">
+**Auto-copy phase learnings to global store (when enabled).**
+
+This step runs AFTER phase completion and SUMMARY.md is written. It copies any LEARNINGS.md
+entries from the completed phase to the global learnings store at `~/.gsd/knowledge/`.
+
+**Check config gate:**
+```bash
+GL_ENABLED=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get features.global_learnings --raw 2>/dev/null || echo "false")
+```
+
+**If `GL_ENABLED` is not `true`:** Skip this step entirely (feature disabled by default).
+
+**If enabled:**
+
+1. Check if LEARNINGS.md exists in the phase directory (use the `phase_dir` value from init context)
+2. If found, copy to global store:
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" learnings copy 2>/dev/null || echo "⚠ Learnings copy failed — continuing"
+```
+Copy failure must NOT block phase completion.
 </step>
 
 <step name="update_project_md">

@@ -772,13 +772,56 @@ Task(
 - **`## VERIFICATION PASSED`:** Display confirmation, proceed to step 13.
 - **`## ISSUES FOUND`:** Display issues, check iteration count, proceed to step 12.
 
+**Thinking partner for architectural tradeoffs (conditional):**
+If `features.thinking_partner` is enabled, scan the checker's issues for architectural tradeoff keywords
+("architecture", "approach", "strategy", "pattern", "vs", "alternative"). If found:
+
+```
+The plan-checker flagged an architectural decision point:
+{issue description}
+
+Brief analysis:
+- Option A: {approach_from_plan} — {pros/cons}
+- Option B: {alternative_approach} — {pros/cons}
+- Recommendation: {choice} aligned with {phase_goal}
+
+Apply this to the revision? [Yes] / [No, I'll decide]
+```
+
+If yes: include the recommendation in the revision prompt. If no: proceed to revision loop as normal.
+If thinking_partner disabled: skip this block entirely.
+
 ## 12. Revision Loop (Max 3 Iterations)
 
 Track `iteration_count` (starts at 1 after initial plan + check).
+Track `prev_issue_count` (initialized to `Infinity` before the loop begins).
+Track `stall_reentry_count` (starts at 0; incremented each time "Adjust approach" re-enters step 8).
 
 **If iteration_count < 3:**
 
-Display: `Sending back to planner for revision... (iteration {N}/3)`
+Parse issue count from checker return: count BLOCKER + WARNING entries in the YAML issues block (structured output from gsd-plan-checker). If the checker's return contains no YAML issues block (i.e., the plan was approved with no issues), treat `issue_count` as 0 and skip the stall check — the plan passed. Proceed to step 13.
+
+Display: `Revision iteration {N}/3 -- {blocker_count} blockers, {warning_count} warnings`
+
+**Stall detection:** If `issue_count >= prev_issue_count`:
+  Display: `Revision loop stalled — issue count not decreasing ({issue_count} issues remain after {N} iterations)`
+
+  **If `stall_reentry_count < 2`:**
+    Ask user:
+      Question: "Issues remain after {N} revision attempts with no progress. Proceed with current output?"
+      Options: "Proceed anyway" | "Adjust approach"
+    If "Proceed anyway": accept current plans and continue to step 13.
+    If "Adjust approach": increment `stall_reentry_count`, open freeform discussion, then re-enter step 8 (full replanning). Note: re-entry resets `iteration_count` and `prev_issue_count` but `stall_reentry_count` persists across re-entries and is capped at 2.
+
+  **If `stall_reentry_count >= 2`:**
+    Display: `Stall persists after 2 re-planning attempts. The following issues could not be resolved automatically:`
+    List the remaining issues from the checker.
+    Suggest: "Consider resolving these issues manually or running `/gsd-debug` to investigate root causes."
+    Options: "Proceed anyway" | "Abandon"
+    If "Proceed anyway": accept current plans and continue to step 13.
+    If "Abandon": stop workflow.
+
+Set `prev_issue_count = issue_count`.
 
 Revision prompt:
 

@@ -861,3 +861,67 @@ describe('config-set/config-get workflow.use_worktrees', () => {
     assert.strictEqual(output, true);
   });
 });
+
+// ─── config-set/config-get context ─────────────────────────────────────────
+
+describe('config-set/config-get context', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('config set context dev succeeds', () => {
+    const result = runGsdTools('config-set context dev', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.context, 'dev');
+  });
+
+  test('config set context research succeeds', () => {
+    const result = runGsdTools('config-set context research', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.context, 'research');
+  });
+
+  test('config set context review succeeds', () => {
+    const result = runGsdTools('config-set context review', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.context, 'review');
+  });
+
+  test('config get context returns the set value', () => {
+    runGsdTools('config-set context dev', tmpDir);
+    const result = runGsdTools('config-get context', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output, 'dev');
+  });
+
+  test('config set context rejects invalid values', () => {
+    const result = runGsdTools('config-set context foobar', tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.ok(
+      result.error.includes('Invalid context value'),
+      `Expected "Invalid context value" in error: ${result.error}`
+    );
+  });
+
+  test('all three context profile files exist', () => {
+    const contextsDir = path.join(__dirname, '..', 'get-shit-done', 'contexts');
+    assert.ok(fs.existsSync(path.join(contextsDir, 'dev.md')), 'dev.md should exist');
+    assert.ok(fs.existsSync(path.join(contextsDir, 'research.md')), 'research.md should exist');
+    assert.ok(fs.existsSync(path.join(contextsDir, 'review.md')), 'review.md should exist');
+  });
+});

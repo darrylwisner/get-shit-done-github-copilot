@@ -23,6 +23,7 @@ Valid GSD subagent types (use exact names — do not fall back to 'general-purpo
 - gsd-plan-checker — Reviews plan quality before execution
 - gsd-executor — Executes plan tasks, commits, creates SUMMARY.md
 - gsd-verifier — Verifies phase completion, checks quality gates
+- gsd-code-reviewer — Reviews source files for bugs, security issues, and code quality
 </available_agent_types>
 
 <process>
@@ -634,8 +635,11 @@ After executor returns:
 
        if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
           [ -n "$DELETED_FILES" ]; then
-         git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
-         git commit --amend --no-edit 2>/dev/null || true
+         COMMIT_DOCS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get commit_docs 2>/dev/null || echo "true")
+         if [ "$COMMIT_DOCS" != "false" ]; then
+           git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
+           git commit --amend --no-edit 2>/dev/null || true
+         fi
        fi
 
        git worktree remove "$WT" --force 2>/dev/null || true
@@ -653,6 +657,55 @@ After executor returns:
 If summary not found, error: "Executor failed to create ${quick_id}-SUMMARY.md"
 
 Note: For quick tasks producing multiple plans (rare), spawn executors in parallel waves per execute-phase patterns.
+
+---
+
+**Step 6.25: Code review (auto)**
+
+Skip this step entirely if `$FULL_MODE` is false.
+
+**Config gate:**
+```bash
+CODE_REVIEW_ENABLED=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.code_review 2>/dev/null || echo "true")
+```
+If `"false"`, skip with message "Code review skipped (workflow.code_review=false)".
+
+**Scope files from executor's commits:**
+```bash
+# Find the diff base: last commit before quick task started
+# Use git log to find commits referencing the quick task id, then take the parent of the oldest
+QUICK_COMMITS=$(git log --oneline --format="%H" --grep="${quick_id}" 2>/dev/null)
+if [ -n "$QUICK_COMMITS" ]; then
+  DIFF_BASE=$(echo "$QUICK_COMMITS" | tail -1)^
+  # Verify parent exists (guard against first commit in repo)
+  git rev-parse "${DIFF_BASE}" >/dev/null 2>&1 || DIFF_BASE=$(echo "$QUICK_COMMITS" | tail -1)
+else
+  # No commits found for this quick task — skip review
+  DIFF_BASE=""
+fi
+
+if [ -n "$DIFF_BASE" ]; then
+  CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}..HEAD" -- . ':!.planning' 2>/dev/null | tr '\n' ' ')
+else
+  CHANGED_FILES=""
+fi
+```
+
+If `CHANGED_FILES` is empty, skip with "No source files changed — skipping code review."
+
+**Invoke review:**
+```
+Task(
+  prompt="Review these files for bugs, security issues, and code quality.
+  Files: ${CHANGED_FILES}
+  Output: ${QUICK_DIR}/${quick_id}-REVIEW.md
+  Depth: quick",
+  subagent_type="gsd-code-reviewer",
+  model="{executor_model}"
+)
+```
+
+If review produces findings, display advisory message. **Error handling:** Failures are non-blocking — catch and proceed.
 
 ---
 
@@ -773,7 +826,14 @@ Build file list:
 ```bash
 # Explicitly stage all artifacts before commit — PLAN.md may be untracked
 # if the executor ran without worktree isolation and committed docs early
-git add ${file_list} 2>/dev/null
+# Filter .planning/ files from staging if commit_docs is disabled (#1783)
+COMMIT_DOCS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get commit_docs 2>/dev/null || echo "true")
+if [ "$COMMIT_DOCS" = "false" ]; then
+  file_list_filtered=$(echo "${file_list}" | tr ' ' '\n' | grep -v '^\.planning/' | tr '\n' ' ')
+  git add ${file_list_filtered} 2>/dev/null
+else
+  git add ${file_list} 2>/dev/null
+fi
 node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list}
 ```
 

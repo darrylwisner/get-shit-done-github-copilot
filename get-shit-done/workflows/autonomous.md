@@ -356,6 +356,27 @@ Store the agent task_id. The workflow can now start discussing the next phase wh
 Skill(skill="gsd-execute-phase", args="${PHASE_NUM} --no-transition")
 ```
 
+**3c.5. Code Review and Fix**
+
+Auto-invoke code review and fix chain. Autonomous mode chains both review and fix (unlike execute-phase/quick which only suggest fix).
+
+**Config gate:**
+```bash
+CODE_REVIEW_ENABLED=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.code_review 2>/dev/null || echo "true")
+```
+If `"false"`: display "Code review skipped (workflow.code_review=false)" and proceed to 3d.
+
+```
+Skill(skill="gsd:code-review", args="${PHASE_NUM}")
+```
+
+Parse status from REVIEW.md frontmatter. If "clean" or "skipped": proceed to 3d. If findings found: auto-invoke:
+```
+Skill(skill="gsd:code-review-fix", args="${PHASE_NUM} --auto")
+```
+
+**Error handling:** If either Skill fails, catch the error, display as non-blocking, and proceed to 3d.
+
 **3d. Post-Execution Routing**
 
 **If `INTERACTIVE` is set:** Wait for the execute agent to complete before reading verification results.
