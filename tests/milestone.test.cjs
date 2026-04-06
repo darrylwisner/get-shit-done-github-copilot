@@ -515,6 +515,78 @@ describe('milestone complete command', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// phases clear command
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('phases clear command', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('deletes normal phase directories when --confirm is passed', () => {
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(p1, { recursive: true });
+    fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan\n');
+
+    const result = runGsdTools('phases clear --confirm', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.cleared, 1, 'should have cleared 1 directory');
+    assert.ok(!fs.existsSync(p1), '01-setup should be deleted');
+  });
+
+  test('requires --confirm when phase directories exist', () => {
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    fs.mkdirSync(p1, { recursive: true });
+
+    const result = runGsdTools('phases clear', tmpDir);
+    assert.ok(!result.success, 'should fail without --confirm');
+  });
+
+  test('preserves 999.x backlog phase directories during clear (#1853)', () => {
+    const p1 = path.join(tmpDir, '.planning', 'phases', '01-setup');
+    const p999a = path.join(tmpDir, '.planning', 'phases', '999.1-some-idea');
+    const p999b = path.join(tmpDir, '.planning', 'phases', '999.2-another-idea');
+
+    fs.mkdirSync(p1, { recursive: true });
+    fs.mkdirSync(p999a, { recursive: true });
+    fs.mkdirSync(p999b, { recursive: true });
+
+    fs.writeFileSync(path.join(p1, '01-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(p999a, 'PLAN.md'), '# Backlog idea\n');
+    fs.writeFileSync(path.join(p999b, 'PLAN.md'), '# Another backlog idea\n');
+
+    const result = runGsdTools('phases clear --confirm', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.cleared, 1, 'should have cleared only 1 directory (not backlog)');
+    assert.ok(!fs.existsSync(p1), '01-setup should be deleted');
+    assert.ok(fs.existsSync(p999a), '999.1-some-idea should be preserved');
+    assert.ok(fs.existsSync(p999b), '999.2-another-idea should be preserved');
+  });
+
+  test('reports 0 cleared when only backlog phases exist', () => {
+    const p999a = path.join(tmpDir, '.planning', 'phases', '999.1-idea');
+    fs.mkdirSync(p999a, { recursive: true });
+
+    const result = runGsdTools('phases clear --confirm', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.cleared, 0, 'cleared should be 0 when only backlog phases exist');
+    assert.ok(fs.existsSync(p999a), '999.1-idea should be preserved');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // requirements mark-complete command
 // ─────────────────────────────────────────────────────────────────────────────
 
