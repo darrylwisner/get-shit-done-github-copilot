@@ -20,7 +20,7 @@ if [ -f .planning/STATE.md ]; then
   echo 'STATE.md exists - check for blockers and current phase.'
   head -20 .planning/STATE.md
 else
-  echo 'No .planning/ found - suggest /gsd:new-project if starting new work.'
+  echo 'No .planning/ found - suggest /gsd-new-project if starting new work.'
 fi
 
 echo ''

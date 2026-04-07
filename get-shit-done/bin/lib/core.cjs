@@ -300,7 +300,7 @@ function loadConfig(cwd) {
       // Extract top-level key names from dot-notation paths (e.g., 'workflow.research' → 'workflow')
       ...[...VALID_CONFIG_KEYS].map(k => k.split('.')[0]),
       // Section containers that hold nested sub-keys
-      'git', 'workflow', 'planning', 'hooks',
+      'git', 'workflow', 'planning', 'hooks', 'features',
       // Internal keys loadConfig reads but config-set doesn't expose
       'model_overrides', 'agent_skills', 'context_window', 'resolve_model_ids',
       // Deprecated keys (still accepted for migration, not in config-set)
