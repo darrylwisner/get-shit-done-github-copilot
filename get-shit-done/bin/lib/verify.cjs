@@ -777,7 +777,7 @@ function cmdValidateHealth(cwd, options, raw) {
           if (statusVal !== 'complete' && statusVal !== 'done') {
             addIssue('warning', 'W011',
               `STATE.md says current phase is ${statePhase} (status: ${statusVal || 'unknown'}) but ROADMAP.md shows it as [x] complete — state files may be out of sync`,
-              'Run /gsd:progress to re-derive current position, or manually update STATE.md');
+              'Run /gsd-progress to re-derive current position, or manually update STATE.md');
           }
         }
       }

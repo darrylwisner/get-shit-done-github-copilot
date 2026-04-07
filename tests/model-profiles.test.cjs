@@ -31,11 +31,12 @@ describe('MODEL_PROFILES', () => {
     }
   });
 
-  test('every agent has quality, balanced, and budget profiles', () => {
+  test('every agent has quality, balanced, budget, and adaptive profiles', () => {
     for (const [agent, profiles] of Object.entries(MODEL_PROFILES)) {
       assert.ok(profiles.quality, `${agent} missing quality profile`);
       assert.ok(profiles.balanced, `${agent} missing balanced profile`);
       assert.ok(profiles.budget, `${agent} missing budget profile`);
+      assert.ok(profiles.adaptive, `${agent} missing adaptive profile`);
     }
   });
 
@@ -65,7 +66,7 @@ describe('MODEL_PROFILES', () => {
 
 describe('VALID_PROFILES', () => {
   test('contains quality, balanced, and budget', () => {
-    assert.deepStrictEqual(VALID_PROFILES.sort(), ['balanced', 'budget', 'quality']);
+    assert.deepStrictEqual(VALID_PROFILES.sort(), ['adaptive', 'balanced', 'budget', 'quality']);
   });
 
   test('is derived from MODEL_PROFILES keys', () => {
@@ -94,6 +95,24 @@ describe('getAgentToModelMapForProfile', () => {
     const map = getAgentToModelMapForProfile('quality');
     assert.strictEqual(map['gsd-planner'], 'opus');
     assert.strictEqual(map['gsd-executor'], 'opus');
+  });
+
+  test('returns correct models for adaptive profile', () => {
+    const map = getAgentToModelMapForProfile('adaptive');
+    assert.strictEqual(map['gsd-planner'], 'opus', 'planner should use opus in adaptive');
+    assert.strictEqual(map['gsd-debugger'], 'opus', 'debugger should use opus in adaptive');
+    assert.strictEqual(map['gsd-executor'], 'sonnet', 'executor should use sonnet in adaptive');
+    assert.strictEqual(map['gsd-codebase-mapper'], 'haiku', 'mapper should use haiku in adaptive');
+    assert.strictEqual(map['gsd-plan-checker'], 'haiku', 'checker should use haiku in adaptive');
+  });
+
+  test('resolution order: override > profile > default', () => {
+    // This tests the conceptual resolution — actual runtime test is in resolveModelInternal
+    const map = getAgentToModelMapForProfile('adaptive');
+    // Profile gives planner opus
+    assert.strictEqual(map['gsd-planner'], 'opus');
+    // An override would take precedence (tested via resolveModelInternal in model-alias-map tests)
+    // Default fallback is 'sonnet' (core.cjs line 1320)
   });
 
   test('returns all agents in the map', () => {
