@@ -164,6 +164,28 @@ describe('config-field-docs', () => {
     );
   });
 
+  test('mode field documents correct allowed values', () => {
+    // mode values are "interactive" and "yolo" per templates/config.json
+    // and workflows/new-project.md — NOT "code-first"/"plan-first"/"hybrid"
+    assert.ok(
+      content.includes('"interactive"') && content.includes('"yolo"'),
+      'mode field must document "interactive" and "yolo" as allowed values'
+    );
+    assert.ok(
+      !content.includes('"code-first"'),
+      'mode field must NOT document non-existent "code-first" value'
+    );
+  });
+
+  test('discuss_mode field documents correct allowed values', () => {
+    // discuss_mode values are "discuss" and "assumptions" per workflows/settings.md
+    // NOT "auto" or "analyze" (those are CLI flags, not config values)
+    assert.ok(
+      content.includes('"assumptions"'),
+      'discuss_mode must document "assumptions" as an allowed value'
+    );
+  });
+
   test('documents plan_checker alias for workflow.plan_check', () => {
     // plan_checker is the flat-key form in CONFIG_DEFAULTS; workflow.plan_check
     // is the canonical namespaced form. The doc should mention the alias.

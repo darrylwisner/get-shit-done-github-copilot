@@ -88,50 +88,49 @@ function cmdPhaseNextDecimal(cwd, basePhase, raw) {
   const phasesDir = path.join(planningDir(cwd), 'phases');
   const normalized = normalizePhaseName(basePhase);
 
-  // Check if phases directory exists
-  if (!fs.existsSync(phasesDir)) {
-    output(
-      {
-        found: false,
-        base_phase: normalized,
-        next: `${normalized}.1`,
-        existing: [],
-      },
-      raw,
-      `${normalized}.1`
-    );
-    return;
-  }
-
   try {
-    const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+    let baseExists = false;
+    const decimalSet = new Set();
 
-    // Check if base phase exists
-    const baseExists = dirs.some(d => phaseTokenMatches(d, normalized));
+    // Scan directory names for existing decimal phases
+    if (fs.existsSync(phasesDir)) {
+      const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
+      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+      baseExists = dirs.some(d => phaseTokenMatches(d, normalized));
 
-    // Find existing decimal phases for this base
-    const decimalPattern = new RegExp(`^${normalized}\\.(\\d+)`);
-    const existingDecimals = [];
-
-    for (const dir of dirs) {
-      const match = dir.match(decimalPattern);
-      if (match) {
-        existingDecimals.push(`${normalized}.${match[1]}`);
+      const dirPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${escapeRegex(normalized)}\\.(\\d+)`);
+      for (const dir of dirs) {
+        const match = dir.match(dirPattern);
+        if (match) decimalSet.add(parseInt(match[1], 10));
       }
     }
 
-    // Sort numerically
-    existingDecimals.sort((a, b) => comparePhaseNum(a, b));
+    // Also scan ROADMAP.md for phase entries that may not have directories yet
+    const roadmapPath = path.join(planningDir(cwd), 'ROADMAP.md');
+    if (fs.existsSync(roadmapPath)) {
+      try {
+        const roadmapContent = fs.readFileSync(roadmapPath, 'utf-8');
+        const phasePattern = new RegExp(
+          `#{2,4}\\s*Phase\\s+0*${escapeRegex(normalized)}\\.(\\d+)\\s*:`, 'gi'
+        );
+        let pm;
+        while ((pm = phasePattern.exec(roadmapContent)) !== null) {
+          decimalSet.add(parseInt(pm[1], 10));
+        }
+      } catch { /* ROADMAP.md read failure is non-fatal */ }
+    }
+
+    // Build sorted list of existing decimals
+    const existingDecimals = Array.from(decimalSet)
+      .sort((a, b) => a - b)
+      .map(n => `${normalized}.${n}`);
 
     // Calculate next decimal
     let nextDecimal;
-    if (existingDecimals.length === 0) {
+    if (decimalSet.size === 0) {
       nextDecimal = `${normalized}.1`;
     } else {
-      const lastDecimal = existingDecimals[existingDecimals.length - 1];
-      const lastNum = parseInt(lastDecimal.split('.')[1], 10);
-      nextDecimal = `${normalized}.${lastNum + 1}`;
+      nextDecimal = `${normalized}.${Math.max(...decimalSet) + 1}`;
     }
 
     output(
@@ -416,22 +415,31 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
       error(`Phase ${afterPhase} not found in ROADMAP.md`);
     }
 
-    // Calculate next decimal using existing logic
+    // Calculate next decimal by scanning both directories AND ROADMAP.md entries
     const phasesDir = path.join(planningDir(cwd), 'phases');
     const normalizedBase = normalizePhaseName(afterPhase);
-    let existingDecimals = [];
+    const decimalSet = new Set();
 
     try {
       const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
       const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-      const decimalPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${normalizedBase}\\.(\\d+)`);
+      const decimalPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${escapeRegex(normalizedBase)}\\.(\\d+)`);
       for (const dir of dirs) {
         const dm = dir.match(decimalPattern);
-        if (dm) existingDecimals.push(parseInt(dm[1], 10));
+        if (dm) decimalSet.add(parseInt(dm[1], 10));
       }
     } catch { /* intentionally empty */ }
 
-    const nextDecimal = existingDecimals.length === 0 ? 1 : Math.max(...existingDecimals) + 1;
+    // Also scan ROADMAP.md content (already loaded) for decimal entries
+    const rmPhasePattern = new RegExp(
+      `#{2,4}\\s*Phase\\s+0*${escapeRegex(normalizedBase)}\\.(\\d+)\\s*:`, 'gi'
+    );
+    let rmMatch;
+    while ((rmMatch = rmPhasePattern.exec(rawContent)) !== null) {
+      decimalSet.add(parseInt(rmMatch[1], 10));
+    }
+
+    const nextDecimal = decimalSet.size === 0 ? 1 : Math.max(...decimalSet) + 1;
     const _decimalPhase = `${normalizedBase}.${nextDecimal}`;
     // Optional project code prefix
     const insertConfig = loadConfig(cwd);

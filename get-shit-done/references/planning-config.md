@@ -225,7 +225,7 @@ Generated from `CONFIG_DEFAULTS` (core.cjs) and `VALID_CONFIG_KEYS` (config.cjs)
 | Key | Type | Default | Allowed Values | Description |
 |-----|------|---------|----------------|-------------|
 | `model_profile` | string | `"balanced"` | `"quality"`, `"balanced"`, `"budget"`, `"inherit"` | Model selection preset for subagents |
-| `mode` | string | (none) | `"code-first"`, `"plan-first"`, `"hybrid"` | Per-phase workflow mode controlling discuss/plan/execute flow |
+| `mode` | string | `"interactive"` | `"interactive"`, `"yolo"` | Operation mode: `"interactive"` shows gates and confirmations; `"yolo"` runs autonomously without prompts |
 | `granularity` | string | (none) | `"coarse"`, `"standard"`, `"fine"` | Planning depth for phase plans (migrated from deprecated `depth`) |
 | `commit_docs` | boolean | `true` | `true`, `false` | Commit .planning/ artifacts to git (auto-false if .planning/ is gitignored) |
 | `search_gitignored` | boolean | `false` | `true`, `false` | Include gitignored paths in broad rg searches via `--no-ignore` |
@@ -252,7 +252,7 @@ Set via `workflow.*` namespace in config.json (e.g., `"workflow": { "research": 
 | `workflow.ui_safety_gate` | boolean | `true` | `true`, `false` | Require safety gate approval for UI changes |
 | `workflow.text_mode` | boolean | `false` | `true`, `false` | Use plain-text numbered lists instead of AskUserQuestion menus |
 | `workflow.research_before_questions` | boolean | `false` | `true`, `false` | Run research before interactive questions in discuss phase |
-| `workflow.discuss_mode` | string | `"discuss"` | `"discuss"`, `"auto"`, `"analyze"` | Default mode for discuss-phase agent |
+| `workflow.discuss_mode` | string | `"discuss"` | `"discuss"`, `"assumptions"` | Default mode for discuss-phase: `"discuss"` runs interactive questioning; `"assumptions"` analyzes codebase and surfaces assumptions instead |
 | `workflow.skip_discuss` | boolean | `false` | `true`, `false` | Skip discuss phase entirely |
 | `workflow.use_worktrees` | boolean | `true` | `true`, `false` | Run executor agents in isolated git worktrees |
 | `workflow.subagent_timeout` | number | `300000` | Any positive integer (ms) | Timeout for parallel subagent tasks (default: 5 minutes) |
