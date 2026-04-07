@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.34.2] - 2026-04-06
+
+### Changed
+- **Node.js minimum lowered to 22** — `engines.node` was raised to `>=24.0.0` based on a CI matrix change, but Node 22 is still in Active LTS until October 2026. Restoring Node 22 support eliminates the `EBADENGINE` warning for users on the previous LTS line. CI matrix now tests against both Node 22 and Node 24.
+
 ## [1.34.1] - 2026-04-06
 
 ### Fixed
@@ -1859,7 +1864,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.34.1...HEAD
+[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.34.2...HEAD
+[1.34.2]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.34.2
 [1.34.1]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.34.1
 [1.34.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.34.0
 [1.33.0]: https://github.com/gsd-build/get-shit-done/releases/tag/v1.33.0
