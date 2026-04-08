@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { escapeRegex, loadConfig, normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, toPosixPath, planningDir, withPlanningLock, output, error, readSubdirectories, phaseTokenMatches } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
-const { writeStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback, updatePerformanceMetricsSection } = require('./state.cjs');
+const { writeStateMd, readModifyWriteStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback, updatePerformanceMetricsSection } = require('./state.cjs');
 
 function cmdPhasesList(cwd, options, raw) {
   const phasesDir = path.join(planningDir(cwd), 'phases');
@@ -341,11 +341,13 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
       _dirName = `${prefix}${_newPhaseId}-${slug}`;
     } else {
       // Sequential mode: find highest integer phase number (in current milestone only)
+      // Skip 999.x backlog phases — they live outside the active sequence
       const phasePattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
       let maxPhase = 0;
       let m;
       while ((m = phasePattern.exec(content)) !== null) {
         const num = parseInt(m[1], 10);
+        if (num >= 999) continue; // backlog phases use 999.x numbering
         if (num > maxPhase) maxPhase = num;
       }
 
@@ -632,19 +634,20 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
   // Update ROADMAP.md
   updateRoadmapAfterPhaseRemoval(roadmapPath, targetPhase, isDecimal, parseInt(normalized, 10), cwd);
 
-  // Update STATE.md phase count
+  // Update STATE.md phase count atomically (#P4.4)
   const statePath = path.join(planningDir(cwd), 'STATE.md');
   if (fs.existsSync(statePath)) {
-    let stateContent = fs.readFileSync(statePath, 'utf-8');
-    const totalRaw = stateExtractField(stateContent, 'Total Phases');
-    if (totalRaw) {
-      stateContent = stateReplaceField(stateContent, 'Total Phases', String(parseInt(totalRaw, 10) - 1)) || stateContent;
-    }
-    const ofMatch = stateContent.match(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i);
-    if (ofMatch) {
-      stateContent = stateContent.replace(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i, `$1${parseInt(ofMatch[2], 10) - 1}$3`);
-    }
-    writeStateMd(statePath, stateContent, cwd);
+    readModifyWriteStateMd(statePath, (stateContent) => {
+      const totalRaw = stateExtractField(stateContent, 'Total Phases');
+      if (totalRaw) {
+        stateContent = stateReplaceField(stateContent, 'Total Phases', String(parseInt(totalRaw, 10) - 1)) || stateContent;
+      }
+      const ofMatch = stateContent.match(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i);
+      if (ofMatch) {
+        stateContent = stateContent.replace(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i, `$1${parseInt(ofMatch[2], 10) - 1}$3`);
+      }
+      return stateContent;
+    }, cwd);
   }
 
   output({
@@ -842,71 +845,72 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     } catch { /* intentionally empty */ }
   }
 
-  // Update STATE.md — use shared helpers that handle both **bold:** and plain Field: formats
+  // Update STATE.md atomically — hold lock across read-modify-write (#P4.4).
+  // Previously read outside the lock; a crash between the ROADMAP update
+  // (locked above) and this write left ROADMAP/STATE inconsistent.
   if (fs.existsSync(statePath)) {
-    let stateContent = fs.readFileSync(statePath, 'utf-8');
-
-    // Update Current Phase — preserve "X of Y (Name)" compound format
-    const phaseValue = nextPhaseNum || phaseNum;
-    const existingPhaseField = stateExtractField(stateContent, 'Current Phase')
-      || stateExtractField(stateContent, 'Phase');
-    let newPhaseValue = String(phaseValue);
-    if (existingPhaseField) {
-      const totalMatch = existingPhaseField.match(/of\s+(\d+)/);
-      const nameMatch = existingPhaseField.match(/\(([^)]+)\)/);
-      if (totalMatch) {
-        const total = totalMatch[1];
-        const nameStr = nextPhaseName ? ` (${nextPhaseName.replace(/-/g, ' ')})` : (nameMatch ? ` (${nameMatch[1]})` : '');
-        newPhaseValue = `${phaseValue} of ${total}${nameStr}`;
-      }
-    }
-    stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase', 'Phase', newPhaseValue);
-
-    // Update Current Phase Name
-    if (nextPhaseName) {
-      stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase Name', null, nextPhaseName.replace(/-/g, ' '));
-    }
-
-    // Update Status
-    stateContent = stateReplaceFieldWithFallback(stateContent, 'Status', null,
-      isLastPhase ? 'Milestone complete' : 'Ready to plan');
-
-    // Update Current Plan
-    stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Plan', 'Plan', 'Not started');
-
-    // Update Last Activity
-    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity', 'Last activity', today);
-
-    // Update Last Activity Description
-    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity Description', null,
-      `Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`);
-
-    // Increment Completed Phases counter (#956)
-    const completedRaw = stateExtractField(stateContent, 'Completed Phases');
-    if (completedRaw) {
-      const newCompleted = parseInt(completedRaw, 10) + 1;
-      stateContent = stateReplaceField(stateContent, 'Completed Phases', String(newCompleted)) || stateContent;
-
-      // Recalculate percent based on completed / total (#956)
-      const totalRaw = stateExtractField(stateContent, 'Total Phases');
-      if (totalRaw) {
-        const totalPhases = parseInt(totalRaw, 10);
-        if (totalPhases > 0) {
-          const newPercent = Math.round((newCompleted / totalPhases) * 100);
-          stateContent = stateReplaceField(stateContent, 'Progress', `${newPercent}%`) || stateContent;
-          // Also update percent field if it exists separately
-          stateContent = stateContent.replace(
-            /(percent:\s*)\d+/,
-            `$1${newPercent}`
-          );
+    readModifyWriteStateMd(statePath, (stateContent) => {
+      // Update Current Phase — preserve "X of Y (Name)" compound format
+      const phaseValue = nextPhaseNum || phaseNum;
+      const existingPhaseField = stateExtractField(stateContent, 'Current Phase')
+        || stateExtractField(stateContent, 'Phase');
+      let newPhaseValue = String(phaseValue);
+      if (existingPhaseField) {
+        const totalMatch = existingPhaseField.match(/of\s+(\d+)/);
+        const nameMatch = existingPhaseField.match(/\(([^)]+)\)/);
+        if (totalMatch) {
+          const total = totalMatch[1];
+          const nameStr = nextPhaseName ? ` (${nextPhaseName.replace(/-/g, ' ')})` : (nameMatch ? ` (${nameMatch[1]})` : '');
+          newPhaseValue = `${phaseValue} of ${total}${nameStr}`;
         }
       }
-    }
+      stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase', 'Phase', newPhaseValue);
 
-    // Gate 4: Update Performance Metrics section (#1627)
-    stateContent = updatePerformanceMetricsSection(stateContent, cwd, phaseNum, planCount, summaryCount);
+      // Update Current Phase Name
+      if (nextPhaseName) {
+        stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase Name', null, nextPhaseName.replace(/-/g, ' '));
+      }
 
-    writeStateMd(statePath, stateContent, cwd);
+      // Update Status
+      stateContent = stateReplaceFieldWithFallback(stateContent, 'Status', null,
+        isLastPhase ? 'Milestone complete' : 'Ready to plan');
+
+      // Update Current Plan
+      stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Plan', 'Plan', 'Not started');
+
+      // Update Last Activity
+      stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity', 'Last activity', today);
+
+      // Update Last Activity Description
+      stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity Description', null,
+        `Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`);
+
+      // Increment Completed Phases counter (#956)
+      const completedRaw = stateExtractField(stateContent, 'Completed Phases');
+      if (completedRaw) {
+        const newCompleted = parseInt(completedRaw, 10) + 1;
+        stateContent = stateReplaceField(stateContent, 'Completed Phases', String(newCompleted)) || stateContent;
+
+        // Recalculate percent based on completed / total (#956)
+        const totalRaw = stateExtractField(stateContent, 'Total Phases');
+        if (totalRaw) {
+          const totalPhases = parseInt(totalRaw, 10);
+          if (totalPhases > 0) {
+            const newPercent = Math.round((newCompleted / totalPhases) * 100);
+            stateContent = stateReplaceField(stateContent, 'Progress', `${newPercent}%`) || stateContent;
+            stateContent = stateContent.replace(
+              /(percent:\s*)\d+/,
+              `$1${newPercent}`
+            );
+          }
+        }
+      }
+
+      // Gate 4: Update Performance Metrics section (#1627)
+      stateContent = updatePerformanceMetricsSection(stateContent, cwd, phaseNum, planCount, summaryCount);
+
+      return stateContent;
+    }, cwd);
   }
 
   const result = {

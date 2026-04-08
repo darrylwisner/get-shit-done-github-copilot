@@ -27,6 +27,16 @@ const WORKSTREAM_SESSION_ENV_KEYS = [
 let cachedControllingTtyToken = null;
 let didProbeControllingTtyToken = false;
 
+// Track all .planning/.lock files held by this process so they can be removed
+// on exit. process.on('exit') fires even on process.exit(1), unlike try/finally
+// which is skipped when error() calls process.exit(1) inside a locked region (#1916).
+const _heldPlanningLocks = new Set();
+process.on('exit', () => {
+  for (const lockPath of _heldPlanningLocks) {
+    try { fs.unlinkSync(lockPath); } catch { /* already gone */ }
+  }
+});
+
 // ─── Path helpers ────────────────────────────────────────────────────────────
 
 /** Normalize a relative path to always use forward slashes (cross-platform). */
@@ -400,7 +410,11 @@ function loadConfig(cwd) {
 
 // ─── Git utilities ────────────────────────────────────────────────────────────
 
+const _gitIgnoredCache = new Map();
+
 function isGitIgnored(cwd, targetPath) {
+  const key = cwd + '::' + targetPath;
+  if (_gitIgnoredCache.has(key)) return _gitIgnoredCache.get(key);
   try {
     // --no-index checks .gitignore rules regardless of whether the file is tracked.
     // Without it, git check-ignore returns "not ignored" for tracked files even when
@@ -412,8 +426,10 @@ function isGitIgnored(cwd, targetPath) {
       cwd,
       stdio: 'pipe',
     });
+    _gitIgnoredCache.set(key, true);
     return true;
   } catch {
+    _gitIgnoredCache.set(key, false);
     return false;
   }
 }
@@ -598,10 +614,15 @@ function withPlanningLock(cwd, fn) {
         acquired: new Date().toISOString(),
       }), { flag: 'wx' });
 
+      // Register for exit-time cleanup so process.exit(1) inside a locked region
+      // cannot leave a stale lock file (#1916).
+      _heldPlanningLocks.add(lockPath);
+
       // Lock acquired — run the function
       try {
         return fn();
       } finally {
+        _heldPlanningLocks.delete(lockPath);
         try { fs.unlinkSync(lockPath); } catch { /* already released */ }
       }
     } catch (err) {
@@ -1485,6 +1506,38 @@ function readSubdirectories(dirPath, sort = false) {
   }
 }
 
+// ─── Atomic file writes ───────────────────────────────────────────────────────
+
+/**
+ * Write a file atomically using write-to-temp-then-rename.
+ *
+ * On POSIX systems, `fs.renameSync` is atomic when the source and destination
+ * are on the same filesystem. This prevents a process killed mid-write from
+ * leaving a truncated file that is unparseable on next read.
+ *
+ * The temp file is placed alongside the target so it is guaranteed to be on
+ * the same filesystem (required for rename atomicity). The PID is embedded in
+ * the temp file name so concurrent writers use distinct paths.
+ *
+ * If `renameSync` fails (e.g. cross-device move), the function falls back to a
+ * direct `writeFileSync` so callers always get a best-effort write.
+ *
+ * @param {string} filePath  Absolute path to write.
+ * @param {string|Buffer} content  File content.
+ * @param {string} [encoding='utf-8']  Encoding passed to writeFileSync.
+ */
+function atomicWriteFileSync(filePath, content, encoding = 'utf-8') {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  try {
+    fs.writeFileSync(tmpPath, content, encoding);
+    fs.renameSync(tmpPath, filePath);
+  } catch (renameErr) {
+    // Clean up the temp file if rename failed, then fall back to direct write.
+    try { fs.unlinkSync(tmpPath); } catch { /* already gone or never created */ }
+    fs.writeFileSync(filePath, content, encoding);
+  }
+}
+
 module.exports = {
   output,
   error,
@@ -1530,4 +1583,5 @@ module.exports = {
   readSubdirectories,
   getAgentsDir,
   checkAgentsInstalled,
+  atomicWriteFileSync,
 };

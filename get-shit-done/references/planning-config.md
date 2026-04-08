@@ -234,6 +234,7 @@ Generated from `CONFIG_DEFAULTS` (core.cjs) and `VALID_CONFIG_KEYS` (config.cjs)
 | `response_language` | string\|null | `null` | Any language name | Language for user-facing prompts (e.g., `"Portuguese"`, `"Japanese"`) |
 | `context_window` | number | `200000` | `200000`, `1000000` | Context window size; set `1000000` for 1M-context models |
 | `resolve_model_ids` | boolean\|string | `false` | `false`, `true`, `"omit"` | Map model aliases to full Claude IDs; `"omit"` returns empty string |
+| `context` | string\|null | `null` | `"dev"`, `"research"`, `"review"` | Execution context profile that adjusts agent behavior: `"dev"` for development tasks, `"research"` for investigation/exploration, `"review"` for code review workflows |
 
 ### Workflow Fields
 
@@ -256,6 +257,8 @@ Set via `workflow.*` namespace in config.json (e.g., `"workflow": { "research": 
 | `workflow.skip_discuss` | boolean | `false` | `true`, `false` | Skip discuss phase entirely |
 | `workflow.use_worktrees` | boolean | `true` | `true`, `false` | Run executor agents in isolated git worktrees |
 | `workflow.subagent_timeout` | number | `300000` | Any positive integer (ms) | Timeout for parallel subagent tasks (default: 5 minutes) |
+| `workflow.code_review` | boolean | `true` | `true`, `false` | Enable built-in code review step in the ship workflow |
+| `workflow.code_review_depth` | string | `"standard"` | `"light"`, `"standard"`, `"deep"` | Depth level for code review analysis in the ship workflow |
 | `workflow._auto_chain_active` | boolean | `false` | `true`, `false` | Internal: tracks whether autonomous chaining is active |
 
 ### Git Fields
@@ -287,6 +290,7 @@ Set via `features.*` namespace (e.g., `"features": { "thinking_partner": true }`
 | Key | Type | Default | Allowed Values | Description |
 |-----|------|---------|----------------|-------------|
 | `features.thinking_partner` | boolean | `false` | `true`, `false` | Enable conditional extended thinking at workflow decision points (used by discuss-phase and plan-phase for architectural tradeoff analysis) |
+| `features.global_learnings` | boolean | `false` | `true`, `false` | Enable injection of global learnings from `~/.gsd/learnings/` into agent prompts |
 
 ### Hook Fields
 
@@ -295,6 +299,14 @@ Set via `hooks.*` namespace (e.g., `"hooks": { "context_warnings": true }`).
 | Key | Type | Default | Allowed Values | Description |
 |-----|------|---------|----------------|-------------|
 | `hooks.context_warnings` | boolean | `true` | `true`, `false` | Show warnings when context budget is exceeded |
+
+### Learnings Fields
+
+Set via `learnings.*` namespace (e.g., `"learnings": { "max_inject": 5 }`). Used together with `features.global_learnings`.
+
+| Key | Type | Default | Allowed Values | Description |
+|-----|------|---------|----------------|-------------|
+| `learnings.max_inject` | number | `10` | Any positive integer | Maximum number of global learning entries to inject into agent prompts per session |
 
 ### Manager Fields
 
