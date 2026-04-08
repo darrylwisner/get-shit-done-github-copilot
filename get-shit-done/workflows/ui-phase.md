@@ -261,11 +261,17 @@ Dimensions: 6/6 passed
 
 ## ▶ Next Up
 
+{If CONTEXT.md exists for this phase:}
 **Plan Phase {N}** — planner will use UI-SPEC.md as design context
 
-`/clear` then:
+`/clear` then: `/gsd-plan-phase {N}`
 
-`/gsd-plan-phase {N}`
+{If CONTEXT.md does NOT exist:}
+**Discuss Phase {N}** — gather implementation context before planning
+
+`/clear` then: `/gsd-discuss-phase {N}`
+
+(or `/gsd-plan-phase {N}` to skip discussion)
 
 ───────────────────────────────────────────────────────────────
 ```
