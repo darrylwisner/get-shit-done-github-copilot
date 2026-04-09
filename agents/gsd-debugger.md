@@ -31,10 +31,6 @@ If the prompt contains a `<files_to_read>` block, you MUST use the `Read` tool t
 - Handle checkpoints when user input is unavoidable
 </role>
 
-<required_reading>
-@~/.claude/get-shit-done/references/common-bug-patterns.md
-</required_reading>
-
 <philosophy>
 
 ## User = Reporter, Claude = Investigator

@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { escapeRegex, loadConfig, normalizePhaseName, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, toPosixPath, planningDir, withPlanningLock, output, error, readSubdirectories, phaseTokenMatches } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
-const { writeStateMd, readModifyWriteStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback, updatePerformanceMetricsSection } = require('./state.cjs');
+const { writeStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback, updatePerformanceMetricsSection } = require('./state.cjs');
 
 function cmdPhasesList(cwd, options, raw) {
   const phasesDir = path.join(planningDir(cwd), 'phases');
@@ -88,49 +88,50 @@ function cmdPhaseNextDecimal(cwd, basePhase, raw) {
   const phasesDir = path.join(planningDir(cwd), 'phases');
   const normalized = normalizePhaseName(basePhase);
 
+  // Check if phases directory exists
+  if (!fs.existsSync(phasesDir)) {
+    output(
+      {
+        found: false,
+        base_phase: normalized,
+        next: `${normalized}.1`,
+        existing: [],
+      },
+      raw,
+      `${normalized}.1`
+    );
+    return;
+  }
+
   try {
-    let baseExists = false;
-    const decimalSet = new Set();
+    const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
 
-    // Scan directory names for existing decimal phases
-    if (fs.existsSync(phasesDir)) {
-      const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-      baseExists = dirs.some(d => phaseTokenMatches(d, normalized));
+    // Check if base phase exists
+    const baseExists = dirs.some(d => phaseTokenMatches(d, normalized));
 
-      const dirPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${escapeRegex(normalized)}\\.(\\d+)`);
-      for (const dir of dirs) {
-        const match = dir.match(dirPattern);
-        if (match) decimalSet.add(parseInt(match[1], 10));
+    // Find existing decimal phases for this base
+    const decimalPattern = new RegExp(`^${normalized}\\.(\\d+)`);
+    const existingDecimals = [];
+
+    for (const dir of dirs) {
+      const match = dir.match(decimalPattern);
+      if (match) {
+        existingDecimals.push(`${normalized}.${match[1]}`);
       }
     }
 
-    // Also scan ROADMAP.md for phase entries that may not have directories yet
-    const roadmapPath = path.join(planningDir(cwd), 'ROADMAP.md');
-    if (fs.existsSync(roadmapPath)) {
-      try {
-        const roadmapContent = fs.readFileSync(roadmapPath, 'utf-8');
-        const phasePattern = new RegExp(
-          `#{2,4}\\s*Phase\\s+0*${escapeRegex(normalized)}\\.(\\d+)\\s*:`, 'gi'
-        );
-        let pm;
-        while ((pm = phasePattern.exec(roadmapContent)) !== null) {
-          decimalSet.add(parseInt(pm[1], 10));
-        }
-      } catch { /* ROADMAP.md read failure is non-fatal */ }
-    }
-
-    // Build sorted list of existing decimals
-    const existingDecimals = Array.from(decimalSet)
-      .sort((a, b) => a - b)
-      .map(n => `${normalized}.${n}`);
+    // Sort numerically
+    existingDecimals.sort((a, b) => comparePhaseNum(a, b));
 
     // Calculate next decimal
     let nextDecimal;
-    if (decimalSet.size === 0) {
+    if (existingDecimals.length === 0) {
       nextDecimal = `${normalized}.1`;
     } else {
-      nextDecimal = `${normalized}.${Math.max(...decimalSet) + 1}`;
+      const lastDecimal = existingDecimals[existingDecimals.length - 1];
+      const lastNum = parseInt(lastDecimal.split('.')[1], 10);
+      nextDecimal = `${normalized}.${lastNum + 1}`;
     }
 
     output(
@@ -341,13 +342,11 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
       _dirName = `${prefix}${_newPhaseId}-${slug}`;
     } else {
       // Sequential mode: find highest integer phase number (in current milestone only)
-      // Skip 999.x backlog phases — they live outside the active sequence
       const phasePattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
       let maxPhase = 0;
       let m;
       while ((m = phasePattern.exec(content)) !== null) {
         const num = parseInt(m[1], 10);
-        if (num >= 999) continue; // backlog phases use 999.x numbering
         if (num > maxPhase) maxPhase = num;
       }
 
@@ -417,31 +416,22 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
       error(`Phase ${afterPhase} not found in ROADMAP.md`);
     }
 
-    // Calculate next decimal by scanning both directories AND ROADMAP.md entries
+    // Calculate next decimal using existing logic
     const phasesDir = path.join(planningDir(cwd), 'phases');
     const normalizedBase = normalizePhaseName(afterPhase);
-    const decimalSet = new Set();
+    let existingDecimals = [];
 
     try {
       const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
       const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-      const decimalPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${escapeRegex(normalizedBase)}\\.(\\d+)`);
+      const decimalPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${normalizedBase}\\.(\\d+)`);
       for (const dir of dirs) {
         const dm = dir.match(decimalPattern);
-        if (dm) decimalSet.add(parseInt(dm[1], 10));
+        if (dm) existingDecimals.push(parseInt(dm[1], 10));
       }
     } catch { /* intentionally empty */ }
 
-    // Also scan ROADMAP.md content (already loaded) for decimal entries
-    const rmPhasePattern = new RegExp(
-      `#{2,4}\\s*Phase\\s+0*${escapeRegex(normalizedBase)}\\.(\\d+)\\s*:`, 'gi'
-    );
-    let rmMatch;
-    while ((rmMatch = rmPhasePattern.exec(rawContent)) !== null) {
-      decimalSet.add(parseInt(rmMatch[1], 10));
-    }
-
-    const nextDecimal = decimalSet.size === 0 ? 1 : Math.max(...decimalSet) + 1;
+    const nextDecimal = existingDecimals.length === 0 ? 1 : Math.max(...existingDecimals) + 1;
     const _decimalPhase = `${normalizedBase}.${nextDecimal}`;
     // Optional project code prefix
     const insertConfig = loadConfig(cwd);
@@ -634,20 +624,19 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
   // Update ROADMAP.md
   updateRoadmapAfterPhaseRemoval(roadmapPath, targetPhase, isDecimal, parseInt(normalized, 10), cwd);
 
-  // Update STATE.md phase count atomically (#P4.4)
+  // Update STATE.md phase count
   const statePath = path.join(planningDir(cwd), 'STATE.md');
   if (fs.existsSync(statePath)) {
-    readModifyWriteStateMd(statePath, (stateContent) => {
-      const totalRaw = stateExtractField(stateContent, 'Total Phases');
-      if (totalRaw) {
-        stateContent = stateReplaceField(stateContent, 'Total Phases', String(parseInt(totalRaw, 10) - 1)) || stateContent;
-      }
-      const ofMatch = stateContent.match(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i);
-      if (ofMatch) {
-        stateContent = stateContent.replace(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i, `$1${parseInt(ofMatch[2], 10) - 1}$3`);
-      }
-      return stateContent;
-    }, cwd);
+    let stateContent = fs.readFileSync(statePath, 'utf-8');
+    const totalRaw = stateExtractField(stateContent, 'Total Phases');
+    if (totalRaw) {
+      stateContent = stateReplaceField(stateContent, 'Total Phases', String(parseInt(totalRaw, 10) - 1)) || stateContent;
+    }
+    const ofMatch = stateContent.match(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i);
+    if (ofMatch) {
+      stateContent = stateContent.replace(/(\bof\s+)(\d+)(\s*(?:\(|phases?))/i, `$1${parseInt(ofMatch[2], 10) - 1}$3`);
+    }
+    writeStateMd(statePath, stateContent, cwd);
   }
 
   output({
@@ -845,72 +834,71 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     } catch { /* intentionally empty */ }
   }
 
-  // Update STATE.md atomically — hold lock across read-modify-write (#P4.4).
-  // Previously read outside the lock; a crash between the ROADMAP update
-  // (locked above) and this write left ROADMAP/STATE inconsistent.
+  // Update STATE.md — use shared helpers that handle both **bold:** and plain Field: formats
   if (fs.existsSync(statePath)) {
-    readModifyWriteStateMd(statePath, (stateContent) => {
-      // Update Current Phase — preserve "X of Y (Name)" compound format
-      const phaseValue = nextPhaseNum || phaseNum;
-      const existingPhaseField = stateExtractField(stateContent, 'Current Phase')
-        || stateExtractField(stateContent, 'Phase');
-      let newPhaseValue = String(phaseValue);
-      if (existingPhaseField) {
-        const totalMatch = existingPhaseField.match(/of\s+(\d+)/);
-        const nameMatch = existingPhaseField.match(/\(([^)]+)\)/);
-        if (totalMatch) {
-          const total = totalMatch[1];
-          const nameStr = nextPhaseName ? ` (${nextPhaseName.replace(/-/g, ' ')})` : (nameMatch ? ` (${nameMatch[1]})` : '');
-          newPhaseValue = `${phaseValue} of ${total}${nameStr}`;
+    let stateContent = fs.readFileSync(statePath, 'utf-8');
+
+    // Update Current Phase — preserve "X of Y (Name)" compound format
+    const phaseValue = nextPhaseNum || phaseNum;
+    const existingPhaseField = stateExtractField(stateContent, 'Current Phase')
+      || stateExtractField(stateContent, 'Phase');
+    let newPhaseValue = String(phaseValue);
+    if (existingPhaseField) {
+      const totalMatch = existingPhaseField.match(/of\s+(\d+)/);
+      const nameMatch = existingPhaseField.match(/\(([^)]+)\)/);
+      if (totalMatch) {
+        const total = totalMatch[1];
+        const nameStr = nextPhaseName ? ` (${nextPhaseName.replace(/-/g, ' ')})` : (nameMatch ? ` (${nameMatch[1]})` : '');
+        newPhaseValue = `${phaseValue} of ${total}${nameStr}`;
+      }
+    }
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase', 'Phase', newPhaseValue);
+
+    // Update Current Phase Name
+    if (nextPhaseName) {
+      stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase Name', null, nextPhaseName.replace(/-/g, ' '));
+    }
+
+    // Update Status
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Status', null,
+      isLastPhase ? 'Milestone complete' : 'Ready to plan');
+
+    // Update Current Plan
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Plan', 'Plan', 'Not started');
+
+    // Update Last Activity
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity', 'Last activity', today);
+
+    // Update Last Activity Description
+    stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity Description', null,
+      `Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`);
+
+    // Increment Completed Phases counter (#956)
+    const completedRaw = stateExtractField(stateContent, 'Completed Phases');
+    if (completedRaw) {
+      const newCompleted = parseInt(completedRaw, 10) + 1;
+      stateContent = stateReplaceField(stateContent, 'Completed Phases', String(newCompleted)) || stateContent;
+
+      // Recalculate percent based on completed / total (#956)
+      const totalRaw = stateExtractField(stateContent, 'Total Phases');
+      if (totalRaw) {
+        const totalPhases = parseInt(totalRaw, 10);
+        if (totalPhases > 0) {
+          const newPercent = Math.round((newCompleted / totalPhases) * 100);
+          stateContent = stateReplaceField(stateContent, 'Progress', `${newPercent}%`) || stateContent;
+          // Also update percent field if it exists separately
+          stateContent = stateContent.replace(
+            /(percent:\s*)\d+/,
+            `$1${newPercent}`
+          );
         }
       }
-      stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase', 'Phase', newPhaseValue);
+    }
 
-      // Update Current Phase Name
-      if (nextPhaseName) {
-        stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase Name', null, nextPhaseName.replace(/-/g, ' '));
-      }
+    // Gate 4: Update Performance Metrics section (#1627)
+    stateContent = updatePerformanceMetricsSection(stateContent, cwd, phaseNum, planCount, summaryCount);
 
-      // Update Status
-      stateContent = stateReplaceFieldWithFallback(stateContent, 'Status', null,
-        isLastPhase ? 'Milestone complete' : 'Ready to plan');
-
-      // Update Current Plan
-      stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Plan', 'Plan', 'Not started');
-
-      // Update Last Activity
-      stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity', 'Last activity', today);
-
-      // Update Last Activity Description
-      stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity Description', null,
-        `Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`);
-
-      // Increment Completed Phases counter (#956)
-      const completedRaw = stateExtractField(stateContent, 'Completed Phases');
-      if (completedRaw) {
-        const newCompleted = parseInt(completedRaw, 10) + 1;
-        stateContent = stateReplaceField(stateContent, 'Completed Phases', String(newCompleted)) || stateContent;
-
-        // Recalculate percent based on completed / total (#956)
-        const totalRaw = stateExtractField(stateContent, 'Total Phases');
-        if (totalRaw) {
-          const totalPhases = parseInt(totalRaw, 10);
-          if (totalPhases > 0) {
-            const newPercent = Math.round((newCompleted / totalPhases) * 100);
-            stateContent = stateReplaceField(stateContent, 'Progress', `${newPercent}%`) || stateContent;
-            stateContent = stateContent.replace(
-              /(percent:\s*)\d+/,
-              `$1${newPercent}`
-            );
-          }
-        }
-      }
-
-      // Gate 4: Update Performance Metrics section (#1627)
-      stateContent = updatePerformanceMetricsSection(stateContent, cwd, phaseNum, planCount, summaryCount);
-
-      return stateContent;
-    }, cwd);
+    writeStateMd(statePath, stateContent, cwd);
   }
 
   const result = {
