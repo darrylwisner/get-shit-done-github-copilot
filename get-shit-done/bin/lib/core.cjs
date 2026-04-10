@@ -229,6 +229,7 @@ const CONFIG_DEFAULTS = {
   plan_checker: true,
   verifier: true,
   nyquist_validation: true,
+  ai_integration_phase: true,
   parallelization: true,
   brave_search: false,
   firecrawl: false,
@@ -670,19 +671,23 @@ function planningRoot(cwd) {
 }
 
 /**
- * Get common .planning file paths, workstream-aware.
- * Scoped paths (state, roadmap, phases, requirements) resolve to the active workstream.
- * Shared paths (project, config) always resolve to the root .planning/.
+ * Get common .planning file paths, project-and-workstream-aware.
+ *
+ * All paths route through planningDir(cwd, ws), which honors the GSD_PROJECT
+ * env var and active workstream. This matches loadConfig() above (line 256),
+ * which has always read config.json via planningDir(cwd). Previously project
+ * and config were resolved against the unrouted .planning/ root, which broke
+ * `gsd-tools config-get` in multi-project layouts (the CRUD writers and the
+ * reader pointed at different files).
  */
 function planningPaths(cwd, ws) {
   const base = planningDir(cwd, ws);
-  const root = path.join(cwd, '.planning');
   return {
     planning: base,
     state: path.join(base, 'STATE.md'),
     roadmap: path.join(base, 'ROADMAP.md'),
-    project: path.join(root, 'PROJECT.md'),
-    config: path.join(root, 'config.json'),
+    project: path.join(base, 'PROJECT.md'),
+    config: path.join(base, 'config.json'),
     phases: path.join(base, 'phases'),
     requirements: path.join(base, 'REQUIREMENTS.md'),
   };
@@ -879,7 +884,10 @@ function normalizePhaseName(phase) {
   const match = stripped.match(/^(\d+)([A-Z])?((?:\.\d+)*)/i);
   if (match) {
     const padded = match[1].padStart(2, '0');
-    const letter = match[2] ? match[2].toUpperCase() : '';
+    // Preserve original case of letter suffix (#1962).
+    // Uppercasing causes directory/roadmap mismatches on case-sensitive filesystems
+    // (e.g., "16c" in ROADMAP.md → directory "16C-name" → progress can't match).
+    const letter = match[2] || '';
     const decimal = match[3] || '';
     return padded + letter + decimal;
   }
