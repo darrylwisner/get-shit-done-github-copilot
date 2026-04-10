@@ -98,6 +98,9 @@ grep -n "type=\"checkpoint" [plan-path]
 At execution decision points, apply structured reasoning:
 @~/.claude/get-shit-done/references/thinking-models-execution.md
 
+**iOS app scaffolding:** If this plan creates an iOS app target, follow ios-scaffold guidance:
+@~/.claude/get-shit-done/references/ios-scaffold.md
+
 For each task:
 
 1. **If `type="auto"`:**
@@ -362,7 +365,16 @@ git commit -m "{type}({phase}-{plan}): {concise task description}
 - **Single-repo:** `TASK_COMMIT=$(git rev-parse --short HEAD)` — track for SUMMARY.
 - **Multi-repo (sub_repos):** Extract hashes from `commit-to-subrepo` JSON output (`repos.{name}.hash`). Record all hashes for SUMMARY (e.g., `backend@abc1234, frontend@def5678`).
 
-**6. Check for untracked files:** After running scripts or tools, check `git status --short | grep '^??'`. For any new untracked files: commit if intentional, add to `.gitignore` if generated/runtime output. Never leave generated files untracked.
+**6. Post-commit deletion check:** After recording the hash, verify the commit did not accidentally delete tracked files:
+```bash
+DELETIONS=$(git diff --diff-filter=D --name-only HEAD~1 HEAD 2>/dev/null || true)
+if [ -n "$DELETIONS" ]; then
+  echo "WARNING: Commit includes file deletions: $DELETIONS"
+fi
+```
+Intentional deletions (e.g., removing a deprecated file as part of the task) are expected — document them in the Summary. Unexpected deletions are a Rule 1 bug: revert and fix before proceeding.
+
+**7. Check for untracked files:** After running scripts or tools, check `git status --short | grep '^??'`. For any new untracked files: commit if intentional, add to `.gitignore` if generated/runtime output. Never leave generated files untracked.
 </task_commit_protocol>
 
 <summary_creation>

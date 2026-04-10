@@ -38,6 +38,9 @@ Parse `$ARGUMENTS` for:
 
 If `$DESCRIPTION` is empty after parsing, prompt user interactively:
 
+
+**Text mode (`workflow.text_mode: true` in config or `--text` flag):** Set `TEXT_MODE=true` if `--text` is present in `$ARGUMENTS` OR `text_mode` from init JSON is `true`. When TEXT_MODE is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for non-Claude runtimes (OpenAI Codex, Gemini CLI, etc.) where `AskUserQuestion` is not available.
+
 ```
 AskUserQuestion(
   header: "Quick Task",
@@ -567,8 +570,10 @@ ${USE_WORKTREES !== "false" ? `
 <worktree_branch_check>
 FIRST ACTION before any other work: verify this worktree branch is based on the correct commit.
 Run: git merge-base HEAD ${EXPECTED_BASE}
-If the result differs from ${EXPECTED_BASE}, run: git reset --soft ${EXPECTED_BASE}
-This corrects a known issue on Windows where EnterWorktree creates branches from main instead of the feature branch HEAD.
+If the result differs from ${EXPECTED_BASE}, hard-reset to the correct base (safe — runs before any agent work):
+  git reset --hard ${EXPECTED_BASE}
+Then verify: if [ "$(git rev-parse HEAD)" != "${EXPECTED_BASE}" ]; then echo "ERROR: Could not correct worktree base"; exit 1; fi
+This corrects a known issue where EnterWorktree creates branches from main instead of the feature branch HEAD (affects all platforms).
 </worktree_branch_check>
 ` : ''}
 

@@ -46,7 +46,7 @@ Parse JSON for: `researcher_model`, `planner_model`, `checker_model`, `research_
 
 ## 2. Parse and Normalize Arguments
 
-Extract from $ARGUMENTS: phase number (integer or decimal like `2.1`), flags (`--research`, `--skip-research`, `--gaps`, `--skip-verify`, `--prd <filepath>`, `--reviews`, `--text`).
+Extract from $ARGUMENTS: phase number (integer or decimal like `2.1`), flags (`--research`, `--skip-research`, `--gaps`, `--skip-verify`, `--skip-ui`, `--prd <filepath>`, `--reviews`, `--text`).
 
 Set `TEXT_MODE=true` if `--text` is present in $ARGUMENTS OR `text_mode` from init JSON is `true`. When `TEXT_MODE` is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for Claude Code remote sessions (`/rc` mode) where TUI menus don't work through the Claude App.
 
@@ -241,6 +241,46 @@ If "Run discuss-phase first":
   ```
   **Exit the plan-phase workflow. Do not continue.**
 
+## 4.5. Check AI-SPEC
+
+**Skip if:** `ai_integration_phase_enabled` from config is false, or `--skip-ai-spec` flag provided.
+
+```bash
+AI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-AI-SPEC.md 2>/dev/null | head -1)
+AI_PHASE_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.ai_integration_phase 2>/dev/null || echo "true")
+```
+
+**Skip if `AI_PHASE_CFG` is `false`.**
+
+**If `AI_SPEC_FILE` is empty:** Check phase goal for AI keywords:
+```bash
+echo "${phase_goal}" | grep -qi "agent\|llm\|rag\|chatbot\|embedding\|langchain\|llamaindex\|crewai\|langgraph\|openai\|anthropic\|vector\|eval\|ai system"
+```
+
+**If AI keywords detected AND no AI-SPEC.md:**
+```
+◆ Note: This phase appears to involve AI system development.
+  Consider running /gsd-ai-integration-phase {N} before planning to:
+  - Select the right framework for your use case
+  - Research its docs and best practices
+  - Design an evaluation strategy
+
+  Continue planning without AI-SPEC? (non-blocking — /gsd-ai-integration-phase can be run after)
+```
+
+Use AskUserQuestion with options:
+- "Continue — plan without AI-SPEC"
+- "Stop — I'll run /gsd-ai-integration-phase {N} first"
+
+If "Stop": Exit with `/gsd-ai-integration-phase {N}` reminder.
+If "Continue": Proceed. (Non-blocking — planner will note AI-SPEC is absent.)
+
+**If `AI_SPEC_FILE` is non-empty:** Extract framework for planner context:
+```bash
+FRAMEWORK_LINE=$(grep "Selected Framework:" "${AI_SPEC_FILE}" | head -1)
+```
+Pass `ai_spec_path` and `framework_line` to planner in step 7 so it can reference the AI design contract.
+
 ## 5. Handle Research
 
 **Skip if:** `--gaps` flag or `--skip-research` flag or `--reviews` flag.
@@ -423,6 +463,8 @@ UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
 
 **If UI-SPEC.md found:** Set `UI_SPEC_PATH=$UI_SPEC_FILE`. Display: `Using UI design contract: ${UI_SPEC_PATH}`
 
+**If UI-SPEC.md missing AND `--skip-ui` flag is present in $ARGUMENTS:** Skip silently to step 6.
+
 **If UI-SPEC.md missing AND `UI_GATE_CFG` is `true`:**
 
 Read auto-chain state:
@@ -445,24 +487,18 @@ Continue to step 6.
 
 **If `AUTO_CHAIN` is `false` (manual invocation):**
 
-If `TEXT_MODE` is true, present as a plain-text numbered list:
+Output this markdown directly (not as a code block):
+
 ```
-Phase {N} has frontend indicators but no UI-SPEC.md. Generate a design contract before planning?
-
-1. Generate UI-SPEC first — Run /gsd-ui-phase {N} then re-run /gsd-plan-phase {N}
-2. Continue without UI-SPEC
-3. Not a frontend phase
-
-Enter number:
+## ⚠ UI-SPEC.md missing for Phase {N}
+▶ Recommended next step:
+`/gsd-ui-phase {N} ${GSD_WS}` — generate UI design contract before planning
+───────────────────────────────────────────────
+Also available:
+- `/gsd-plan-phase {N} --skip-ui ${GSD_WS}` — plan without UI-SPEC (not recommended for frontend phases)
 ```
 
-Otherwise use AskUserQuestion:
-- header: "UI Design Contract"
-- question: "Phase {N} has frontend indicators but no UI-SPEC.md. Generate a design contract before planning?"
-- options:
-  - "Generate UI-SPEC first" → Display: "Run `/gsd-ui-phase {N} ${GSD_WS}` then re-run `/gsd-plan-phase {N} ${GSD_WS}`". Exit workflow.
-  - "Continue without UI-SPEC" → Continue to step 6.
-  - "Not a frontend phase" → Continue to step 6.
+**Exit the plan-phase workflow. Do not continue.**
 
 **If `HAS_UI` is 1 (no frontend indicators):** Skip silently to step 5.7.
 
