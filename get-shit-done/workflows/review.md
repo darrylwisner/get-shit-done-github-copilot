@@ -20,6 +20,8 @@ command -v claude >/dev/null 2>&1 && echo "claude:available" || echo "claude:mis
 command -v codex >/dev/null 2>&1 && echo "codex:available" || echo "codex:missing"
 command -v coderabbit >/dev/null 2>&1 && echo "coderabbit:available" || echo "coderabbit:missing"
 command -v opencode >/dev/null 2>&1 && echo "opencode:available" || echo "opencode:missing"
+command -v qwen >/dev/null 2>&1 && echo "qwen:available" || echo "qwen:missing"
+command -v cursor >/dev/null 2>&1 && echo "cursor:available" || echo "cursor:missing"
 ```
 
 Parse flags from `$ARGUMENTS`:
@@ -28,6 +30,8 @@ Parse flags from `$ARGUMENTS`:
 - `--codex` → include Codex
 - `--coderabbit` → include CodeRabbit
 - `--opencode` → include OpenCode
+- `--qwen` → include Qwen Code
+- `--cursor` → include Cursor
 - `--all` → include all available
 - No flags → include all available
 
@@ -38,6 +42,8 @@ No external AI CLIs found. Install at least one:
 - codex: https://github.com/openai/codex
 - claude: https://github.com/anthropics/claude-code
 - opencode: https://opencode.ai (leverages GitHub Copilot subscription models)
+- qwen: https://github.com/nicepkg/qwen-code (Alibaba Qwen models)
+- cursor: https://cursor.com (Cursor IDE agent mode)
 
 Then run /gsd-review again.
 ```
@@ -197,6 +203,22 @@ if [ ! -s /tmp/gsd-review-opencode-{phase}.md ]; then
 fi
 ```
 
+**Qwen Code:**
+```bash
+qwen "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-qwen-{phase}.md
+if [ ! -s /tmp/gsd-review-qwen-{phase}.md ]; then
+  echo "Qwen review failed or returned empty output." > /tmp/gsd-review-qwen-{phase}.md
+fi
+```
+
+**Cursor:**
+```bash
+cat /tmp/gsd-review-prompt-{phase}.md | cursor agent -p --mode ask --trust 2>/dev/null > /tmp/gsd-review-cursor-{phase}.md
+if [ ! -s /tmp/gsd-review-cursor-{phase}.md ]; then
+  echo "Cursor review failed or returned empty output." > /tmp/gsd-review-cursor-{phase}.md
+fi
+```
+
 If a CLI fails, log the error and continue with remaining CLIs.
 
 Display progress:
@@ -216,7 +238,7 @@ Combine all review responses into `{phase_dir}/{padded_phase}-REVIEWS.md`:
 ```markdown
 ---
 phase: {N}
-reviewers: [gemini, claude, codex, coderabbit, opencode]
+reviewers: [gemini, claude, codex, coderabbit, opencode, qwen, cursor]
 reviewed_at: {ISO timestamp}
 plans_reviewed: [{list of PLAN.md files}]
 ---

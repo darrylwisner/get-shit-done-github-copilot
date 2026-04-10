@@ -342,6 +342,9 @@ git add src/types/user.ts
 | `fix`      | Bug fix, error correction                       |
 | `test`     | Test-only changes (TDD RED)                     |
 | `refactor` | Code cleanup, no behavior change                |
+| `perf`     | Performance improvement, no behavior change     |
+| `docs`     | Documentation only                              |
+| `style`    | Formatting, whitespace, no logic change         |
 | `chore`    | Config, tooling, dependencies                   |
 
 **4. Commit:**

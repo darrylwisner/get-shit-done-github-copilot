@@ -865,6 +865,8 @@ Cross-AI peer review of phase plans from external AI CLIs.
 | `--codex` | Include Codex CLI review |
 | `--coderabbit` | Include CodeRabbit review |
 | `--opencode` | Include OpenCode review (via GitHub Copilot) |
+| `--qwen` | Include Qwen Code review (Alibaba Qwen models) |
+| `--cursor` | Include Cursor agent review |
 | `--all` | Include all available CLIs |
 
 **Produces:** `{phase}-REVIEWS.md` — consumable by `/gsd-plan-phase --reviews`
