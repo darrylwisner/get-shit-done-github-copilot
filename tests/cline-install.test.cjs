@@ -29,6 +29,7 @@ const {
   getConfigDirFromHome,
   convertClaudeToCliineMarkdown,
   install,
+  finishInstall,
 } = require('../bin/install.js');
 
 describe('Cline runtime directory mapping', () => {
@@ -152,6 +153,23 @@ describe('Cline install (local)', () => {
     install(false, 'cline');
     const engineDir = path.join(tmpDir, 'get-shit-done');
     assert.ok(fs.existsSync(engineDir), 'get-shit-done directory must exist after install');
+  });
+
+  test('finishInstall does not throw ERR_INVALID_ARG_TYPE for cline runtime (regression: null settingsPath guard)', () => {
+    // install() returns settingsPath: null for cline — finishInstall() must not call
+    // writeSettings(null, ...) or it crashes with ERR_INVALID_ARG_TYPE.
+    // Before fix: isCline was missing from the writeSettings guard in finishInstall().
+    // After fix:  !isCline is in the guard, matching codex/copilot/cursor/windsurf/trae.
+    assert.doesNotThrow(
+      () => finishInstall(null, null, null, false, 'cline', false, tmpDir),
+      'finishInstall must not throw when called with null settingsPath for cline runtime'
+    );
+  });
+
+  test('settings.json is not written for cline runtime', () => {
+    finishInstall(null, null, null, false, 'cline', false, tmpDir);
+    const settingsJson = path.join(tmpDir, 'settings.json');
+    assert.ok(!fs.existsSync(settingsJson), 'settings.json must not be written for cline runtime');
   });
 
   test('installed engine files have no leaked .claude paths', () => {
