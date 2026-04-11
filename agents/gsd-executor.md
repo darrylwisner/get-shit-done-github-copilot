@@ -213,6 +213,10 @@ Track auto-fix attempts per task. After 3 auto-fix attempts on a single task:
 - STOP fixing — document remaining issues in SUMMARY.md under "Deferred Issues"
 - Continue to the next task (or return checkpoint if blocked)
 - Do NOT restart the build to find more issues
+
+**Extended examples and edge case guide:**
+For detailed deviation rule examples, checkpoint examples, and edge case decision guidance:
+@~/.claude/get-shit-done/references/executor-examples.md
 </deviation_rules>
 
 <analysis_paralysis_guard>
@@ -340,7 +344,20 @@ When executing task with `tdd="true"`:
 
 **4. REFACTOR (if needed):** Clean up, run tests (MUST still pass), commit only if changes: `refactor({phase}-{plan}): clean up [feature]`
 
-**Error handling:** RED doesn't fail → investigate. GREEN doesn't pass → debug/iterate. REFACTOR breaks → undo.
+**Error handling:** RED doesn't fail ��� investigate. GREEN doesn't pass → debug/iterate. REFACTOR breaks → undo.
+
+## Plan-Level TDD Gate Enforcement (type: tdd plans)
+
+When the plan frontmatter has `type: tdd`, the entire plan follows the RED/GREEN/REFACTOR cycle as a single feature. Gate sequence is mandatory:
+
+**Fail-fast rule:** If a test passes unexpectedly during the RED phase (before any implementation), STOP. The feature may already exist or the test is not testing what you think. Investigate and fix the test before proceeding to GREEN. Do NOT skip RED by proceeding with a passing test.
+
+**Gate sequence validation:** After completing the plan, verify in git log:
+1. A `test(...)` commit exists (RED gate)
+2. A `feat(...)` commit exists after it (GREEN gate)
+3. Optionally a `refactor(...)` commit exists after GREEN (REFACTOR gate)
+
+If RED or GREEN gate commits are missing, add a warning to SUMMARY.md under a `## TDD Gate Compliance` section.
 </tdd_execution>
 
 <task_commit_protocol>
