@@ -52,17 +52,19 @@ process.stdin.on('end', () => {
       process.exit(0);
     }
 
-    // Check if context warnings are disabled via config
+    // Check if context warnings are disabled via config.
+    // Quick sentinel check: skip config read entirely for non-GSD projects (#P2.5).
     const cwd = data.cwd || process.cwd();
-    const configPath = path.join(cwd, '.planning', 'config.json');
-    if (fs.existsSync(configPath)) {
+    const planningDir = path.join(cwd, '.planning');
+    if (fs.existsSync(planningDir)) {
       try {
+        const configPath = path.join(planningDir, 'config.json');
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         if (config.hooks?.context_warnings === false) {
           process.exit(0);
         }
       } catch (e) {
-        // Ignore config parse errors
+        // Ignore config read/parse errors (config may not exist in .planning/)
       }
     }
 
