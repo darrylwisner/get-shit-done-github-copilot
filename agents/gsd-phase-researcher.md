@@ -276,6 +276,12 @@ Priority: Context7 > Exa (verified) > Firecrawl (official docs) > Official GitHu
 
 **Primary recommendation:** [one-liner actionable guidance]
 
+## Architectural Responsibility Map
+
+| Capability | Primary Tier | Secondary Tier | Rationale |
+|------------|-------------|----------------|-----------|
+| [capability] | [tier] | [tier or —] | [why this tier owns it] |
+
 ## Standard Stack
 
 ### Core
@@ -519,6 +525,33 @@ cat "$phase_dir"/*-CONTEXT.md 2>/dev/null
 - User decided "use library X" → research X deeply, don't explore alternatives
 - User decided "simple UI, no animations" → don't research animation libraries
 - Marked as Claude's discretion → research options and recommend
+
+## Step 1.5: Architectural Responsibility Mapping
+
+Before diving into framework-specific research, map each capability in this phase to its standard architectural tier owner. This is a pure reasoning step — no tool calls needed.
+
+**For each capability in the phase description:**
+
+1. Identify what the capability does (e.g., "user authentication", "data visualization", "file upload")
+2. Determine which architectural tier owns the primary responsibility:
+
+| Tier | Examples |
+|------|----------|
+| **Browser / Client** | DOM manipulation, client-side routing, local storage, service workers |
+| **Frontend Server (SSR)** | Server-side rendering, hydration, middleware, auth cookies |
+| **API / Backend** | REST/GraphQL endpoints, business logic, auth, data validation |
+| **CDN / Static** | Static assets, edge caching, image optimization |
+| **Database / Storage** | Persistence, queries, migrations, caching layers |
+
+3. Record the mapping in a table:
+
+| Capability | Primary Tier | Secondary Tier | Rationale |
+|------------|-------------|----------------|-----------|
+| [capability] | [tier] | [tier or —] | [why this tier owns it] |
+
+**Output:** Include an `## Architectural Responsibility Map` section in RESEARCH.md immediately after the Summary section. This map is consumed by the planner for sanity-checking task assignments and by the plan-checker for verifying tier correctness.
+
+**Why this matters:** Multi-tier applications frequently have capabilities misassigned during planning — e.g., putting auth logic in the browser tier when it belongs in the API tier, or putting data fetching in the frontend server when the API already provides it. Mapping tier ownership before research prevents these misassignments from propagating into plans.
 
 ## Step 2: Identify Research Domains
 

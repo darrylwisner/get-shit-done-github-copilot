@@ -151,6 +151,8 @@ Research, plan, and verify a phase.
 | `--prd <file>` | Use a PRD file instead of discuss-phase for context |
 | `--reviews` | Replan with cross-AI review feedback from REVIEWS.md |
 | `--validate` | Run state validation before planning begins |
+| `--bounce` | Run external plan bounce validation after planning (uses `workflow.plan_bounce_script`) |
+| `--skip-bounce` | Skip plan bounce even if enabled in config |
 
 **Prerequisites:** `.planning/ROADMAP.md` exists
 **Produces:** `{phase}-RESEARCH.md`, `{phase}-{N}-PLAN.md`, `{phase}-VALIDATION.md`
@@ -160,6 +162,7 @@ Research, plan, and verify a phase.
 /gsd-plan-phase 3 --skip-research   # Plan without research (familiar domain)
 /gsd-plan-phase --auto              # Non-interactive planning
 /gsd-plan-phase 2 --validate        # Validate state before planning
+/gsd-plan-phase 1 --bounce          # Plan + external bounce validation
 ```
 
 ---
@@ -173,6 +176,8 @@ Execute all plans in a phase with wave-based parallelization, or run a specific 
 | `N` | **Yes** | Phase number to execute |
 | `--wave N` | No | Execute only Wave `N` in the phase |
 | `--validate` | No | Run state validation before execution begins |
+| `--cross-ai` | No | Delegate execution to an external AI CLI (uses `workflow.cross_ai_command`) |
+| `--no-cross-ai` | No | Force local execution even if cross-AI is enabled in config |
 
 **Prerequisites:** Phase has PLAN.md files
 **Produces:** per-plan `{phase}-{N}-SUMMARY.md`, git commits, and `{phase}-VERIFICATION.md` when the phase is fully complete
@@ -181,6 +186,7 @@ Execute all plans in a phase with wave-based parallelization, or run a specific 
 /gsd-execute-phase 1                # Execute phase 1
 /gsd-execute-phase 1 --wave 2       # Execute only Wave 2
 /gsd-execute-phase 1 --validate     # Validate state before execution
+/gsd-execute-phase 2 --cross-ai     # Delegate phase 2 to external AI CLI
 ```
 
 ---
@@ -781,6 +787,36 @@ Post-mortem investigation of failed or stuck GSD workflows.
 ```bash
 /gsd-forensics                              # Interactive — prompted for problem
 /gsd-forensics "Phase 3 execution stalled"  # With problem description
+```
+
+---
+
+### `/gsd-extract-learnings`
+
+Extract reusable patterns, anti-patterns, and architectural decisions from completed phase work.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `N` | **Yes** | Phase number to extract learnings from |
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Extract learnings from all completed phases |
+| `--format` | Output format: `markdown` (default), `json` |
+
+**Prerequisites:** Phase has been executed (SUMMARY.md files exist)
+**Produces:** `.planning/learnings/{phase}-LEARNINGS.md`
+
+**Extracts:**
+- Architectural decisions and their rationale
+- Patterns that worked well (reusable in future phases)
+- Anti-patterns encountered and how they were resolved
+- Technology-specific insights
+- Performance and testing observations
+
+```bash
+/gsd-extract-learnings 3                    # Extract learnings from phase 3
+/gsd-extract-learnings --all                # Extract from all completed phases
 ```
 
 ---

@@ -338,6 +338,8 @@ issue:
    - `"future enhancement"`, `"placeholder"`, `"basic version"`, `"minimal"`
    - `"will be wired later"`, `"dynamic in future"`, `"skip for now"`
    - `"not wired to"`, `"not connected to"`, `"stub"`
+   - `"too complex"`, `"too difficult"`, `"challenging"`, `"non-trivial"` (when used to justify omission)
+   - Time estimates used as scope justification: `"would take"`, `"hours"`, `"days"`, `"minutes"` (in sizing context)
 2. For each match, cross-reference with the CONTEXT.md decision it claims to implement
 3. Compare: does the task deliver what D-XX actually says, or a reduced version?
 4. If reduced: BLOCKER — the planner must either deliver fully or propose phase split
@@ -367,6 +369,54 @@ issue:
 Plans reduce {N} user decisions. Options:
 1. Revise plans to deliver decisions fully (may increase plan count)
 2. Split phase: [suggested grouping of D-XX into sub-phases]
+```
+
+## Dimension 7c: Architectural Tier Compliance
+
+**Question:** Do plan tasks assign capabilities to the correct architectural tier as defined in the Architectural Responsibility Map?
+
+**Skip if:** No RESEARCH.md exists for this phase, or RESEARCH.md has no `## Architectural Responsibility Map` section. Output: "Dimension 7c: SKIPPED (no responsibility map found)"
+
+**Process:**
+1. Read the phase's RESEARCH.md and extract the `## Architectural Responsibility Map` table
+2. For each plan task, identify which capability it implements and which tier it targets (inferred from file paths, action description, and artifacts)
+3. Cross-reference against the responsibility map — does the task place work in the tier that owns the capability?
+4. Flag any tier mismatch where a task assigns logic to a tier that doesn't own the capability
+
+**Red flags:**
+- Auth validation logic placed in browser/client tier when responsibility map assigns it to API tier
+- Data persistence logic in frontend server when it belongs in database tier
+- Business rule enforcement in CDN/static tier when it belongs in API tier
+- Server-side rendering logic assigned to API tier when frontend server owns it
+
+**Severity:** WARNING for potential tier mismatches. BLOCKER if a security-sensitive capability (auth, access control, input validation) is assigned to a less-trusted tier than the responsibility map specifies.
+
+**Example — tier mismatch:**
+```yaml
+issue:
+  dimension: architectural_tier_compliance
+  severity: blocker
+  description: "Task places auth token validation in browser tier, but Architectural Responsibility Map assigns auth to API tier"
+  plan: "01"
+  task: 2
+  capability: "Authentication token validation"
+  expected_tier: "API / Backend"
+  actual_tier: "Browser / Client"
+  fix_hint: "Move token validation to API route handler per Architectural Responsibility Map"
+```
+
+**Example — non-security mismatch (warning):**
+```yaml
+issue:
+  dimension: architectural_tier_compliance
+  severity: warning
+  description: "Task places data formatting in API tier, but Architectural Responsibility Map assigns it to Frontend Server"
+  plan: "02"
+  task: 1
+  capability: "Date/currency formatting for display"
+  expected_tier: "Frontend Server (SSR)"
+  actual_tier: "API / Backend"
+  fix_hint: "Consider moving display formatting to frontend server per Architectural Responsibility Map"
 ```
 
 ## Dimension 8: Nyquist Compliance
@@ -859,6 +909,7 @@ Plan verification complete when:
   - [ ] No tasks contradict locked decisions
   - [ ] Deferred ideas not included in plans
 - [ ] Overall status determined (passed | issues_found)
+- [ ] Architectural tier compliance checked (tasks match responsibility map tiers)
 - [ ] Cross-plan data contracts checked (no conflicting transforms on shared data)
 - [ ] CLAUDE.md compliance checked (plans respect project conventions)
 - [ ] Structured issues returned (if any found)

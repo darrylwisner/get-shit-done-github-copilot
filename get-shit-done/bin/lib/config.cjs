@@ -25,8 +25,13 @@ const VALID_CONFIG_KEYS = new Set([
   'workflow.use_worktrees',
   'workflow.code_review',
   'workflow.code_review_depth',
+  'workflow.code_review_command',
+  'workflow.plan_bounce',
+  'workflow.plan_bounce_script',
+  'workflow.plan_bounce_passes',
   'git.branching_strategy', 'git.base_branch', 'git.phase_branch_template', 'git.milestone_branch_template', 'git.quick_branch_template',
   'planning.commit_docs', 'planning.search_gitignored',
+  'workflow.cross_ai_execution', 'workflow.cross_ai_command', 'workflow.cross_ai_timeout',
   'workflow.subagent_timeout',
   'hooks.context_warnings',
   'features.thinking_partner',
@@ -37,6 +42,7 @@ const VALID_CONFIG_KEYS = new Set([
   'manager.flags.discuss', 'manager.flags.plan', 'manager.flags.execute',
   'response_language',
   'intel.enabled',
+  'claude_md_path',
 ]);
 
 /**
@@ -64,6 +70,7 @@ const CONFIG_KEY_SUGGESTIONS = {
   'hooks.research_questions': 'workflow.research_before_questions',
   'workflow.research_questions': 'workflow.research_before_questions',
   'workflow.codereview': 'workflow.code_review',
+  'workflow.review_command': 'workflow.code_review_command',
   'workflow.review': 'workflow.code_review',
   'workflow.code_review_level': 'workflow.code_review_depth',
   'workflow.review_depth': 'workflow.code_review_depth',
@@ -154,6 +161,10 @@ function buildNewProjectConfig(userChoices) {
       skip_discuss: false,
       code_review: true,
       code_review_depth: 'standard',
+      code_review_command: null,
+      plan_bounce: false,
+      plan_bounce_script: null,
+      plan_bounce_passes: 2,
     },
     hooks: {
       context_warnings: true,
@@ -161,6 +172,7 @@ function buildNewProjectConfig(userChoices) {
     project_code: null,
     phase_naming: 'sequential',
     agent_skills: {},
+    claude_md_path: './CLAUDE.md',
   };
 
   // Three-level deep merge: hardcoded <- userDefaults <- choices
