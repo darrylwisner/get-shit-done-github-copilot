@@ -86,6 +86,27 @@
   - [Worktree Toggle](#66-worktree-toggle)
   - [Project Code Prefixing](#67-project-code-prefixing)
   - [Claude Code Skills Migration](#68-claude-code-skills-migration)
+- [v1.34.0 Features](#v1340-features)
+  - [Global Learnings Store](#89-global-learnings-store)
+  - [Queryable Codebase Intelligence](#90-queryable-codebase-intelligence)
+  - [Execution Context Profiles](#91-execution-context-profiles)
+  - [Gates Taxonomy](#92-gates-taxonomy)
+  - [Code Review Pipeline](#93-code-review-pipeline)
+  - [Socratic Exploration](#94-socratic-exploration)
+  - [Safe Undo](#95-safe-undo)
+  - [Plan Import](#96-plan-import)
+  - [Rapid Codebase Scan](#97-rapid-codebase-scan)
+  - [Autonomous Audit-to-Fix](#98-autonomous-audit-to-fix)
+  - [Improved Prompt Injection Scanner](#99-improved-prompt-injection-scanner)
+  - [Stall Detection in Plan-Phase](#100-stall-detection-in-plan-phase)
+  - [Hard Stop Safety Gates in /gsd-next](#101-hard-stop-safety-gates-in-gsd-next)
+  - [Adaptive Model Preset](#102-adaptive-model-preset)
+  - [Post-Merge Hunk Verification](#103-post-merge-hunk-verification)
+- [v1.35.0 Features](#v1350-features)
+  - [New Runtime Support (Cline, CodeBuddy, Qwen Code)](#104-new-runtime-support-cline-codebuddy-qwen-code)
+  - [GSD-2 Reverse Migration](#105-gsd-2-reverse-migration)
+  - [AI Integration Phase Wizard](#106-ai-integration-phase-wizard)
+  - [AI Eval Review](#107-ai-eval-review)
 - [v1.32 Features](#v132-features)
   - [STATE.md Consistency Gates](#69-statemd-consistency-gates)
   - [Autonomous `--to N` Flag](#70-autonomous---to-n-flag)
@@ -901,7 +922,7 @@ fix(03-01): correct auth token expiry
 **Purpose:** Run GSD across multiple AI coding agent runtimes.
 
 **Requirements:**
-- REQ-RUNTIME-01: System MUST support Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Antigravity, Trae, Cline, Augment Code
+- REQ-RUNTIME-01: System MUST support Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Antigravity, Trae, Cline, Augment Code, CodeBuddy, Qwen Code
 - REQ-RUNTIME-02: Installer MUST transform content per runtime (tool names, paths, frontmatter)
 - REQ-RUNTIME-03: Installer MUST support interactive and non-interactive (`--claude --global`) modes
 - REQ-RUNTIME-04: Installer MUST support both global and local installation
@@ -910,12 +931,12 @@ fix(03-01): correct auth token expiry
 
 **Runtime Transformations:**
 
-| Aspect | Claude Code | OpenCode | Gemini | Kilo | Codex | Copilot | Antigravity | Trae | Cline | Augment |
-|--------|------------|----------|--------|-------|-------|---------|-------------|------|-------|---------|
-| Commands | Slash commands | Slash commands | Slash commands | Slash commands | Skills (TOML) | Slash commands | Skills | Skills | Rules | Skills |
-| Agent format | Claude native | `mode: subagent` | Claude native | `mode: subagent` | Skills | Tool mapping | Skills | Skills | Rules | Skills |
-| Hook events | `PostToolUse` | N/A | `AfterTool` | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
-| Config | `settings.json` | `opencode.json(c)` | `settings.json` | `kilo.json(c)` | TOML | Instructions | Config | Config | Config | Config |
+| Aspect | Claude Code | OpenCode | Gemini | Kilo | Codex | Copilot | Antigravity | Trae | Cline | Augment | CodeBuddy | Qwen Code |
+|--------|------------|----------|--------|-------|-------|---------|-------------|------|-------|---------|-----------|-----------|
+| Commands | Slash commands | Slash commands | Slash commands | Slash commands | Skills (TOML) | Slash commands | Skills | Skills | Rules | Skills | Skills | Skills |
+| Agent format | Claude native | `mode: subagent` | Claude native | `mode: subagent` | Skills | Tool mapping | Skills | Skills | Rules | Skills | Skills | Skills |
+| Hook events | `PostToolUse` | N/A | `AfterTool` | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| Config | `settings.json` | `opencode.json(c)` | `settings.json` | `kilo.json(c)` | TOML | Instructions | Config | Config | `.clinerules` | Config | Config | Config |
 
 ---
 
@@ -1894,3 +1915,357 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `hooks.community` | boolean | `false` | Enable optional community hooks for commit validation, session state, and phase boundaries |
+
+---
+
+## v1.34.0 Features
+
+  - [Global Learnings Store](#89-global-learnings-store)
+  - [Queryable Codebase Intelligence](#90-queryable-codebase-intelligence)
+  - [Execution Context Profiles](#91-execution-context-profiles)
+  - [Gates Taxonomy](#92-gates-taxonomy)
+  - [Code Review Pipeline](#93-code-review-pipeline)
+  - [Socratic Exploration](#94-socratic-exploration)
+  - [Safe Undo](#95-safe-undo)
+  - [Plan Import](#96-plan-import)
+  - [Rapid Codebase Scan](#97-rapid-codebase-scan)
+  - [Autonomous Audit-to-Fix](#98-autonomous-audit-to-fix)
+  - [Improved Prompt Injection Scanner](#99-improved-prompt-injection-scanner)
+  - [Stall Detection in Plan-Phase](#100-stall-detection-in-plan-phase)
+  - [Hard Stop Safety Gates in /gsd-next](#101-hard-stop-safety-gates-in-gsd-next)
+  - [Adaptive Model Preset](#102-adaptive-model-preset)
+  - [Post-Merge Hunk Verification](#103-post-merge-hunk-verification)
+
+---
+
+### 89. Global Learnings Store
+
+**Commands:** Auto-triggered at phase completion; consumed by planner
+**Config:** `features.global_learnings`
+
+**Purpose:** Persist cross-session, cross-project learnings in a global store so the planner agent can learn from patterns across the entire project history — not just the current session.
+
+**Requirements:**
+- REQ-LEARN-01: Learnings MUST be auto-copied from `.planning/` to the global store at phase completion
+- REQ-LEARN-02: The planner agent MUST receive relevant learnings at spawn time via injection
+- REQ-LEARN-03: Injection MUST be capped by `learnings.max_inject` to avoid context bloat
+- REQ-LEARN-04: Feature MUST be opt-in via `features.global_learnings: true`
+
+**Config:**
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `features.global_learnings` | boolean | `false` | Enable cross-project learnings pipeline |
+| `learnings.max_inject` | number | (system default) | Maximum learnings entries injected into planner |
+
+---
+
+### 90. Queryable Codebase Intelligence
+
+**Command:** `/gsd-intel [query <term>|status|diff|refresh]`
+**Config:** `intel.enabled`
+
+**Purpose:** Maintain a queryable JSON index of codebase structure, API surface, dependency graph, file roles, and architecture decisions in `.planning/intel/`. Enables targeted lookups without reading the entire codebase.
+
+**Requirements:**
+- REQ-INTEL-01: Intel files MUST be stored as JSON in `.planning/intel/`
+- REQ-INTEL-02: `query` mode MUST search across all intel files for a term and group results by file
+- REQ-INTEL-03: `status` mode MUST report freshness (FRESH/STALE, stale threshold: 24 hours)
+- REQ-INTEL-04: `diff` mode MUST compare current intel state to the last snapshot
+- REQ-INTEL-05: `refresh` mode MUST spawn the intel-updater agent to rebuild all files
+- REQ-INTEL-06: Feature MUST be opt-in via `intel.enabled: true`
+
+**Intel files produced:**
+| File | Contents |
+|------|----------|
+| `stack.json` | Technology stack and dependencies |
+| `api-map.json` | Exported functions and API surface |
+| `dependency-graph.json` | Inter-module dependency relationships |
+| `file-roles.json` | Role classification for each source file |
+| `arch-decisions.json` | Detected architecture decisions |
+
+---
+
+### 91. Execution Context Profiles
+
+**Config:** `context_profile`
+
+**Purpose:** Select a pre-configured execution context (mode, model, workflow settings) tuned for a specific type of work without manually adjusting individual settings.
+
+**Requirements:**
+- REQ-CTX-01: `dev` profile MUST optimize for iterative development (balanced model, plan_check enabled)
+- REQ-CTX-02: `research` profile MUST optimize for research-heavy work (higher model tier, research enabled)
+- REQ-CTX-03: `review` profile MUST optimize for code review work (verifier and code_review enabled)
+
+**Available profiles:** `dev`, `research`, `review`
+
+**Config:**
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `context_profile` | string | (none) | Execution context preset: `dev`, `research`, or `review` |
+
+---
+
+### 92. Gates Taxonomy
+
+**References:** `get-shit-done/references/gates.md`
+**Agents:** plan-checker, verifier
+
+**Purpose:** Define 4 canonical gate types that structure all workflow decision points, enabling plan-checker and verifier agents to apply consistent gate logic.
+
+**Gate types:**
+| Type | Description |
+|------|-------------|
+| **Confirm** | User approves before proceeding (e.g., roadmap review) |
+| **Quality** | Automated quality check must pass (e.g., plan verification loop) |
+| **Safety** | Hard stop on detected risk or policy violation |
+| **Transition** | Phase or milestone boundary acknowledgment |
+
+**Requirements:**
+- REQ-GATES-01: plan-checker MUST classify each checkpoint as one of the 4 gate types
+- REQ-GATES-02: verifier MUST apply gate logic appropriate to the gate type
+- REQ-GATES-03: Hard stop safety gates MUST never be bypassed by `--auto` flags
+
+---
+
+### 93. Code Review Pipeline
+
+**Commands:** `/gsd-code-review`, `/gsd-code-review-fix`
+
+**Purpose:** Structured review of source files changed during a phase, with a separate auto-fix pass that commits each fix atomically.
+
+**Requirements:**
+- REQ-REVIEW-01: `gsd-code-review` MUST scope files to the phase using SUMMARY.md and git diff fallback
+- REQ-REVIEW-02: Review MUST support three depth levels: `quick`, `standard`, `deep`
+- REQ-REVIEW-03: Findings MUST be severity-classified: Critical, Warning, Info
+- REQ-REVIEW-04: `gsd-code-review-fix` MUST read REVIEW.md and fix Critical + Warning findings by default
+- REQ-REVIEW-05: Each fix MUST be committed atomically with a descriptive message
+- REQ-REVIEW-06: `--auto` flag MUST enable fix + re-review iteration loop, capped at 3 iterations
+- REQ-REVIEW-07: Feature MUST be gated by `workflow.code_review` config flag
+
+**Config:**
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `workflow.code_review` | boolean | `true` | Enable code review commands |
+| `workflow.code_review_depth` | string | `standard` | Default review depth: `quick`, `standard`, or `deep` |
+
+---
+
+### 94. Socratic Exploration
+
+**Command:** `/gsd-explore [topic]`
+
+**Purpose:** Guide a developer through exploring an idea via Socratic probing questions before committing to a plan. Routes outputs to the appropriate GSD artifact: notes, todos, seeds, research questions, requirements updates, or a new phase.
+
+**Requirements:**
+- REQ-EXPLORE-01: Exploration MUST use Socratic probing — ask questions before proposing solutions
+- REQ-EXPLORE-02: Session MUST offer to route outputs to the appropriate GSD artifact
+- REQ-EXPLORE-03: An optional topic argument MUST prime the first question
+- REQ-EXPLORE-04: Exploration MUST optionally spawn a research agent for technical feasibility
+
+---
+
+### 95. Safe Undo
+
+**Command:** `/gsd-undo --last N | --phase NN | --plan NN-MM`
+
+**Purpose:** Roll back GSD phase or plan commits safely using the phase manifest and git log, with dependency checks and a hard confirmation gate before any revert is applied.
+
+**Requirements:**
+- REQ-UNDO-01: `--phase` mode MUST identify all commits for the phase via manifest and git log fallback
+- REQ-UNDO-02: `--plan` mode MUST identify all commits for a specific plan
+- REQ-UNDO-03: `--last N` mode MUST display recent GSD commits for interactive selection
+- REQ-UNDO-04: System MUST check for dependent phases/plans before reverting
+- REQ-UNDO-05: A confirmation gate MUST be shown before any git revert is executed
+
+---
+
+### 96. Plan Import
+
+**Command:** `/gsd-import --from <filepath>`
+
+**Purpose:** Ingest an external plan file into the GSD planning system with conflict detection against `PROJECT.md` decisions, converting it to a valid GSD PLAN.md and validating it through the plan-checker.
+
+**Requirements:**
+- REQ-IMPORT-01: Importer MUST detect conflicts between the external plan and existing PROJECT.md decisions
+- REQ-IMPORT-02: All detected conflicts MUST be presented to the user for resolution before writing
+- REQ-IMPORT-03: Imported plan MUST be written as a valid GSD PLAN.md format
+- REQ-IMPORT-04: Written plan MUST pass `gsd-plan-checker` validation
+
+---
+
+### 97. Rapid Codebase Scan
+
+**Command:** `/gsd-scan [--focus tech|arch|quality|concerns|tech+arch]`
+
+**Purpose:** Lightweight alternative to `/gsd-map-codebase` that spawns a single mapper agent for a specific focus area, producing targeted output in `.planning/codebase/` without the overhead of 4 parallel agents.
+
+**Requirements:**
+- REQ-SCAN-01: Scan MUST spawn exactly one mapper agent (not four parallel agents)
+- REQ-SCAN-02: Focus area MUST be one of: `tech`, `arch`, `quality`, `concerns`, `tech+arch` (default)
+- REQ-SCAN-03: Output MUST be written to `.planning/codebase/` in the same format as `/gsd-map-codebase`
+
+---
+
+### 98. Autonomous Audit-to-Fix
+
+**Command:** `/gsd-audit-fix [--source <audit>] [--severity high|medium|all] [--max N] [--dry-run]`
+
+**Purpose:** End-to-end pipeline that runs an audit, classifies findings as auto-fixable vs. manual-only, then autonomously fixes auto-fixable issues with test verification and atomic commits.
+
+**Requirements:**
+- REQ-AUDITFIX-01: Findings MUST be classified as auto-fixable or manual-only before any changes
+- REQ-AUDITFIX-02: Each fix MUST be verified with tests before committing
+- REQ-AUDITFIX-03: Each fix MUST be committed atomically
+- REQ-AUDITFIX-04: `--dry-run` MUST show classification table without applying any fixes
+- REQ-AUDITFIX-05: `--max N` MUST limit the number of fixes applied in one run (default: 5)
+
+---
+
+### 99. Improved Prompt Injection Scanner
+
+**Hook:** `gsd-prompt-guard.js`
+**Script:** `scripts/prompt-injection-scan.sh`
+
+**Purpose:** Enhanced detection of prompt injection attempts in planning artifacts, adding invisible Unicode character detection, encoding obfuscation patterns, and entropy-based analysis.
+
+**Requirements:**
+- REQ-SCAN-INJ-01: Scanner MUST detect invisible Unicode characters (zero-width spaces, soft hyphens, etc.)
+- REQ-SCAN-INJ-02: Scanner MUST detect encoding obfuscation patterns (base64-encoded instructions, homoglyphs)
+- REQ-SCAN-INJ-03: Scanner MUST apply entropy analysis to flag high-entropy strings in unexpected positions
+- REQ-SCAN-INJ-04: Scanner MUST remain advisory-only — detection is logged, not blocking
+
+---
+
+### 100. Stall Detection in Plan-Phase
+
+**Command:** `/gsd-plan-phase`
+
+**Purpose:** Detect when the planner revision loop has stalled — producing the same output across multiple iterations — and break the cycle by escalating to a different strategy or exiting with a clear diagnostic.
+
+**Requirements:**
+- REQ-STALL-01: Revision loop MUST detect identical plan output across consecutive iterations
+- REQ-STALL-02: On stall detection, system MUST escalate strategy before retrying
+- REQ-STALL-03: Maximum stall retries MUST be bounded (capped at the existing max 3 iterations)
+
+---
+
+### 101. Hard Stop Safety Gates in /gsd-next
+
+**Command:** `/gsd-next`
+
+**Purpose:** Prevent `/gsd-next` from entering runaway loops by adding hard stop safety gates and a consecutive-call guard that interrupts autonomous chaining when repeated identical steps are detected.
+
+**Requirements:**
+- REQ-NEXT-GATE-01: `/gsd-next` MUST track consecutive same-step calls
+- REQ-NEXT-GATE-02: On repeated same-step, system MUST present a hard stop gate to the user
+- REQ-NEXT-GATE-03: User MUST explicitly confirm to continue past a hard stop gate
+
+---
+
+### 102. Adaptive Model Preset
+
+**Config:** `model_profile: "adaptive"`
+
+**Purpose:** Role-based model assignment that automatically selects the appropriate model tier based on the current agent's role, rather than applying a single tier to all agents.
+
+**Requirements:**
+- REQ-ADAPTIVE-01: `adaptive` preset MUST assign model tiers based on agent role (planner → quality tier, executor → balanced tier, etc.)
+- REQ-ADAPTIVE-02: `adaptive` MUST be selectable via `/gsd-set-profile adaptive`
+
+---
+
+### 103. Post-Merge Hunk Verification
+
+**Command:** `/gsd-reapply-patches`
+
+**Purpose:** After applying local patches post-update, verify that all hunks were actually applied by comparing the expected patch content against the live filesystem. Surface any dropped or partial hunks immediately rather than silently accepting incomplete merges.
+
+**Requirements:**
+- REQ-PATCH-VERIFY-01: Reapply-patches MUST verify each hunk was applied after the merge
+- REQ-PATCH-VERIFY-02: Dropped or partial hunks MUST be reported to the user with file and line context
+- REQ-PATCH-VERIFY-03: Verification MUST run after all patches are applied, not per-patch
+
+---
+
+## v1.35.0 Features
+
+- [New Runtime Support (Cline, CodeBuddy, Qwen Code)](#104-new-runtime-support-cline-codebuddy-qwen-code)
+- [GSD-2 Reverse Migration](#105-gsd-2-reverse-migration)
+- [AI Integration Phase Wizard](#106-ai-integration-phase-wizard)
+- [AI Eval Review](#107-ai-eval-review)
+
+---
+
+### 104. New Runtime Support (Cline, CodeBuddy, Qwen Code)
+
+**Part of:** `npx get-shit-done-cc`
+
+**Purpose:** Extend GSD installation to Cline, CodeBuddy, and Qwen Code runtimes.
+
+**Requirements:**
+- REQ-CLINE-02: Cline install MUST write `.clinerules` to `~/.cline/` (global) or `./.cline/` (local). No custom slash commands — rules-based integration only. Flag: `--cline`.
+- REQ-CODEBUDDY-01: CodeBuddy install MUST deploy skills to `~/.codebuddy/skills/gsd-*/SKILL.md`. Flag: `--codebuddy`.
+- REQ-QWEN-01: Qwen Code install MUST deploy skills to `~/.qwen/skills/gsd-*/SKILL.md`, following the open standard used by Claude Code 2.1.88+. `QWEN_CONFIG_DIR` env var overrides the default path. Flag: `--qwen`.
+
+**Runtime summary:**
+
+| Runtime | Install Format | Config Path | Flag |
+|---------|---------------|-------------|------|
+| Cline | `.clinerules` | `~/.cline/` or `./.cline/` | `--cline` |
+| CodeBuddy | Skills (`SKILL.md`) | `~/.codebuddy/skills/` | `--codebuddy` |
+| Qwen Code | Skills (`SKILL.md`) | `~/.qwen/skills/` | `--qwen` |
+
+---
+
+### 105. GSD-2 Reverse Migration
+
+**Command:** `/gsd-from-gsd2 [--dry-run] [--force] [--path <dir>]`
+
+**Purpose:** Migrate a project from GSD-2 format (`.gsd/` directory with Milestone→Slice→Task hierarchy) back to the v1 `.planning/` format, restoring full compatibility with all GSD v1 commands.
+
+**Requirements:**
+- REQ-FROM-GSD2-01: Importer MUST read `.gsd/` from the specified or current directory
+- REQ-FROM-GSD2-02: Milestone→Slice hierarchy MUST be flattened to sequential phase numbers (M001/S01→phase 01, M001/S02→phase 02, M002/S01→phase 03, etc.)
+- REQ-FROM-GSD2-03: System MUST guard against overwriting an existing `.planning/` directory without `--force`
+- REQ-FROM-GSD2-04: `--dry-run` MUST preview all changes without writing any files
+- REQ-FROM-GSD2-05: Migration MUST produce `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, and sequential phase directories
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview migration output without writing files |
+| `--force` | Overwrite an existing `.planning/` directory |
+| `--path <dir>` | Specify the GSD-2 root directory |
+
+---
+
+### 106. AI Integration Phase Wizard
+
+**Command:** `/gsd-ai-integration-phase [N]`
+
+**Purpose:** Guide developers through selecting, integrating, and planning evaluation for AI/LLM capabilities in a project phase. Produces a structured `AI-SPEC.md` that feeds into planning and verification.
+
+**Requirements:**
+- REQ-AISPEC-01: Wizard MUST present an interactive decision matrix covering framework selection, model choice, and integration approach
+- REQ-AISPEC-02: System MUST surface domain-specific failure modes and eval criteria relevant to the project type
+- REQ-AISPEC-03: System MUST spawn 3 parallel specialist agents: domain-researcher, framework-selector, and eval-planner
+- REQ-AISPEC-04: Output MUST produce `{phase}-AI-SPEC.md` with framework recommendation, implementation guidance, and evaluation strategy
+
+**Produces:** `{phase}-AI-SPEC.md` in the phase directory
+
+---
+
+### 107. AI Eval Review
+
+**Command:** `/gsd-eval-review [N]`
+
+**Purpose:** Retroactively audit an executed AI phase's evaluation coverage against the `AI-SPEC.md` plan. Identifies gaps between planned and implemented evaluation before the phase is closed.
+
+**Requirements:**
+- REQ-EVALREVIEW-01: Review MUST read `AI-SPEC.md` from the specified phase
+- REQ-EVALREVIEW-02: Each eval dimension MUST be scored as COVERED, PARTIAL, or MISSING
+- REQ-EVALREVIEW-03: Output MUST include findings, gap descriptions, and remediation guidance
+- REQ-EVALREVIEW-04: `EVAL-REVIEW.md` MUST be written to the phase directory
+
+**Produces:** `{phase}-EVAL-REVIEW.md` with scored eval dimensions, gap analysis, and remediation steps

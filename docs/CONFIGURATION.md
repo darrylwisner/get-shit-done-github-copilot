@@ -20,6 +20,7 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
     "commit_docs": true,
     "search_gitignored": false
   },
+  "context_profile": null,
   "workflow": {
     "research": true,
     "plan_check": true,
@@ -34,7 +35,9 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
     "discuss_mode": "discuss",
     "skip_discuss": false,
     "text_mode": false,
-    "use_worktrees": true
+    "use_worktrees": true,
+    "code_review": true,
+    "code_review_depth": "standard"
   },
   "hooks": {
     "context_warnings": true,
@@ -73,7 +76,17 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
   "security_asvs_level": 1,
   "security_block_on": "high",
   "agent_skills": {},
-  "response_language": null
+  "response_language": null,
+  "features": {
+    "thinking_partner": false,
+    "global_learnings": false
+  },
+  "learnings": {
+    "max_inject": 10
+  },
+  "intel": {
+    "enabled": false
+  }
 }
 ```
 
@@ -88,6 +101,7 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
 | `model_profile` | enum | `quality`, `balanced`, `budget`, `inherit` | `balanced` | Model tier for each agent (see [Model Profiles](#model-profiles)) |
 | `project_code` | string | any short string | (none) | Prefix for phase directory names (e.g., `"ABC"` produces `ABC-01-setup/`). Added in v1.31 |
 | `response_language` | string | language code | (none) | Language for agent responses (e.g., `"pt"`, `"ko"`, `"ja"`). Propagates to all spawned agents for cross-phase language consistency. Added in v1.32 |
+| `context_profile` | string | `dev`, `research`, `review` | (none) | Execution context preset that applies a pre-configured bundle of mode, model, and workflow settings for the current type of work. Added in v1.34 |
 
 > **Note:** `granularity` was renamed from `depth` in v1.22.3. Existing configs are auto-migrated.
 
@@ -113,6 +127,8 @@ All workflow toggles follow the **absent = enabled** pattern. If a key is missin
 | `workflow.skip_discuss` | boolean | `false` | When `true`, `/gsd-autonomous` bypasses the discuss-phase entirely, writing minimal CONTEXT.md from the ROADMAP phase goal. Useful for projects where developer preferences are fully captured in PROJECT.md/REQUIREMENTS.md. Added in v1.28 |
 | `workflow.text_mode` | boolean | `false` | Replaces AskUserQuestion TUI menus with plain-text numbered lists. Required for Claude Code remote sessions (`/rc` mode) where TUI menus don't render. Can also be set per-session with `--text` flag on discuss-phase. Added in v1.28 |
 | `workflow.use_worktrees` | boolean | `true` | When `false`, disables git worktree isolation for parallel execution. Users who prefer sequential execution or whose environment does not support worktrees can disable this. Added in v1.31 |
+| `workflow.code_review` | boolean | `true` | Enable `/gsd-code-review` and `/gsd-code-review-fix` commands. When `false`, the commands exit with a configuration gate message. Added in v1.34 |
+| `workflow.code_review_depth` | string | `standard` | Default review depth for `/gsd-code-review`: `quick` (pattern-matching only), `standard` (per-file analysis), or `deep` (cross-file with import graphs). Can be overridden per-run with `--depth=`. Added in v1.34 |
 
 ### Recommended Presets
 
@@ -230,6 +246,7 @@ Toggle optional capabilities via the `features.*` config namespace. Feature flag
 |---------|------|---------|-------------|
 | `features.thinking_partner` | boolean | `false` | Enable thinking partner analysis at workflow decision points |
 | `features.global_learnings` | boolean | `false` | Enable cross-project learnings pipeline (auto-copy at phase completion, planner injection) |
+| `intel.enabled` | boolean | `false` | Enable queryable codebase intelligence system. When `true`, `/gsd-intel` commands build and query a JSON index in `.planning/intel/`. Added in v1.34 |
 
 ### Usage
 
@@ -343,11 +360,33 @@ Settings for the security enforcement feature (v1.31). All follow the **absent =
 
 ---
 
-## Hook Settings
+## Review Settings
+
+Configure per-CLI model selection for `/gsd-review`. When set, overrides the CLI's default model for that reviewer.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `hooks.context_warnings` | boolean | `true` | Show context window usage warnings during sessions |
+| `review.models.gemini` | string | (CLI default) | Model used when `--gemini` reviewer is invoked |
+| `review.models.claude` | string | (CLI default) | Model used when `--claude` reviewer is invoked |
+| `review.models.codex` | string | (CLI default) | Model used when `--codex` reviewer is invoked |
+| `review.models.opencode` | string | (CLI default) | Model used when `--opencode` reviewer is invoked |
+| `review.models.qwen` | string | (CLI default) | Model used when `--qwen` reviewer is invoked |
+| `review.models.cursor` | string | (CLI default) | Model used when `--cursor` reviewer is invoked |
+
+### Example
+
+```json
+{
+  "review": {
+    "models": {
+      "gemini": "gemini-2.5-pro",
+      "qwen": "qwen-max"
+    }
+  }
+}
+```
+
+Falls back to each CLI's configured default when a key is absent. Added in v1.35.0 (#1849).
 
 ---
 
