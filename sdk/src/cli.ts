@@ -15,6 +15,7 @@ import { GSD } from './index.js';
 import { CLITransport } from './cli-transport.js';
 import { WSTransport } from './ws-transport.js';
 import { InitRunner } from './init-runner.js';
+import { validateWorkstreamName } from './workstream-utils.js';
 
 // ─── Parsed CLI args ─────────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ export interface ParsedCliArgs {
   wsPort: number | undefined;
   model: string | undefined;
   maxBudget: number | undefined;
+  /** Workstream name for multi-workstream projects. Routes .planning/ to .planning/workstreams/<name>/. */
+  ws: string | undefined;
   help: boolean;
   version: boolean;
 }
@@ -43,6 +46,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
     options: {
       'project-dir': { type: 'string', default: process.cwd() },
       'ws-port': { type: 'string' },
+      ws: { type: 'string' },
       model: { type: 'string' },
       'max-budget': { type: 'string' },
       init: { type: 'string' },
@@ -69,6 +73,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
     wsPort: values['ws-port'] ? Number(values['ws-port']) : undefined,
     model: values.model as string | undefined,
     maxBudget: values['max-budget'] ? Number(values['max-budget']) : undefined,
+    ws: values.ws as string | undefined,
     help: values.help as boolean,
     version: values.version as boolean,
   };
@@ -92,6 +97,7 @@ Options:
   --init <input>        Bootstrap from a PRD before running (auto only)
                         Accepts @path/to/prd.md or "description text"
   --project-dir <dir>   Project directory (default: cwd)
+  --ws <name>           Route .planning/ to .planning/workstreams/<name>/
   --ws-port <port>      Enable WebSocket transport on <port>
   --model <model>       Override LLM model
   --max-budget <n>      Max budget per step in USD
@@ -194,6 +200,13 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     return;
   }
 
+  // Validate --ws flag if provided
+  if (args.ws !== undefined && !validateWorkstreamName(args.ws)) {
+    console.error(`Error: Invalid workstream name "${args.ws}". Use alphanumeric, hyphens, underscores, or dots only.`);
+    process.exitCode = 1;
+    return;
+  }
+
   if (args.command !== 'run' && args.command !== 'init' && args.command !== 'auto') {
     console.error('Error: Expected "gsd-sdk run <prompt>", "gsd-sdk auto", or "gsd-sdk init [input]"');
     console.error(USAGE);
@@ -226,6 +239,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       projectDir: args.projectDir,
       model: args.model,
       maxBudgetUsd: args.maxBudget,
+      workstream: args.ws,
     });
 
     // Wire CLI transport
@@ -296,6 +310,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       model: args.model,
       maxBudgetUsd: args.maxBudget,
       autoMode: true,
+      workstream: args.ws,
     });
 
     // Wire CLI transport (always active)
@@ -384,6 +399,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     projectDir: args.projectDir,
     model: args.model,
     maxBudgetUsd: args.maxBudget,
+    workstream: args.ws,
   });
 
   // Wire CLI transport (always active)

@@ -7,6 +7,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { relPlanningPath } from './workstream-utils.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -99,15 +100,25 @@ export const CONFIG_DEFAULTS: GSDConfig = {
  * Returns full defaults when file is missing or empty.
  * Throws on malformed JSON with a helpful error message.
  */
-export async function loadConfig(projectDir: string): Promise<GSDConfig> {
-  const configPath = join(projectDir, '.planning', 'config.json');
+export async function loadConfig(projectDir: string, workstream?: string): Promise<GSDConfig> {
+  const configPath = join(projectDir, relPlanningPath(workstream), 'config.json');
+  const rootConfigPath = join(projectDir, '.planning', 'config.json');
 
   let raw: string;
   try {
     raw = await readFile(configPath, 'utf-8');
   } catch {
-    // File missing — normal for new projects
-    return structuredClone(CONFIG_DEFAULTS);
+    // If workstream config missing, fall back to root config
+    if (workstream) {
+      try {
+        raw = await readFile(rootConfigPath, 'utf-8');
+      } catch {
+        return structuredClone(CONFIG_DEFAULTS);
+      }
+    } else {
+      // File missing — normal for new projects
+      return structuredClone(CONFIG_DEFAULTS);
+    }
   }
 
   const trimmed = raw.trim();

@@ -56,6 +56,9 @@ Determine which CLI to skip based on the current runtime environment:
 if [ "$ANTIGRAVITY_AGENT" = "1" ]; then
   # Antigravity is a separate client — all CLIs are external, skip none
   SELF_CLI="none"
+elif [ -n "$CURSOR_SESSION_ID" ]; then
+  # Running inside Cursor agent — skip cursor for independence
+  SELF_CLI="cursor"
 elif [ -n "$CLAUDE_CODE_ENTRYPOINT" ]; then
   # Running inside Claude Code CLI — skip claude for independence
   SELF_CLI="claude"
@@ -272,6 +275,18 @@ plans_reviewed: [{list of PLAN.md files}]
 ## OpenCode Review
 
 {opencode review content}
+
+---
+
+## Qwen Review
+
+{qwen review content}
+
+---
+
+## Cursor Review
+
+{cursor review content}
 
 ---
 

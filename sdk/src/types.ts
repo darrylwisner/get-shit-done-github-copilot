@@ -207,6 +207,8 @@ export interface GSDOptions {
   maxTurns?: number;
   /** Enable auto mode: sets auto_advance=true, skip_discuss=false in workflow config. */
   autoMode?: boolean;
+  /** Workstream name. Routes all .planning/ paths to .planning/workstreams/<name>/. */
+  workstream?: string;
 }
 
 // ─── S02: Event stream types ─────────────────────────────────────────────────

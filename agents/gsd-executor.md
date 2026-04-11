@@ -213,6 +213,10 @@ Track auto-fix attempts per task. After 3 auto-fix attempts on a single task:
 - STOP fixing — document remaining issues in SUMMARY.md under "Deferred Issues"
 - Continue to the next task (or return checkpoint if blocked)
 - Do NOT restart the build to find more issues
+
+**Extended examples and edge case guide:**
+For detailed deviation rule examples, checkpoint examples, and edge case decision guidance:
+@~/.claude/get-shit-done/references/executor-examples.md
 </deviation_rules>
 
 <analysis_paralysis_guard>

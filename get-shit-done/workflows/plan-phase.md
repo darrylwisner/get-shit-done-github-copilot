@@ -46,7 +46,7 @@ Parse JSON for: `researcher_model`, `planner_model`, `checker_model`, `research_
 
 ## 2. Parse and Normalize Arguments
 
-Extract from $ARGUMENTS: phase number (integer or decimal like `2.1`), flags (`--research`, `--skip-research`, `--gaps`, `--skip-verify`, `--skip-ui`, `--prd <filepath>`, `--reviews`, `--text`).
+Extract from $ARGUMENTS: phase number (integer or decimal like `2.1`), flags (`--research`, `--skip-research`, `--gaps`, `--skip-verify`, `--skip-ui`, `--prd <filepath>`, `--reviews`, `--text`, `--bounce`, `--skip-bounce`).
 
 Set `TEXT_MODE=true` if `--text` is present in $ARGUMENTS OR `text_mode` from init JSON is `true`. When `TEXT_MODE` is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for Claude Code remote sessions (`/rc` mode) where TUI menus don't work through the Claude App.
 
@@ -719,41 +719,70 @@ Task(
 ## 9. Handle Planner Return
 
 - **`## PLANNING COMPLETE`:** Display plan count. If `--skip-verify` or `plan_checker_enabled` is false (from init): skip to step 13. Otherwise: step 10.
-- **`## PHASE SPLIT RECOMMENDED`:** The planner determined the phase is too complex to implement all user decisions without simplifying them. Handle in step 9b.
+- **`## PHASE SPLIT RECOMMENDED`:** The planner determined the phase exceeds the context budget for full-fidelity implementation of all source items. Handle in step 9b.
+- **`## ⚠ Source Audit: Unplanned Items Found`:** The planner's multi-source coverage audit found items from REQUIREMENTS.md, RESEARCH.md, ROADMAP goal, or CONTEXT.md decisions that are not covered by any plan. Handle in step 9c.
 - **`## CHECKPOINT REACHED`:** Present to user, get response, spawn continuation (step 12)
 - **`## PLANNING INCONCLUSIVE`:** Show attempts, offer: Add context / Retry / Manual
 
 ## 9b. Handle Phase Split Recommendation
 
-When the planner returns `## PHASE SPLIT RECOMMENDED`, it means the phase has too many decisions to implement at full fidelity within the plan budget. The planner proposes groupings.
+When the planner returns `## PHASE SPLIT RECOMMENDED`, it means the phase's source items exceed the context budget for full-fidelity implementation. The planner proposes groupings.
 
 **Extract from planner return:**
 - Proposed sub-phases (e.g., "17a: processing core (D-01 to D-19)", "17b: billing + config UX (D-20 to D-27)")
-- Which D-XX decisions go in each sub-phase
-- Why the split is necessary (decision count, complexity estimate)
+- Which source items (REQ-IDs, D-XX decisions, RESEARCH items) go in each sub-phase
+- Why the split is necessary (context cost estimate, file count)
 
 **Present to user:**
 ```
-## Phase {X} is too complex for full-fidelity implementation
+## Phase {X} exceeds context budget for full-fidelity implementation
 
-The planner found {N} decisions that cannot all be implemented without
-simplifying some. Instead of reducing your decisions, we recommend splitting:
+The planner found {N} source items that exceed the context budget when
+planned at full fidelity. Instead of reducing scope, we recommend splitting:
 
 **Option 1: Split into sub-phases**
-- Phase {X}a: {name} — {D-XX to D-YY} ({N} decisions)
-- Phase {X}b: {name} — {D-XX to D-YY} ({M} decisions)
+- Phase {X}a: {name} — {items} ({N} source items, ~{P}% context)
+- Phase {X}b: {name} — {items} ({M} source items, ~{Q}% context)
 
-**Option 2: Proceed anyway** (planner will attempt all, quality may degrade)
+**Option 2: Proceed anyway** (planner will attempt all, quality may degrade past 50% context)
 
-**Option 3: Prioritize** — you choose which decisions to implement now,
+**Option 3: Prioritize** — you choose which items to implement now,
 rest become a follow-up phase
 ```
 
 Use AskUserQuestion with these 3 options.
 
 **If "Split":** Use `/gsd-insert-phase` to create the sub-phases, then replan each.
-**If "Proceed":** Return to planner with instruction to attempt all decisions at full fidelity, accepting more plans/tasks.
-**If "Prioritize":** Use AskUserQuestion (multiSelect) to let user pick which D-XX are "now" vs "later". Create CONTEXT.md for each sub-phase with the selected decisions.
+**If "Proceed":** Return to planner with instruction to attempt all items at full fidelity, accepting more plans/tasks.
+**If "Prioritize":** Use AskUserQuestion (multiSelect) to let user pick which items are "now" vs "later". Create CONTEXT.md for each sub-phase with the selected items.
+
+## 9c. Handle Source Audit Gaps
+
+When the planner returns `## ⚠ Source Audit: Unplanned Items Found`, it means items from REQUIREMENTS.md, RESEARCH.md, ROADMAP goal, or CONTEXT.md decisions have no corresponding plan.
+
+**Extract from planner return:**
+- Each unplanned item with its source artifact and section
+- The planner's suggested options (A: add plan, B: split phase, C: defer with confirmation)
+
+**Present each gap to user.** For each unplanned item:
+
+```
+## ⚠ Unplanned: {item description}
+
+Source: {RESEARCH.md / REQUIREMENTS.md / ROADMAP goal / CONTEXT.md}
+Details: {why the planner flagged this}
+
+Options:
+1. Add a plan to cover this item (recommended)
+2. Split phase — move to a sub-phase with related items
+3. Defer — add to backlog (developer confirms this is intentional)
+```
+
+Use AskUserQuestion for each gap (or batch if multiple gaps).
+
+**If "Add plan":** Return to planner (step 8) with instruction to add plans covering the missing items, preserving existing plans.
+**If "Split":** Use `/gsd-insert-phase` for overflow items, then replan.
+**If "Defer":** Record in CONTEXT.md `## Deferred Ideas` with developer's confirmation. Proceed to step 10.
 
 ## 10. Spawn gsd-plan-checker Agent
 
@@ -900,6 +929,77 @@ After planner returns -> spawn checker again (step 10), increment iteration_coun
 Display: `Max iterations reached. {N} issues remain:` + issue list
 
 Offer: 1) Force proceed, 2) Provide guidance and retry, 3) Abandon
+
+## 12.5. Plan Bounce (Optional External Refinement)
+
+**Skip if:** `--skip-bounce` flag, `--gaps` flag, or bounce is not activated.
+
+**Activation:** Bounce runs when `--bounce` flag is present OR `workflow.plan_bounce` config is `true`. The `--skip-bounce` flag always wins (disables bounce even if config enables it). The `--gaps` flag also disables bounce (gap-closure mode should not modify plans externally).
+
+**Prerequisites:** `workflow.plan_bounce_script` must be set to a valid script path. If bounce is activated but no script is configured, display warning and skip:
+```
+⚠ Plan bounce activated but no script configured.
+Set workflow.plan_bounce_script to the path of your refinement script.
+Skipping bounce step.
+```
+
+**Read pass count:**
+```bash
+BOUNCE_PASSES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.plan_bounce_passes --default 2)
+BOUNCE_SCRIPT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.plan_bounce_script)
+```
+
+Display banner:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► BOUNCING PLANS (External Refinement)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Script: ${BOUNCE_SCRIPT}
+Max passes: ${BOUNCE_PASSES}
+```
+
+**For each PLAN.md file in the phase directory:**
+
+1. **Backup:** Copy `*-PLAN.md` to `*-PLAN.pre-bounce.md`
+```bash
+cp "${PLAN_FILE}" "${PLAN_FILE%.md}.pre-bounce.md"
+```
+
+2. **Invoke bounce script:**
+```bash
+"${BOUNCE_SCRIPT}" "${PLAN_FILE}" "${BOUNCE_PASSES}"
+```
+
+3. **Validate bounced plan — YAML frontmatter integrity:**
+After the script returns, check that the bounced file still has valid YAML frontmatter (opening and closing `---` delimiters with parseable content between them). If the bounced plan breaks YAML frontmatter validation, restore the original from the pre-bounce.md backup and continue to the next plan:
+```
+⚠ Bounced plan ${PLAN_FILE} has broken YAML frontmatter — restoring original from pre-bounce backup.
+```
+
+4. **Handle script failure:** If the bounce script exits non-zero, restore the original plan from the pre-bounce.md backup and continue to the next plan:
+```
+⚠ Bounce script failed for ${PLAN_FILE} (exit code ${EXIT_CODE}) — restoring original from pre-bounce backup.
+```
+
+**After all plans are bounced:**
+
+5. **Re-run plan checker on bounced plans:** Spawn gsd-plan-checker (same as step 10) on all modified plans. If a bounced plan fails the checker, restore original from its pre-bounce.md backup:
+```
+⚠ Bounced plan ${PLAN_FILE} failed checker validation — restoring original from pre-bounce backup.
+```
+
+6. **Commit surviving bounced plans:** If at least one plan survived both the frontmatter validation and the checker re-run, commit the changes:
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "refactor(${padded_phase}): bounce plans through external refinement" --files "${PHASE_DIR}/*-PLAN.md"
+```
+
+Display summary:
+```
+Plan bounce complete: {survived}/{total} plans refined
+```
+
+**Clean up:** Remove all `*-PLAN.pre-bounce.md` backup files after the bounce step completes (whether plans survived or were restored).
 
 ## 13. Requirements Coverage Gate
 
