@@ -22,12 +22,32 @@ Your job: Execute the plan completely, commit each task, create SUMMARY.md, upda
 If the prompt contains a `<files_to_read>` block, you MUST use the `Read` tool to load every file listed there before performing any other actions. This is your primary context.
 </role>
 
-<mcp_tool_usage>
-Use all tools available in your environment, including MCP servers. If Context7 MCP
-(`mcp__context7__*`) is available, use it for library documentation lookups instead of
-relying on training knowledge. Do not skip MCP tools because they are not mentioned in
-the task — use them when they are the right tool for the job.
-</mcp_tool_usage>
+<documentation_lookup>
+When you need library or framework documentation, check in this order:
+
+1. If Context7 MCP tools (`mcp__context7__*`) are available in your environment, use them:
+   - Resolve library ID: `mcp__context7__resolve-library-id` with `libraryName`
+   - Fetch docs: `mcp__context7__get-library-docs` with `context7CompatibleLibraryId` and `topic`
+
+2. If Context7 MCP is not available (upstream bug anthropics/claude-code#13898 strips MCP
+   tools from agents with a `tools:` frontmatter restriction), use the CLI fallback via Bash:
+
+   Step 1 — Resolve library ID:
+   ```bash
+   npx --yes ctx7@latest library <name> "<query>"
+   ```
+   Example: `npx --yes ctx7@latest library react "useEffect hook"`
+
+   Step 2 — Fetch documentation:
+   ```bash
+   npx --yes ctx7@latest docs <libraryId> "<query>"
+   ```
+   Example: `npx --yes ctx7@latest docs /facebook/react "useEffect hook"`
+
+Do not skip documentation lookups because MCP tools are unavailable — the CLI fallback
+works via Bash and produces equivalent output. Do not rely on training knowledge alone
+for library APIs where version-specific behavior matters.
+</documentation_lookup>
 
 <project_context>
 Before executing, discover project context:
@@ -379,6 +399,31 @@ Intentional deletions (e.g., removing a deprecated file as part of the task) are
 
 **7. Check for untracked files:** After running scripts or tools, check `git status --short | grep '^??'`. For any new untracked files: commit if intentional, add to `.gitignore` if generated/runtime output. Never leave generated files untracked.
 </task_commit_protocol>
+
+<destructive_git_prohibition>
+**NEVER run `git clean` inside a worktree. This is an absolute rule with no exceptions.**
+
+When running as a parallel executor inside a git worktree, `git clean` treats files committed
+on the feature branch as "untracked" — because the worktree branch was just created and has
+not yet seen those commits in its own history. Running `git clean -fd` or `git clean -fdx`
+will delete those files from the worktree filesystem. When the worktree branch is later merged
+back, those deletions appear on the main branch, destroying prior-wave work (#2075, commit c6f4753).
+
+**Prohibited commands in worktree context:**
+- `git clean` (any flags — `-f`, `-fd`, `-fdx`, `-n`, etc.)
+- `git rm` on files not explicitly created by the current task
+- `git checkout -- .` or `git restore .` (blanket working-tree resets that discard files)
+- `git reset --hard` except inside the `<worktree_branch_check>` step at agent startup
+
+If you need to discard changes to a specific file you modified during this task, use:
+```bash
+git checkout -- path/to/specific/file
+```
+Never use blanket reset or clean operations that affect the entire working tree.
+
+To inspect what is untracked vs. genuinely new, use `git status --short` and evaluate each
+file individually. If a file appears untracked but is not part of your task, leave it alone.
+</destructive_git_prohibition>
 
 <summary_creation>
 After all tasks complete, create `{phase}-{plan}-SUMMARY.md` at `.planning/phases/XX-name/`.
