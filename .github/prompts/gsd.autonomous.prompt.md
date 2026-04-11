@@ -6,7 +6,8 @@ tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Task"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Task","Agent"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 
