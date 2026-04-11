@@ -25,6 +25,7 @@ import {
   DEFAULT_TRUNCATION_OPTIONS,
   type TruncationOptions,
 } from './context-truncation.js';
+import { relPlanningPath } from './workstream-utils.js';
 
 // ─── File manifest per phase ─────────────────────────────────────────────────
 
@@ -77,8 +78,8 @@ export class ContextEngine {
   private readonly logger?: GSDLogger;
   private readonly truncation: TruncationOptions;
 
-  constructor(projectDir: string, logger?: GSDLogger, truncation?: Partial<TruncationOptions>) {
-    this.planningDir = join(projectDir, '.planning');
+  constructor(projectDir: string, logger?: GSDLogger, truncation?: Partial<TruncationOptions>, workstream?: string) {
+    this.planningDir = join(projectDir, relPlanningPath(workstream));
     this.logger = logger;
     this.truncation = { ...DEFAULT_TRUNCATION_OPTIONS, ...truncation };
   }

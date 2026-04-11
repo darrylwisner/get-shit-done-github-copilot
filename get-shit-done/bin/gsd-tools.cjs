@@ -470,6 +470,9 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
       } else if (subcommand === 'sync') {
         const { verify } = parseNamedArgs(args, [], ['verify']);
         state.cmdStateSync(cwd, { verify }, raw);
+      } else if (subcommand === 'prune') {
+        const { 'keep-recent': keepRecent, 'dry-run': dryRun } = parseNamedArgs(args, ['keep-recent'], ['dry-run']);
+        state.cmdStatePrune(cwd, { keepRecent: keepRecent || '3', dryRun: !!dryRun }, raw);
       } else {
         state.cmdStateLoad(cwd, raw);
       }
@@ -638,6 +641,11 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
       break;
     }
 
+    case 'skill-manifest': {
+      init.cmdSkillManifest(cwd, args, raw);
+      break;
+    }
+
     case 'history-digest': {
       commands.cmdHistoryDigest(cwd, raw);
       break;
@@ -799,13 +807,13 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
       const workflow = args[1];
       switch (workflow) {
         case 'execute-phase': {
-          const { validate: epValidate } = parseNamedArgs(args, [], ['validate']);
-          init.cmdInitExecutePhase(cwd, args[2], raw, { validate: epValidate });
+          const { validate: epValidate, tdd: epTdd } = parseNamedArgs(args, [], ['validate', 'tdd']);
+          init.cmdInitExecutePhase(cwd, args[2], raw, { validate: epValidate, tdd: epTdd });
           break;
         }
         case 'plan-phase': {
-          const { validate: ppValidate } = parseNamedArgs(args, [], ['validate']);
-          init.cmdInitPlanPhase(cwd, args[2], raw, { validate: ppValidate });
+          const { validate: ppValidate, tdd: ppTdd } = parseNamedArgs(args, [], ['validate', 'tdd']);
+          init.cmdInitPlanPhase(cwd, args[2], raw, { validate: ppValidate, tdd: ppTdd });
           break;
         }
         case 'new-project':
