@@ -892,6 +892,95 @@ describe('phase add with project_code', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// phase add-batch command (#2165)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('phase add-batch command (#2165)', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      [
+        '# Roadmap v1.0',
+        '',
+        '### Phase 1: Foundation',
+        '**Goal:** Setup',
+        '',
+        '---',
+        '',
+      ].join('\n')
+    );
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('adds multiple phases with sequential numbers in a single call', () => {
+    // Use array form to avoid shell quoting issues with JSON args
+    const result = runGsdTools(['phase', 'add-batch', '--descriptions', '["Alpha","Beta","Gamma"]'], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.count, 3, 'should report 3 phases added');
+    assert.strictEqual(output.phases[0].phase_number, 2);
+    assert.strictEqual(output.phases[1].phase_number, 3);
+    assert.strictEqual(output.phases[2].phase_number, 4);
+
+    assert.ok(fs.existsSync(path.join(tmpDir, '.planning', 'phases', '02-alpha')), '02-alpha dir must exist');
+    assert.ok(fs.existsSync(path.join(tmpDir, '.planning', 'phases', '03-beta')), '03-beta dir must exist');
+    assert.ok(fs.existsSync(path.join(tmpDir, '.planning', 'phases', '04-gamma')), '04-gamma dir must exist');
+
+    const roadmap = fs.readFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+    assert.ok(roadmap.includes('### Phase 2: Alpha'), 'roadmap should include Phase 2');
+    assert.ok(roadmap.includes('### Phase 3: Beta'), 'roadmap should include Phase 3');
+    assert.ok(roadmap.includes('### Phase 4: Gamma'), 'roadmap should include Phase 4');
+  });
+
+  test('no duplicate phase numbers when multiple add-batch calls are made sequentially', () => {
+    // Regression for #2165: parallel `phase add` invocations produced duplicates
+    // because each read disk state before any write landed. add-batch serializes
+    // the entire batch under a single lock so the next call sees the updated state.
+    const r1 = runGsdTools(['phase', 'add-batch', '--descriptions', '["Wave-One-A","Wave-One-B"]'], tmpDir);
+    assert.ok(r1.success, `First batch failed: ${r1.error}`);
+
+    const r2 = runGsdTools(['phase', 'add-batch', '--descriptions', '["Wave-Two-A","Wave-Two-B"]'], tmpDir);
+    assert.ok(r2.success, `Second batch failed: ${r2.error}`);
+
+    const out1 = JSON.parse(r1.output);
+    const out2 = JSON.parse(r2.output);
+    const allNums = [...out1.phases, ...out2.phases].map(p => p.phase_number);
+    const unique = new Set(allNums);
+    assert.strictEqual(unique.size, allNums.length, `Duplicate phase numbers detected: ${allNums}`);
+
+    // Directories must all exist and be unique
+    const dirs = fs.readdirSync(path.join(tmpDir, '.planning', 'phases'));
+    assert.strictEqual(dirs.length, 4, `Expected 4 phase dirs, got: ${dirs}`);
+  });
+
+  test('each phase directory contains a .gitkeep file', () => {
+    const result = runGsdTools(['phase', 'add-batch', '--descriptions', '["Setup","Build"]'], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'phases', '02-setup', '.gitkeep')),
+      '.gitkeep must exist in 02-setup'
+    );
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'phases', '03-build', '.gitkeep')),
+      '.gitkeep must exist in 03-build'
+    );
+  });
+
+  test('returns error for empty descriptions array', () => {
+    const result = runGsdTools(['phase', 'add-batch', '--descriptions', '[]'], tmpDir);
+    assert.ok(!result.success, 'should fail on empty array');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // phase insert command
 // ─────────────────────────────────────────────────────────────────────────────
 

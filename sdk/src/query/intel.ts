@@ -1,0 +1,311 @@
+/**
+ * Intel query handlers — .planning/intel/ file management.
+ *
+ * Ported from get-shit-done/bin/lib/intel.cjs.
+ * Provides intel status, diff, snapshot, validate, query, extract-exports,
+ * and patch-meta operations for the project intelligence system.
+ *
+ * @example
+ * ```typescript
+ * import { intelStatus, intelQuery } from './intel.js';
+ *
+ * await intelStatus([], '/project');
+ * // { data: { files: { ... }, overall_stale: false } }
+ *
+ * await intelQuery(['AuthService'], '/project');
+ * // { data: { matches: [...], term: 'AuthService', total: 3 } }
+ * ```
+ */
+
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+
+import { planningPaths } from './helpers.js';
+import type { QueryHandler } from './utils.js';
+
+// ─── Constants ───────────────────────────────────────────────────────────
+
+const INTEL_FILES: Record<string, string> = {
+  files: 'files.json',
+  apis: 'apis.json',
+  deps: 'deps.json',
+  arch: 'arch.md',
+  stack: 'stack.json',
+};
+
+const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// ─── Internal helpers ────────────────────────────────────────────────────
+
+function intelDir(projectDir: string): string {
+  return join(projectDir, '.planning', 'intel');
+}
+
+function isIntelEnabled(projectDir: string): boolean {
+  try {
+    const cfg = JSON.parse(readFileSync(planningPaths(projectDir).config, 'utf-8'));
+    return cfg?.intel?.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+function intelFilePath(projectDir: string, filename: string): string {
+  return join(intelDir(projectDir), filename);
+}
+
+function safeReadJson(filePath: string): unknown {
+  try {
+    if (!existsSync(filePath)) return null;
+    return JSON.parse(readFileSync(filePath, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function hashFile(filePath: string): string | null {
+  try {
+    if (!existsSync(filePath)) return null;
+    const content = readFileSync(filePath);
+    return createHash('sha256').update(content).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+function searchJsonEntries(data: unknown, term: string): unknown[] {
+  const lowerTerm = term.toLowerCase();
+  const results: unknown[] = [];
+  if (!data || typeof data !== 'object') return results;
+
+  function matchesInValue(value: unknown): boolean {
+    if (typeof value === 'string') return value.toLowerCase().includes(lowerTerm);
+    if (Array.isArray(value)) return value.some(v => matchesInValue(v));
+    if (value && typeof value === 'object') return Object.values(value as object).some(v => matchesInValue(v));
+    return false;
+  }
+
+  if (Array.isArray(data)) {
+    for (const entry of data) {
+      if (matchesInValue(entry)) results.push(entry);
+    }
+  } else {
+    for (const [, value] of Object.entries(data as object)) {
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (matchesInValue(entry)) results.push(entry);
+        }
+      }
+    }
+  }
+  return results;
+}
+
+function searchArchMd(filePath: string, term: string): string[] {
+  if (!existsSync(filePath)) return [];
+  const lowerTerm = term.toLowerCase();
+  const content = readFileSync(filePath, 'utf-8');
+  return content.split('\n').filter(line => line.toLowerCase().includes(lowerTerm));
+}
+
+// ─── Handlers ────────────────────────────────────────────────────────────
+
+export const intelStatus: QueryHandler = async (_args, projectDir) => {
+  if (!isIntelEnabled(projectDir)) {
+    return { data: { disabled: true, message: 'Intel system disabled. Set intel.enabled=true in config.json to activate.' } };
+  }
+  const now = Date.now();
+  const files: Record<string, unknown> = {};
+  let overallStale = false;
+
+  for (const [, filename] of Object.entries(INTEL_FILES)) {
+    const filePath = intelFilePath(projectDir, filename);
+    if (!existsSync(filePath)) {
+      files[filename] = { exists: false, updated_at: null, stale: true };
+      overallStale = true;
+      continue;
+    }
+    let updatedAt: string | null = null;
+    if (filename.endsWith('.md')) {
+      try { updatedAt = statSync(filePath).mtime.toISOString(); } catch { /* skip */ }
+    } else {
+      const data = safeReadJson(filePath) as Record<string, unknown> | null;
+      if (data?._meta) {
+        updatedAt = (data._meta as Record<string, unknown>).updated_at as string | null;
+      }
+    }
+    const stale = !updatedAt || (now - new Date(updatedAt).getTime()) > STALE_MS;
+    if (stale) overallStale = true;
+    files[filename] = { exists: true, updated_at: updatedAt, stale };
+  }
+  return { data: { files, overall_stale: overallStale } };
+};
+
+export const intelDiff: QueryHandler = async (_args, projectDir) => {
+  if (!isIntelEnabled(projectDir)) {
+    return { data: { disabled: true, message: 'Intel system disabled.' } };
+  }
+  const snapshotPath = intelFilePath(projectDir, '.last-refresh.json');
+  const snapshot = safeReadJson(snapshotPath) as Record<string, unknown> | null;
+  if (!snapshot) return { data: { no_baseline: true } };
+
+  const prevHashes = (snapshot.hashes as Record<string, string>) || {};
+  const changed: string[] = [];
+  const added: string[] = [];
+  const removed: string[] = [];
+
+  for (const [, filename] of Object.entries(INTEL_FILES)) {
+    const filePath = intelFilePath(projectDir, filename);
+    const currentHash = hashFile(filePath);
+    if (currentHash && !prevHashes[filename]) added.push(filename);
+    else if (currentHash && prevHashes[filename] && currentHash !== prevHashes[filename]) changed.push(filename);
+    else if (!currentHash && prevHashes[filename]) removed.push(filename);
+  }
+  return { data: { changed, added, removed } };
+};
+
+export const intelSnapshot: QueryHandler = async (_args, projectDir) => {
+  if (!isIntelEnabled(projectDir)) {
+    return { data: { disabled: true, message: 'Intel system disabled.' } };
+  }
+  const dir = intelDir(projectDir);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+  const hashes: Record<string, string> = {};
+  let fileCount = 0;
+  for (const [, filename] of Object.entries(INTEL_FILES)) {
+    const filePath = join(dir, filename);
+    const hash = hashFile(filePath);
+    if (hash) { hashes[filename] = hash; fileCount++; }
+  }
+
+  const timestamp = new Date().toISOString();
+  writeFileSync(join(dir, '.last-refresh.json'), JSON.stringify({ hashes, timestamp, version: 1 }, null, 2), 'utf-8');
+  return { data: { saved: true, timestamp, files: fileCount } };
+};
+
+export const intelValidate: QueryHandler = async (_args, projectDir) => {
+  if (!isIntelEnabled(projectDir)) {
+    return { data: { disabled: true, message: 'Intel system disabled.' } };
+  }
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  for (const [, filename] of Object.entries(INTEL_FILES)) {
+    const filePath = intelFilePath(projectDir, filename);
+    if (!existsSync(filePath)) {
+      errors.push(`Missing intel file: ${filename}`);
+      continue;
+    }
+    if (!filename.endsWith('.md')) {
+      const data = safeReadJson(filePath) as Record<string, unknown> | null;
+      if (!data) { errors.push(`Invalid JSON in: ${filename}`); continue; }
+      const meta = data._meta as Record<string, unknown> | undefined;
+      if (!meta?.updated_at) warnings.push(`${filename}: missing _meta.updated_at`);
+      else {
+        const age = Date.now() - new Date(meta.updated_at as string).getTime();
+        if (age > STALE_MS) warnings.push(`${filename}: stale (${Math.round(age / 3600000)}h old)`);
+      }
+    }
+  }
+  return { data: { valid: errors.length === 0, errors, warnings } };
+};
+
+export const intelQuery: QueryHandler = async (args, projectDir) => {
+  const term = args[0] || '';
+  if (!isIntelEnabled(projectDir)) {
+    return { data: { disabled: true, message: 'Intel system disabled.' } };
+  }
+  const matches: unknown[] = [];
+  let total = 0;
+
+  for (const [, filename] of Object.entries(INTEL_FILES)) {
+    if (filename.endsWith('.md')) {
+      const filePath = intelFilePath(projectDir, filename);
+      const archMatches = searchArchMd(filePath, term);
+      if (archMatches.length > 0) { matches.push({ source: filename, entries: archMatches }); total += archMatches.length; }
+    } else {
+      const filePath = intelFilePath(projectDir, filename);
+      const data = safeReadJson(filePath);
+      if (!data) continue;
+      const found = searchJsonEntries(data, term);
+      if (found.length > 0) { matches.push({ source: filename, entries: found }); total += found.length; }
+    }
+  }
+  return { data: { matches, term, total } };
+};
+
+export const intelExtractExports: QueryHandler = async (args, projectDir) => {
+  const filePath = args[0] ? resolve(projectDir, args[0]) : '';
+  if (!filePath || !existsSync(filePath)) {
+    return { data: { file: filePath, exports: [], method: 'none' } };
+  }
+
+  const content = readFileSync(filePath, 'utf-8');
+  const exports: string[] = [];
+  let method = 'none';
+
+  const allMatches = [...content.matchAll(/module\.exports\s*=\s*\{/g)];
+  if (allMatches.length > 0) {
+    const lastMatch = allMatches[allMatches.length - 1];
+    const startIdx = lastMatch.index! + lastMatch[0].length;
+    let depth = 1; let endIdx = startIdx;
+    while (endIdx < content.length && depth > 0) {
+      if (content[endIdx] === '{') depth++;
+      else if (content[endIdx] === '}') depth--;
+      if (depth > 0) endIdx++;
+    }
+    const block = content.substring(startIdx, endIdx);
+    method = 'module.exports';
+    for (const line of block.split('\n')) {
+      const t = line.trim();
+      if (!t || t.startsWith('//') || t.startsWith('*')) continue;
+      const k = t.match(/^(\w+)\s*[,}:]/) || t.match(/^(\w+)$/);
+      if (k) exports.push(k[1]);
+    }
+  }
+  for (const m of content.matchAll(/^exports\.(\w+)\s*=/gm)) {
+    if (!exports.includes(m[1])) { exports.push(m[1]); if (method === 'none') method = 'exports.X'; }
+  }
+  const esmExports: string[] = [];
+  for (const m of content.matchAll(/^export\s+(?:default\s+)?(?:async\s+)?(?:function|class)\s+(\w+)/gm)) {
+    if (!esmExports.includes(m[1])) esmExports.push(m[1]);
+  }
+  for (const m of content.matchAll(/^export\s+(?:const|let|var)\s+(\w+)\s*=/gm)) {
+    if (!esmExports.includes(m[1])) esmExports.push(m[1]);
+  }
+  for (const m of content.matchAll(/^export\s*\{([^}]+)\}/gm)) {
+    for (const item of m[1].split(',')) {
+      const name = item.trim().split(/\s+as\s+/)[0].trim();
+      if (name && !esmExports.includes(name)) esmExports.push(name);
+    }
+  }
+  for (const e of esmExports) {
+    if (!exports.includes(e)) exports.push(e);
+  }
+  if (esmExports.length > 0 && exports.length > esmExports.length) method = 'mixed';
+  else if (esmExports.length > 0 && method === 'none') method = 'esm';
+
+  return { data: { file: args[0], exports, method } };
+};
+
+export const intelPatchMeta: QueryHandler = async (args, projectDir) => {
+  const filePath = args[0] ? resolve(projectDir, args[0]) : '';
+  if (!filePath || !existsSync(filePath)) {
+    return { data: { patched: false, error: `File not found: ${filePath}` } };
+  }
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    if (!data._meta) data._meta = {};
+    const meta = data._meta as Record<string, unknown>;
+    const timestamp = new Date().toISOString();
+    meta.updated_at = timestamp;
+    meta.version = ((meta.version as number) || 0) + 1;
+    writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+    return { data: { patched: true, file: args[0], timestamp } };
+  } catch (err) {
+    return { data: { patched: false, error: String(err) } };
+  }
+};
