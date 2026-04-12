@@ -100,8 +100,10 @@ describe('parseCliArgs', () => {
     expect(result.maxBudget).toBe(15);
   });
 
-  it('throws on unknown options (strict mode)', () => {
-    expect(() => parseCliArgs(['--unknown-flag'])).toThrow();
+  it('ignores unknown options (non-strict for --pick support)', () => {
+    // strict: false allows --pick and other query-specific flags
+    const result = parseCliArgs(['--unknown-flag']);
+    expect(result.command).toBeUndefined();
   });
 
   // ─── Init command parsing ──────────────────────────────────────────────
