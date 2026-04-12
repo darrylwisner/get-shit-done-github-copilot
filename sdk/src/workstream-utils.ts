@@ -5,7 +5,7 @@
  * .planning/workstreams/<name>/ instead.
  */
 
-import { join } from 'node:path';
+import { posix } from 'node:path';
 
 /**
  * Validate a workstream name.
@@ -28,5 +28,6 @@ export function validateWorkstreamName(name: string): boolean {
  */
 export function relPlanningPath(workstream?: string): string {
   if (!workstream) return '.planning';
-  return join('.planning', 'workstreams', workstream);
+  // Use POSIX segments so the same logical path string is used on all platforms (Windows included).
+  return posix.join('.planning', 'workstreams', workstream);
 }

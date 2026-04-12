@@ -146,6 +146,15 @@ Parse JSON for: `planner_model`, `executor_model`, `checker_model`, `verifier_mo
 USE_WORKTREES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.use_worktrees 2>/dev/null || echo "true")
 ```
 
+If the project uses git submodules, worktree isolation is skipped:
+
+```bash
+if [ -f .gitmodules ]; then
+  echo "[worktree] Submodule project detected (.gitmodules exists) — falling back to sequential execution"
+  USE_WORKTREES=false
+fi
+```
+
 **If `roadmap_exists` is false:** Error — Quick mode requires an active project with ROADMAP.md. Run `/gsd-new-project` first.
 
 Quick tasks can run mid-phase - validation only checks ROADMAP.md exists, not phase status.
@@ -613,8 +622,8 @@ After executor returns:
        # Backup STATE.md and ROADMAP.md before merge (main always wins)
        STATE_BACKUP=$(mktemp)
        ROADMAP_BACKUP=$(mktemp)
-       git show HEAD:.planning/STATE.md > "$STATE_BACKUP" 2>/dev/null || true
-       git show HEAD:.planning/ROADMAP.md > "$ROADMAP_BACKUP" 2>/dev/null || true
+       [ -f .planning/STATE.md ] && cp .planning/STATE.md "$STATE_BACKUP" || true
+       [ -f .planning/ROADMAP.md ] && cp .planning/ROADMAP.md "$ROADMAP_BACKUP" || true
 
        # Snapshot files on main to detect resurrections
        PRE_MERGE_FILES=$(git ls-files .planning/)
