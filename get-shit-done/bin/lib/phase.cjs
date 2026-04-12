@@ -408,6 +408,76 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
   output(result, raw, result.padded);
 }
 
+function cmdPhaseAddBatch(cwd, descriptions, raw) {
+  if (!Array.isArray(descriptions) || descriptions.length === 0) {
+    error('descriptions array required for phase add-batch');
+  }
+  const config = loadConfig(cwd);
+  const roadmapPath = path.join(planningDir(cwd), 'ROADMAP.md');
+  if (!fs.existsSync(roadmapPath)) { error('ROADMAP.md not found'); }
+  const projectCode = config.project_code || '';
+  const prefix = projectCode ? `${projectCode}-` : '';
+
+  const results = withPlanningLock(cwd, () => {
+    let rawContent = fs.readFileSync(roadmapPath, 'utf-8');
+    const content = extractCurrentMilestone(rawContent, cwd);
+    let maxPhase = 0;
+    if (config.phase_naming !== 'custom') {
+      const phasePattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
+      let m;
+      while ((m = phasePattern.exec(content)) !== null) {
+        const num = parseInt(m[1], 10);
+        if (num >= 999) continue;
+        if (num > maxPhase) maxPhase = num;
+      }
+      const phasesOnDisk = path.join(planningDir(cwd), 'phases');
+      if (fs.existsSync(phasesOnDisk)) {
+        const dirNumPattern = /^(?:[A-Z][A-Z0-9]*-)?(\d+)-/;
+        for (const entry of fs.readdirSync(phasesOnDisk)) {
+          const match = entry.match(dirNumPattern);
+          if (!match) continue;
+          const num = parseInt(match[1], 10);
+          if (num >= 999) continue;
+          if (num > maxPhase) maxPhase = num;
+        }
+      }
+    }
+    const added = [];
+    for (const description of descriptions) {
+      const slug = generateSlugInternal(description);
+      let newPhaseId, dirName;
+      if (config.phase_naming === 'custom') {
+        newPhaseId = slug.toUpperCase().replace(/-/g, '-');
+        dirName = `${prefix}${newPhaseId}-${slug}`;
+      } else {
+        maxPhase += 1;
+        newPhaseId = maxPhase;
+        dirName = `${prefix}${String(newPhaseId).padStart(2, '0')}-${slug}`;
+      }
+      const dirPath = path.join(planningDir(cwd), 'phases', dirName);
+      fs.mkdirSync(dirPath, { recursive: true });
+      fs.writeFileSync(path.join(dirPath, '.gitkeep'), '');
+      const dependsOn = config.phase_naming === 'custom' ? '' : `\n**Depends on:** Phase ${typeof newPhaseId === 'number' ? newPhaseId - 1 : 'TBD'}`;
+      const phaseEntry = `\n### Phase ${newPhaseId}: ${description}\n\n**Goal:** [To be planned]\n**Requirements**: TBD${dependsOn}\n**Plans:** 0 plans\n\nPlans:\n- [ ] TBD (run /gsd-plan-phase ${newPhaseId} to break down)\n`;
+      const lastSeparator = rawContent.lastIndexOf('\n---');
+      rawContent = lastSeparator > 0
+        ? rawContent.slice(0, lastSeparator) + phaseEntry + rawContent.slice(lastSeparator)
+        : rawContent + phaseEntry;
+      added.push({
+        phase_number: typeof newPhaseId === 'number' ? newPhaseId : String(newPhaseId),
+        padded: typeof newPhaseId === 'number' ? String(newPhaseId).padStart(2, '0') : String(newPhaseId),
+        name: description,
+        slug,
+        directory: toPosixPath(path.join(path.relative(cwd, planningDir(cwd)), 'phases', dirName)),
+        naming_mode: config.phase_naming,
+      });
+    }
+    atomicWriteFileSync(roadmapPath, rawContent);
+    return added;
+  });
+  output({ phases: results, count: results.length }, raw);
+}
+
 function cmdPhaseInsert(cwd, afterPhase, description, raw) {
   if (!afterPhase || !description) {
     error('after-phase and description required for phase insert');
@@ -979,6 +1049,7 @@ module.exports = {
   cmdFindPhase,
   cmdPhasePlanIndex,
   cmdPhaseAdd,
+  cmdPhaseAddBatch,
   cmdPhaseInsert,
   cmdPhaseRemove,
   cmdPhaseComplete,
