@@ -17,7 +17,7 @@
  * ```
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, basename } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -830,9 +830,9 @@ export const initListWorkspaces: QueryHandler = async (_args, _projectDir) => {
 
   const workspaces: Array<Record<string, unknown>> = [];
   if (existsSync(defaultBase)) {
-    let entries: Array<{ isDirectory(): boolean; name: string }> = [];
+    let entries: Dirent[] = [];
     try {
-      entries = readdirSync(defaultBase, { withFileTypes: true }) as unknown as typeof entries;
+      entries = readdirSync(defaultBase, { withFileTypes: true });
     } catch { entries = []; }
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;

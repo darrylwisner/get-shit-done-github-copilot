@@ -89,28 +89,46 @@ export { extractField } from './registry.js';
 // ─── Mutation commands set ────────────────────────────────────────────────
 
 /**
- * Set of command names that represent mutation operations.
- * Used to wire event emission after successful dispatch.
+ * Command names that perform durable writes (disk, git, or global profile store).
+ * Used to wire event emission after successful dispatch. Both dotted and
+ * space-delimited aliases must be listed when both exist.
+ *
+ * See QUERY-HANDLERS.md for semantics. Init composition handlers are omitted
+ * (they emit JSON for workflows; agents perform writes).
  */
-const MUTATION_COMMANDS = new Set([
+export const QUERY_MUTATION_COMMANDS = new Set<string>([
   'state.update', 'state.patch', 'state.begin-phase', 'state.advance-plan',
   'state.record-metric', 'state.update-progress', 'state.add-decision',
   'state.add-blocker', 'state.resolve-blocker', 'state.record-session',
-  'frontmatter.set', 'frontmatter.merge', 'frontmatter.validate',
+  'state.planned-phase', 'state planned-phase',
+  'frontmatter.set', 'frontmatter.merge', 'frontmatter.validate', 'frontmatter validate',
   'config-set', 'config-set-model-profile', 'config-new-project', 'config-ensure-section',
-  'commit', 'check-commit',
-  'template.fill', 'template.select',
+  'commit', 'check-commit', 'commit-to-subrepo',
+  'template.fill', 'template.select', 'template select',
   'validate.health', 'validate health',
   'phase.add', 'phase.insert', 'phase.remove', 'phase.complete',
   'phase.scaffold', 'phases.clear', 'phases.archive',
   'phase add', 'phase insert', 'phase remove', 'phase complete',
   'phase scaffold', 'phases clear', 'phases archive',
+  'roadmap.update-plan-progress', 'roadmap update-plan-progress',
+  'requirements.mark-complete', 'requirements mark-complete',
+  'todo.complete', 'todo complete',
+  'milestone.complete', 'milestone complete',
+  'workstream.create', 'workstream.set', 'workstream.complete', 'workstream.progress',
+  'workstream create', 'workstream set', 'workstream complete', 'workstream progress',
+  'docs-init',
+  'learnings.copy', 'learnings copy',
+  'intel.snapshot', 'intel.patch-meta', 'intel snapshot', 'intel patch-meta',
+  'write-profile', 'generate-claude-profile', 'generate-dev-preferences', 'generate-claude-md',
 ]);
 
 // ─── Event builder ────────────────────────────────────────────────────────
 
 /**
  * Build a mutation event based on the command prefix and result.
+ *
+ * `sessionId` is empty until a future phase wires session correlation into
+ * the query layer; see QUERY-HANDLERS.md.
  */
 function buildMutationEvent(cmd: string, args: string[], result: QueryResult): GSDEvent {
   const base = {
@@ -118,14 +136,37 @@ function buildMutationEvent(cmd: string, args: string[], result: QueryResult): G
     sessionId: '',
   };
 
-  if (cmd.startsWith('state.')) {
+  if (cmd.startsWith('template.') || cmd.startsWith('template ')) {
+    const data = result.data as Record<string, unknown> | null;
     return {
       ...base,
-      type: GSDEventType.StateMutation,
+      type: GSDEventType.TemplateFill,
+      templateType: (data?.template as string) ?? args[0] ?? '',
+      path: (data?.path as string) ?? args[1] ?? '',
+      created: (data?.created as boolean) ?? false,
+    } as GSDTemplateFillEvent;
+  }
+
+  if (cmd === 'commit' || cmd === 'check-commit' || cmd === 'commit-to-subrepo') {
+    const data = result.data as Record<string, unknown> | null;
+    return {
+      ...base,
+      type: GSDEventType.GitCommit,
+      hash: (data?.hash as string) ?? null,
+      committed: (data?.committed as boolean) ?? false,
+      reason: (data?.reason as string) ?? '',
+    } as GSDGitCommitEvent;
+  }
+
+  if (cmd.startsWith('frontmatter.') || cmd.startsWith('frontmatter ')) {
+    return {
+      ...base,
+      type: GSDEventType.FrontmatterMutation,
       command: cmd,
-      fields: args.slice(0, 2),
+      file: args[0] ?? '',
+      fields: args.slice(1),
       success: true,
-    } as GSDStateMutationEvent;
+    } as GSDFrontmatterMutationEvent;
   }
 
   if (cmd.startsWith('config-')) {
@@ -138,26 +179,14 @@ function buildMutationEvent(cmd: string, args: string[], result: QueryResult): G
     } as GSDConfigMutationEvent;
   }
 
-  if (cmd.startsWith('frontmatter.')) {
+  if (cmd.startsWith('validate.') || cmd.startsWith('validate ')) {
     return {
       ...base,
-      type: GSDEventType.FrontmatterMutation,
+      type: GSDEventType.ConfigMutation,
       command: cmd,
-      file: args[0] ?? '',
-      fields: args.slice(1),
+      key: args[0] ?? '',
       success: true,
-    } as GSDFrontmatterMutationEvent;
-  }
-
-  if (cmd === 'commit' || cmd === 'check-commit') {
-    const data = result.data as Record<string, unknown> | null;
-    return {
-      ...base,
-      type: GSDEventType.GitCommit,
-      hash: (data?.hash as string) ?? null,
-      committed: (data?.committed as boolean) ?? false,
-      reason: (data?.reason as string) ?? '',
-    } as GSDGitCommitEvent;
+    } as GSDConfigMutationEvent;
   }
 
   if (cmd.startsWith('phase.') || cmd.startsWith('phase ') || cmd.startsWith('phases.') || cmd.startsWith('phases ')) {
@@ -170,25 +199,24 @@ function buildMutationEvent(cmd: string, args: string[], result: QueryResult): G
     } as GSDStateMutationEvent;
   }
 
-  if (cmd.startsWith('validate.') || cmd.startsWith('validate ')) {
+  if (cmd.startsWith('state.') || cmd.startsWith('state ')) {
     return {
       ...base,
-      type: GSDEventType.ConfigMutation,
+      type: GSDEventType.StateMutation,
       command: cmd,
-      key: args[0] ?? '',
+      fields: args.slice(0, 2),
       success: true,
-    } as GSDConfigMutationEvent;
+    } as GSDStateMutationEvent;
   }
 
-  // template.fill / template.select
-  const data = result.data as Record<string, unknown> | null;
+  // roadmap, requirements, todo, milestone, workstream, intel, profile, learnings, docs-init
   return {
     ...base,
-    type: GSDEventType.TemplateFill,
-    templateType: (data?.template as string) ?? args[0] ?? '',
-    path: (data?.path as string) ?? args[1] ?? '',
-    created: (data?.created as boolean) ?? false,
-  } as GSDTemplateFillEvent;
+    type: GSDEventType.StateMutation,
+    command: cmd,
+    fields: args.slice(0, 2),
+    success: true,
+  } as GSDStateMutationEvent;
 }
 
 // ─── Factory ───────────────────────────────────────────────────────────────
@@ -408,7 +436,7 @@ export function createRegistry(eventStream?: GSDEventStream): QueryRegistry {
 
   // Wire event emission for mutation commands
   if (eventStream) {
-    for (const cmd of MUTATION_COMMANDS) {
+    for (const cmd of QUERY_MUTATION_COMMANDS) {
       const original = registry.getHandler(cmd);
       if (original) {
         registry.register(cmd, async (args: string[], projectDir: string) => {

@@ -71,7 +71,7 @@ export const workstreamList: QueryHandler = async (_args, projectDir) => {
   const dir = workstreamsDir(projectDir);
   if (!existsSync(dir)) return { data: { mode: 'flat', workstreams: [], message: 'No workstreams — operating in flat mode' } };
   try {
-    const entries = readdirSync(dir, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+    const entries = readdirSync(dir, { withFileTypes: true });
     const workstreams = entries.filter(e => e.isDirectory()).map(e => e.name);
     return { data: { mode: 'workstream', workstreams, count: workstreams.length } };
   } catch {
@@ -212,7 +212,7 @@ export const workstreamComplete: QueryHandler = async (args, projectDir) => {
 
   const filesMoved: string[] = [];
   try {
-    const entries = readdirSync(wsDir, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+    const entries = readdirSync(wsDir, { withFileTypes: true });
     for (const entry of entries) {
       renameSync(join(wsDir, entry.name), join(archivePath, entry.name));
       filesMoved.push(entry.name);
@@ -230,7 +230,7 @@ export const workstreamComplete: QueryHandler = async (args, projectDir) => {
 
   let remainingWs = 0;
   try {
-    remainingWs = (readdirSync(wsRoot, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>)
+    remainingWs = readdirSync(wsRoot, { withFileTypes: true })
       .filter(e => e.isDirectory()).length;
     if (remainingWs === 0) rmdirSync(wsRoot);
   } catch { /* best-effort */ }

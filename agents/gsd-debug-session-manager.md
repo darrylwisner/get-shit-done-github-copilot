@@ -70,9 +70,9 @@ Continue debugging {slug}. Evidence is in the debug file.
 </objective>
 
 <prior_state>
-<files_to_read>
+<required_reading>
 - {debug_file_path} (Debug session state)
-</files_to_read>
+</required_reading>
 </prior_state>
 
 <mode>
@@ -226,9 +226,9 @@ Continue debugging {slug}. Evidence is in the debug file.
 </objective>
 
 <prior_state>
-<files_to_read>
+<required_reading>
 - {debug_file_path} (Debug session state)
-</files_to_read>
+</required_reading>
 </prior_state>
 
 <checkpoint_response>

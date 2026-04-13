@@ -51,7 +51,7 @@ Read `~/.claude/get-shit-done/references/ai-frameworks.md` for framework profile
 - `phase_context`: phase name and goal
 - `context_path`: path to CONTEXT.md if it exists
 
-**If prompt contains `<files_to_read>`, read every listed file before doing anything else.**
+**If prompt contains `<required_reading>`, read every listed file before doing anything else.**
 </input>
 
 <documentation_sources>

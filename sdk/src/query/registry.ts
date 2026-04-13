@@ -87,6 +87,13 @@ export class QueryRegistry {
   }
 
   /**
+   * List all registered command names (for tooling, pipelines, and tests).
+   */
+  commands(): string[] {
+    return Array.from(this.handlers.keys());
+  }
+
+  /**
    * Get the handler for a command without dispatching.
    *
    * @param command - The command name to look up

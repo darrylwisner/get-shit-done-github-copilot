@@ -37,7 +37,7 @@ This ensures project-specific patterns, conventions, and best practices are appl
 - `phase_dir`: phase directory path
 - `phase_number`, `phase_name`
 
-**If prompt contains `<files_to_read>`, read every listed file before doing anything else.**
+**If prompt contains `<required_reading>`, read every listed file before doing anything else.**
 </input>
 
 <execution_flow>

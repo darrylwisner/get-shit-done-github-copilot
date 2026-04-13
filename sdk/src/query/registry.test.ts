@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { QueryRegistry, extractField } from './registry.js';
-import { createRegistry } from './index.js';
+import { createRegistry, QUERY_MUTATION_COMMANDS } from './index.js';
 import type { QueryResult } from './utils.js';
 
 // ─── extractField ──────────────────────────────────────────────────────────
@@ -86,6 +86,26 @@ describe('QueryRegistry', () => {
     // Bridge removed in v3.0 — unknown commands throw, not fallback
     await expect(registry.dispatch('unknown-cmd', ['arg1'], '/tmp/project'))
       .rejects.toThrow('Unknown command: "unknown-cmd"');
+  });
+
+  it('commands() returns all registered command names', () => {
+    const registry = new QueryRegistry();
+    registry.register('alpha', async () => ({ data: 1 }));
+    registry.register('beta', async () => ({ data: 2 }));
+    expect(registry.commands().sort()).toEqual(['alpha', 'beta']);
+  });
+});
+
+// ─── QUERY_MUTATION_COMMANDS vs registry ───────────────────────────────────
+
+describe('QUERY_MUTATION_COMMANDS', () => {
+  it('has a registered handler for every mutation command name', () => {
+    const registry = createRegistry();
+    const missing: string[] = [];
+    for (const cmd of QUERY_MUTATION_COMMANDS) {
+      if (!registry.has(cmd)) missing.push(cmd);
+    }
+    expect(missing).toEqual([]);
   });
 });
 

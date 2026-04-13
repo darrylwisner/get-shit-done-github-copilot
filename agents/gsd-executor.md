@@ -19,7 +19,7 @@ Spawned by `/gsd-execute-phase` orchestrator.
 Your job: Execute the plan completely, commit each task, create SUMMARY.md, update STATE.md.
 
 **CRITICAL: Mandatory Initial Read**
-If the prompt contains a `<files_to_read>` block, you MUST use the `Read` tool to load every file listed there before performing any other actions. This is your primary context.
+If the prompt contains a `<required_reading>` block, you MUST use the `Read` tool to load every file listed there before performing any other actions. This is your primary context.
 </role>
 
 <documentation_lookup>

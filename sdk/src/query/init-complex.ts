@@ -18,7 +18,7 @@
  * ```
  */
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, type Dirent } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { homedir } from 'node:os';
@@ -90,9 +90,9 @@ export const initNewProject: QueryHandler = async (_args, projectDir) => {
 
   function findCodeFiles(dir: string, depth: number): boolean {
     if (depth > 3) return false;
-    let entries: Array<{ isDirectory(): boolean; isFile(): boolean; name: string }>;
+    let entries: Dirent[];
     try {
-      entries = readdirSync(dir, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; isFile(): boolean; name: string }>;
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       return false;
     }
@@ -202,7 +202,7 @@ export const initProgress: QueryHandler = async (_args, projectDir) => {
   // Scan phase directories
   try {
     const entries = readdirSync(paths.phases, { withFileTypes: true });
-    const dirs = (entries as unknown as Array<{ isDirectory(): boolean; name: string }>)
+    const dirs = entries
       .filter(e => e.isDirectory())
       .map(e => e.name)
       .sort((a, b) => {
@@ -339,7 +339,7 @@ export const initManager: QueryHandler = async (_args, projectDir) => {
   // Pre-compute directory listing once
   let phaseDirEntries: string[] = [];
   try {
-    phaseDirEntries = (readdirSync(paths.phases, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>)
+    phaseDirEntries = readdirSync(paths.phases, { withFileTypes: true })
       .filter(e => e.isDirectory())
       .map(e => e.name);
   } catch { /* intentionally empty */ }

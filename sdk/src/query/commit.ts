@@ -18,9 +18,9 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { planningPaths } from './helpers.js';
+import { GSDError } from '../errors.js';
+import { planningPaths, resolvePathUnderProject } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── execGit ──────────────────────────────────────────────────────────────
@@ -227,11 +227,20 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir) => {
     return { data: { committed: false, reason: 'commit message required' } };
   }
 
+  const sanitized = sanitizeCommitMessage(message);
+  if (!sanitized && message) {
+    return { data: { committed: false, reason: 'commit message empty after sanitization' } };
+  }
+
   try {
     for (const file of files) {
-      const resolved = join(projectDir, file);
-      if (!resolved.startsWith(projectDir)) {
-        return { data: { committed: false, reason: `file path escapes project: ${file}` } };
+      try {
+        await resolvePathUnderProject(projectDir, file);
+      } catch (err) {
+        if (err instanceof GSDError) {
+          return { data: { committed: false, reason: `${err.message}: ${file}` } };
+        }
+        throw err;
       }
     }
 
@@ -239,7 +248,7 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir) => {
     spawnSync('git', ['-C', projectDir, 'add', ...fileArgs], { stdio: 'pipe' });
 
     const commitResult = spawnSync(
-      'git', ['-C', projectDir, 'commit', '-m', message],
+      'git', ['-C', projectDir, 'commit', '-m', sanitized],
       { stdio: 'pipe', encoding: 'utf-8' },
     );
     if (commitResult.status !== 0) {
@@ -251,7 +260,7 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir) => {
       { encoding: 'utf-8' },
     );
     const hash = hashResult.stdout.trim();
-    return { data: { committed: true, hash, message } };
+    return { data: { committed: true, hash, message: sanitized } };
   } catch (err) {
     return { data: { committed: false, reason: String(err) } };
   }

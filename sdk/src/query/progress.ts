@@ -17,6 +17,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { GSDError, ErrorClassification } from '../errors.js';
 import { comparePhaseNum, normalizePhaseName, planningPaths, toPosixPath } from './helpers.js';
 import { getMilestoneInfo, roadmapAnalyze } from './roadmap.js';
 import type { QueryHandler } from './utils.js';
@@ -137,7 +138,7 @@ export const statsJson: QueryHandler = async (_args, projectDir) => {
 
   if (existsSync(paths.phases)) {
     try {
-      const entries = readdirSync(paths.phases, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+      const entries = readdirSync(paths.phases, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         phasesTotal++;
@@ -242,10 +243,7 @@ export const listTodos: QueryHandler = async (args, projectDir) => {
 export const todoComplete: QueryHandler = async (args, projectDir) => {
   const filename = args[0];
   if (!filename) {
-    throw new (await import('../errors.js')).GSDError(
-      'filename required for todo complete',
-      (await import('../errors.js')).ErrorClassification.Validation,
-    );
+    throw new GSDError('filename required for todo complete', ErrorClassification.Validation);
   }
 
   const pendingDir = join(projectDir, '.planning', 'todos', 'pending');
@@ -253,10 +251,7 @@ export const todoComplete: QueryHandler = async (args, projectDir) => {
   const sourcePath = join(pendingDir, filename);
 
   if (!existsSync(sourcePath)) {
-    throw new (await import('../errors.js')).GSDError(
-      `Todo not found: ${filename}`,
-      (await import('../errors.js')).ErrorClassification.Validation,
-    );
+    throw new GSDError(`Todo not found: ${filename}`, ErrorClassification.Validation);
   }
 
   mkdirSync(completedDir, { recursive: true });

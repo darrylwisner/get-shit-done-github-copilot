@@ -6,11 +6,11 @@ color: cyan
 # hooks:
 ---
 
-<files_to_read>
-CRITICAL: If your spawn prompt contains a files_to_read block,
+<required_reading>
+CRITICAL: If your spawn prompt contains a required_reading block,
 you MUST Read every listed file BEFORE any other action.
 Skipping this causes hallucinated context and broken output.
-</files_to_read>
+</required_reading>
 
 **Context budget:** Load project skills first (lightweight). Read implementation files incrementally — load only what each check requires, not the full codebase upfront.
 

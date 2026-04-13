@@ -62,7 +62,7 @@ export const historyDigest: QueryHandler = async (_args, projectDir) => {
   const milestonesDir = join(projectDir, '.planning', 'milestones');
   if (existsSync(milestonesDir)) {
     try {
-      const milestoneEntries = readdirSync(milestonesDir, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+      const milestoneEntries = readdirSync(milestonesDir, { withFileTypes: true });
       const archivedPhaseDirs = milestoneEntries
         .filter(e => e.isDirectory() && /^v[\d.]+-phases$/.test(e.name))
         .map(e => e.name)
@@ -70,7 +70,7 @@ export const historyDigest: QueryHandler = async (_args, projectDir) => {
       for (const archiveName of archivedPhaseDirs) {
         const archivePath = join(milestonesDir, archiveName);
         try {
-          const dirs = readdirSync(archivePath, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+          const dirs = readdirSync(archivePath, { withFileTypes: true });
           for (const d of dirs.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
             allPhaseDirs.push({ name: d.name, fullPath: join(archivePath, d.name) });
           }
@@ -82,7 +82,7 @@ export const historyDigest: QueryHandler = async (_args, projectDir) => {
   // Current phases
   if (existsSync(paths.phases)) {
     try {
-      const currentDirs = readdirSync(paths.phases, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+      const currentDirs = readdirSync(paths.phases, { withFileTypes: true });
       for (const d of currentDirs.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
         allPhaseDirs.push({ name: d.name, fullPath: join(paths.phases, d.name) });
       }

@@ -113,10 +113,31 @@ function updateCurrentPositionFields(content: string, fields: Record<string, str
 // ─── Lockfile helpers ─────────────────────────────────────────────────────
 
 /**
+ * If the lock file contains a PID, return whether that process is gone (stolen
+ * locks after SIGKILL/crash). Null if the file could not be read.
+ */
+async function isLockProcessDead(lockPath: string): Promise<boolean | null> {
+  try {
+    const raw = await readFile(lockPath, 'utf-8');
+    const pid = parseInt(raw.trim(), 10);
+    if (!Number.isFinite(pid) || pid <= 0) return true;
+    try {
+      process.kill(pid, 0);
+      return false;
+    } catch {
+      return true;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Acquire a lockfile for STATE.md operations.
  *
  * Uses O_CREAT|O_EXCL for atomic creation. Retries up to 10 times with
- * 200ms + jitter delay. Cleans stale locks older than 10 seconds.
+ * 200ms + jitter delay. Cleans stale locks when the holder PID is dead, or when
+ * the lock file is older than 10 seconds (existing heuristic).
  *
  * @param statePath - Path to STATE.md
  * @returns Path to the lockfile
@@ -136,6 +157,11 @@ export async function acquireStateLock(statePath: string): Promise<string> {
     } catch (err: unknown) {
       if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'EEXIST') {
         try {
+          const dead = await isLockProcessDead(lockPath);
+          if (dead === true) {
+            await unlink(lockPath);
+            continue;
+          }
           const s = await stat(lockPath);
           if (Date.now() - s.mtimeMs > 10000) {
             await unlink(lockPath);
@@ -714,22 +740,20 @@ export const statePlannedPhase: QueryHandler = async (args, projectDir) => {
   const phaseArg = args.find((a, i) => args[i - 1] === '--phase') || args[0];
   const nameArg = args.find((a, i) => args[i - 1] === '--name') || '';
   const plansArg = args.find((a, i) => args[i - 1] === '--plans') || '0';
-  const paths = planningPaths(projectDir);
 
   if (!phaseArg) {
     return { data: { updated: false, reason: '--phase argument required' } };
   }
 
   try {
-    let content = await readFile(paths.state, 'utf-8');
     const timestamp = new Date().toISOString();
     const record = `\n**Planned Phase:** ${phaseArg} (${nameArg}) — ${plansArg} plans — ${timestamp}\n`;
-    if (/\*\*Planned Phase:\*\*/.test(content)) {
-      content = content.replace(/\*\*Planned Phase:\*\*[^\n]*\n/, record);
-    } else {
-      content += record;
-    }
-    await writeFile(paths.state, content, 'utf-8');
+    await readModifyWriteStateMd(projectDir, (body) => {
+      if (/\*\*Planned Phase:\*\*/.test(body)) {
+        return body.replace(/\*\*Planned Phase:\*\*[^\n]*\n/, record);
+      }
+      return body + record;
+    });
     return { data: { updated: true, phase: phaseArg, name: nameArg, plans: plansArg } };
   } catch {
     return { data: { updated: false, reason: 'STATE.md not found or unreadable' } };
