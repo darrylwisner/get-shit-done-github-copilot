@@ -17,10 +17,9 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { join, isAbsolute } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
-import { escapeRegex } from './helpers.js';
+import { escapeRegex, resolvePathUnderProject } from './helpers.js';
 
 // ─── splitInlineArray ───────────────────────────────────────────────────────
 
@@ -329,7 +328,15 @@ export const frontmatterGet: QueryHandler = async (args, projectDir) => {
     throw new GSDError('file path contains null bytes', ErrorClassification.Validation);
   }
 
-  const fullPath = isAbsolute(filePath) ? filePath : join(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {

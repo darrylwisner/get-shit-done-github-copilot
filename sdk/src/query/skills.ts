@@ -33,7 +33,7 @@ export const agentSkills: QueryHandler = async (args, projectDir) => {
   for (const dir of skillDirs) {
     if (!existsSync(dir)) continue;
     try {
-      const entries = readdirSync(dir, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+      const entries = readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isDirectory()) skills.push(entry.name);
       }

@@ -17,7 +17,9 @@
  * ```
  */
 
-import { join } from 'node:path';
+import { join, relative, resolve, isAbsolute, normalize } from 'node:path';
+import { realpath } from 'node:fs/promises';
+import { GSDError, ErrorClassification } from '../errors.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -321,4 +323,31 @@ export function planningPaths(projectDir: string): PlanningPaths {
     phases: toPosixPath(join(base, 'phases')),
     requirements: toPosixPath(join(base, 'REQUIREMENTS.md')),
   };
+}
+
+// ─── resolvePathUnderProject ───────────────────────────────────────────────
+
+/**
+ * Resolve a user-supplied path against the project and ensure it cannot escape
+ * the real project root (prefix checks are insufficient; symlinks are handled
+ * via realpath).
+ *
+ * @param projectDir - Project root directory
+ * @param userPath - Relative or absolute path from user input
+ * @returns Canonical resolved path within the project
+ */
+export async function resolvePathUnderProject(projectDir: string, userPath: string): Promise<string> {
+  const projectReal = await realpath(projectDir);
+  const candidate = isAbsolute(userPath) ? normalize(userPath) : resolve(projectReal, userPath);
+  let realCandidate: string;
+  try {
+    realCandidate = await realpath(candidate);
+  } catch {
+    realCandidate = candidate;
+  }
+  const rel = relative(projectReal, realCandidate);
+  if (rel.startsWith('..') || (isAbsolute(rel) && rel.length > 0)) {
+    throw new GSDError('path escapes project directory', ErrorClassification.Validation);
+  }
+  return realCandidate;
 }

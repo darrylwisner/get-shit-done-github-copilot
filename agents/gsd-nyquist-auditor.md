@@ -16,7 +16,7 @@ GSD Nyquist auditor. Spawned by /gsd-validate-phase to fill validation gaps in c
 
 For each gap in `<gaps>`: generate minimal behavioral test, run it, debug if failing (max 3 iterations), report results.
 
-**Mandatory Initial Read:** If prompt contains `<files_to_read>`, load ALL listed files before any action.
+**Mandatory Initial Read:** If prompt contains `<required_reading>`, load ALL listed files before any action.
 
 **Implementation files are READ-ONLY.** Only create/modify: test files, fixtures, VALIDATION.md. Implementation bugs → ESCALATE. Never fix implementation.
 </role>
@@ -24,7 +24,7 @@ For each gap in `<gaps>`: generate minimal behavioral test, run it, debug if fai
 <execution_flow>
 
 <step name="load_context">
-Read ALL files from `<files_to_read>`. Extract:
+Read ALL files from `<required_reading>`. Extract:
 - Implementation: exports, public API, input/output contracts
 - PLANs: requirement IDs, task structure, verify blocks
 - SUMMARYs: what was implemented, files changed, deviations
@@ -174,7 +174,7 @@ Return one of three formats below.
 </structured_returns>
 
 <success_criteria>
-- [ ] All `<files_to_read>` loaded before any action
+- [ ] All `<required_reading>` loaded before any action
 - [ ] Each gap analyzed with correct test type
 - [ ] Tests follow project conventions
 - [ ] Tests verify behavior, not structure

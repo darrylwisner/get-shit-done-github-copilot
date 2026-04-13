@@ -558,7 +558,7 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir) => {
       return { data: { valid: true, issues: [], checked: 0 } };
     }
 
-    const entries = readdirSync(phasesDir, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+    const entries = readdirSync(phasesDir, { withFileTypes: true });
     let checked = 0;
 
     for (const entry of entries) {

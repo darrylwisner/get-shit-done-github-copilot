@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`@gsd-build/sdk` — Phase 1 typed query foundation** — Registry-based `gsd-sdk query` command, classified errors (`GSDQueryError`), and unit-tested handlers under `sdk/src/query/` (state, roadmap, phase lifecycle, init, config, validation, and related domains). Implements incremental SDK-first migration scope approved in #2083; builds on validated work from #2007 / `feat/sdk-foundation` without migrating workflows or removing `gsd-tools.cjs` in this phase.
 - **Flow diagram directive for phase researcher** — `gsd-phase-researcher` now enforces data-flow architecture diagrams instead of file-listing diagrams. Language-agnostic directive added to agent prompt and research template. (#2139)
 
+### Fixed
+
+- **SDK query layer (PR review hardening)** — `commit-to-subrepo` uses realpath-aware path containment and sanitized commit messages; `state.planned-phase` uses the STATE.md lockfile; `verifyKeyLinks` mitigates ReDoS on frontmatter patterns; frontmatter handlers resolve paths under the real project root; phase directory names reject `..` and separators; `gsd-sdk` restores strict CLI parsing by stripping `--pick` before `parseArgs`; `QueryRegistry.commands()` for enumeration; `todoComplete` uses static error imports.
+
+### Changed
+
+- **SDK query follow-up (tests, docs, registry)** — Expanded `QUERY_MUTATION_COMMANDS` for event emission; stale lock cleanup uses PID liveness (`process.kill(pid, 0)`) when a lock file exists; `searchJsonEntries` is depth-bounded (`MAX_JSON_SEARCH_DEPTH`); removed unnecessary `readdirSync`/`Dirent` casts across query handlers; added `sdk/src/query/QUERY-HANDLERS.md` (error vs `{ data.error }`, mutations, locks, intel limits); unit tests for intel, profile, uat, skills, summary, websearch, workstream, registry vs `QUERY_MUTATION_COMMANDS`, and frontmatter extract/splice round-trip.
+
 ## [1.35.0] - 2026-04-10
 
 ### Added

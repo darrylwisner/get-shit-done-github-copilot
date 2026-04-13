@@ -100,10 +100,20 @@ describe('parseCliArgs', () => {
     expect(result.maxBudget).toBe(15);
   });
 
-  it('ignores unknown options (non-strict for --pick support)', () => {
-    // strict: false allows --pick and other query-specific flags
-    const result = parseCliArgs(['--unknown-flag']);
-    expect(result.command).toBeUndefined();
+  it('rejects unknown options (strict parser)', () => {
+    expect(() => parseCliArgs(['--unknown-flag'])).toThrow();
+  });
+
+  it('rejects unknown flags on run command', () => {
+    expect(() => parseCliArgs(['run', 'hello', '--not-a-real-option'])).toThrow();
+  });
+
+  it('parses query with --pick stripped before strict parse', () => {
+    const result = parseCliArgs([
+      'query', 'state.load', '--pick', 'data', '--project-dir', 'C:\\tmp\\proj',
+    ]);
+    expect(result.command).toBe('query');
+    expect(result.projectDir).toBe('C:\\tmp\\proj');
   });
 
   // ─── Init command parsing ──────────────────────────────────────────────

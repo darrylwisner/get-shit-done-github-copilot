@@ -142,7 +142,7 @@ export const auditUat: QueryHandler = async (_args, projectDir) => {
   }
 
   const results: Record<string, unknown>[] = [];
-  const entries = readdirSync(paths.phases, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+  const entries = readdirSync(paths.phases, { withFileTypes: true });
 
   for (const entry of entries.filter(e => e.isDirectory())) {
     const phaseMatch = entry.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);

@@ -18,10 +18,9 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { join, isAbsolute } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter } from './frontmatter.js';
-import { normalizeMd } from './helpers.js';
+import { normalizeMd, resolvePathUnderProject } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── FRONTMATTER_SCHEMAS ──────────────────────────────────────────────────
@@ -178,7 +177,15 @@ export const frontmatterSet: QueryHandler = async (args, projectDir) => {
     throw new GSDError('file path contains null bytes', ErrorClassification.Validation);
   }
 
-  const fullPath = isAbsolute(filePath) ? filePath : join(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {
@@ -220,7 +227,15 @@ export const frontmatterMerge: QueryHandler = async (args, projectDir) => {
     throw new GSDError('file path contains null bytes', ErrorClassification.Validation);
   }
 
-  const fullPath = isAbsolute(filePath) ? filePath : join(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {
@@ -285,7 +300,15 @@ export const frontmatterValidate: QueryHandler = async (args, projectDir) => {
     );
   }
 
-  const fullPath = isAbsolute(filePath) ? filePath : join(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {

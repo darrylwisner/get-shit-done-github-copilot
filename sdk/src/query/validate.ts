@@ -16,12 +16,37 @@
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, isAbsolute, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter, parseMustHavesBlock } from './frontmatter.js';
-import { escapeRegex, normalizePhaseName, planningPaths } from './helpers.js';
+import { escapeRegex, normalizePhaseName, planningPaths, resolvePathUnderProject } from './helpers.js';
 import type { QueryHandler } from './utils.js';
+
+/** Max length for key_links regex patterns (ReDoS mitigation). */
+const MAX_KEY_LINK_PATTERN_LEN = 512;
+
+/**
+ * Build a RegExp for must_haves key_links pattern matching.
+ * Long or nested-quantifier patterns fall back to a literal match via escapeRegex.
+ */
+export function regexForKeyLinkPattern(pattern: string): RegExp {
+  if (typeof pattern !== 'string' || pattern.length === 0) {
+    return /$^/;
+  }
+  if (pattern.length > MAX_KEY_LINK_PATTERN_LEN) {
+    return new RegExp(escapeRegex(pattern.slice(0, MAX_KEY_LINK_PATTERN_LEN)));
+  }
+  // Mitigate catastrophic backtracking on nested quantifier forms
+  if (/\([^)]*[\+\*][^)]*\)[\+\*]/.test(pattern)) {
+    return new RegExp(escapeRegex(pattern));
+  }
+  try {
+    return new RegExp(pattern);
+  } catch {
+    return new RegExp(escapeRegex(pattern));
+  }
+}
 
 // ─── verifyKeyLinks ───────────────────────────────────────────────────────
 
@@ -48,7 +73,15 @@ export const verifyKeyLinks: QueryHandler = async (args, projectDir) => {
     throw new GSDError('file path contains null bytes', ErrorClassification.Validation);
   }
 
-  const fullPath = isAbsolute(planFilePath) ? planFilePath : join(projectDir, planFilePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, planFilePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: planFilePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {
@@ -77,37 +110,33 @@ export const verifyKeyLinks: QueryHandler = async (args, projectDir) => {
 
     let sourceContent: string | null = null;
     try {
-      sourceContent = await readFile(join(projectDir, check.from), 'utf-8');
+      const fromPath = await resolvePathUnderProject(projectDir, check.from);
+      sourceContent = await readFile(fromPath, 'utf-8');
     } catch {
-      // Source file not found
+      // Source file not found or path invalid
     }
 
     if (!sourceContent) {
       check.detail = 'Source file not found';
     } else if (linkObj.pattern) {
-      // T-12-05: Wrap new RegExp in try/catch
-      try {
-        const regex = new RegExp(linkObj.pattern as string);
-        if (regex.test(sourceContent)) {
-          check.verified = true;
-          check.detail = 'Pattern found in source';
-        } else {
-          // Try target file
-          let targetContent: string | null = null;
-          try {
-            targetContent = await readFile(join(projectDir, check.to), 'utf-8');
-          } catch {
-            // Target file not found
-          }
-          if (targetContent && regex.test(targetContent)) {
-            check.verified = true;
-            check.detail = 'Pattern found in target';
-          } else {
-            check.detail = `Pattern "${linkObj.pattern}" not found in source or target`;
-          }
+      const regex = regexForKeyLinkPattern(linkObj.pattern as string);
+      if (regex.test(sourceContent)) {
+        check.verified = true;
+        check.detail = 'Pattern found in source';
+      } else {
+        let targetContent: string | null = null;
+        try {
+          const toPath = await resolvePathUnderProject(projectDir, check.to);
+          targetContent = await readFile(toPath, 'utf-8');
+        } catch {
+          // Target file not found
         }
-      } catch {
-        check.detail = `Invalid regex pattern: ${linkObj.pattern}`;
+        if (targetContent && regex.test(targetContent)) {
+          check.verified = true;
+          check.detail = 'Pattern found in target';
+        } else {
+          check.detail = `Pattern "${linkObj.pattern}" not found in source or target`;
+        }
       }
     } else {
       // No pattern: check if target path is referenced in source content

@@ -37,12 +37,26 @@ export interface ParsedCliArgs {
 }
 
 /**
+ * Strip `--pick <field>` from argv before parseArgs so the global parser stays strict.
+ * Query dispatch removes --pick separately in main(); this only affects CLI parsing.
+ */
+function argvForCliParse(argv: string[]): string[] {
+  if (argv[0] !== 'query') return argv;
+  const copy = [...argv];
+  const pickIdx = copy.indexOf('--pick');
+  if (pickIdx !== -1 && pickIdx + 1 < copy.length) {
+    copy.splice(pickIdx, 2);
+  }
+  return copy;
+}
+
+/**
  * Parse CLI arguments into a structured object.
  * Exported for testing — the main() function uses this internally.
  */
 export function parseCliArgs(argv: string[]): ParsedCliArgs {
   const { values, positionals } = parseArgs({
-    args: argv,
+    args: argvForCliParse(argv),
     options: {
       'project-dir': { type: 'string', default: process.cwd() },
       'ws-port': { type: 'string' },
@@ -54,7 +68,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
       version: { type: 'boolean', short: 'v', default: false },
     },
     allowPositionals: true,
-    strict: false,
+    strict: true,
   });
 
   const command = positionals[0] as string | undefined;

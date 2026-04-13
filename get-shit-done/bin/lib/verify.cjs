@@ -837,6 +837,40 @@ function cmdValidateHealth(cwd, options, raw) {
     } catch { /* parse error already caught in Check 5 */ }
   }
 
+  // ─── Check 11: Stale / orphan git worktrees (#2167) ────────────────────────
+  try {
+    const worktreeResult = execGit(cwd, ['worktree', 'list', '--porcelain']);
+    if (worktreeResult.exitCode === 0 && worktreeResult.stdout) {
+      const blocks = worktreeResult.stdout.split('\n\n').filter(Boolean);
+      // Skip the first block — it is always the main worktree
+      for (let i = 1; i < blocks.length; i++) {
+        const lines = blocks[i].split('\n');
+        const wtLine = lines.find(l => l.startsWith('worktree '));
+        if (!wtLine) continue;
+        const wtPath = wtLine.slice('worktree '.length);
+
+        if (!fs.existsSync(wtPath)) {
+          // Orphan: path no longer exists on disk
+          addIssue('warning', 'W017',
+            `Orphan git worktree: ${wtPath} (path no longer exists on disk)`,
+            'Run: git worktree prune');
+        } else {
+          // Check if stale (older than 1 hour)
+          try {
+            const stat = fs.statSync(wtPath);
+            const ageMs = Date.now() - stat.mtimeMs;
+            const ONE_HOUR = 60 * 60 * 1000;
+            if (ageMs > ONE_HOUR) {
+              addIssue('warning', 'W017',
+                `Stale git worktree: ${wtPath} (last modified ${Math.round(ageMs / 60000)} minutes ago)`,
+                `Run: git worktree remove ${wtPath} --force`);
+            }
+          } catch { /* stat failed — skip */ }
+        }
+      }
+    }
+  } catch { /* git worktree not available or not a git repo — skip silently */ }
+
   // ─── Perform repairs if requested ─────────────────────────────────────────
   const repairActions = [];
   if (options.repair && repairs.length > 0) {

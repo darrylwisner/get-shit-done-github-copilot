@@ -212,7 +212,7 @@ export const scanSessions: QueryHandler = async (_args, _projectDir) => {
   let sessionCount = 0;
 
   try {
-    const projectDirs = readdirSync(SESSIONS_DIR, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+    const projectDirs = readdirSync(SESSIONS_DIR, { withFileTypes: true });
     for (const pDir of projectDirs.filter(e => e.isDirectory())) {
       const pPath = join(SESSIONS_DIR, pDir.name);
       const sessions = readdirSync(pPath).filter(f => f.endsWith('.jsonl'));
@@ -232,7 +232,7 @@ export const profileSample: QueryHandler = async (_args, _projectDir) => {
   let projectsSampled = 0;
 
   try {
-    const projectDirs = readdirSync(SESSIONS_DIR, { withFileTypes: true }) as unknown as Array<{ isDirectory(): boolean; name: string }>;
+    const projectDirs = readdirSync(SESSIONS_DIR, { withFileTypes: true });
     for (const pDir of projectDirs.filter(e => e.isDirectory()).slice(0, 5)) {
       const pPath = join(SESSIONS_DIR, pDir.name);
       const sessions = readdirSync(pPath).filter(f => f.endsWith('.jsonl')).slice(0, 3);

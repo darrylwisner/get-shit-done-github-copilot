@@ -45,6 +45,19 @@ function assertNoNullBytes(value: string, label: string): void {
   }
 }
 
+/** Reject `..` or path separators in phase directory names. */
+function assertSafePhaseDirName(dirName: string, label = 'phase directory'): void {
+  if (/[/\\]|\.\./.test(dirName)) {
+    throw new GSDError(`${label} contains invalid path segments`, ErrorClassification.Validation);
+  }
+}
+
+function assertSafeProjectCode(code: string): void {
+  if (code && /[/\\]|\.\./.test(code)) {
+    throw new GSDError('project_code contains invalid characters', ErrorClassification.Validation);
+  }
+}
+
 // ─── Slug generation (inline) ────────────────────────────────────────────
 
 /** Generate kebab-case slug from description. Port of generateSlugInternal. */
@@ -150,6 +163,7 @@ export const phaseAdd: QueryHandler = async (args, projectDir) => {
 
   // Optional project code prefix (e.g., 'CK' -> 'CK-01-foundation')
   const projectCode = (config.project_code as string) || '';
+  assertSafeProjectCode(projectCode);
   const prefix = projectCode ? `${projectCode}-` : '';
 
   let newPhaseId: number | string = '';
@@ -164,6 +178,7 @@ export const phaseAdd: QueryHandler = async (args, projectDir) => {
       if (!newPhaseId) {
         throw new GSDError('--id required when phase_naming is "custom"', ErrorClassification.Validation);
       }
+      assertSafePhaseDirName(String(newPhaseId), 'custom phase id');
       dirName = `${prefix}${newPhaseId}-${slug}`;
     } else {
       // Sequential mode: find highest integer phase number (in current milestone only)
@@ -181,6 +196,8 @@ export const phaseAdd: QueryHandler = async (args, projectDir) => {
       const paddedNum = String(newPhaseId).padStart(2, '0');
       dirName = `${prefix}${paddedNum}-${slug}`;
     }
+
+    assertSafePhaseDirName(dirName);
 
     const dirPath = join(planningPaths(projectDir).phases, dirName);
 
@@ -293,8 +310,10 @@ export const phaseInsert: QueryHandler = async (args, projectDir) => {
       insertConfig = JSON.parse(await readFile(planningPaths(projectDir).config, 'utf-8'));
     } catch { /* use defaults */ }
     const projectCode = (insertConfig.project_code as string) || '';
+    assertSafeProjectCode(projectCode);
     const pfx = projectCode ? `${projectCode}-` : '';
     dirName = `${pfx}${decimalPhase}-${slug}`;
+    assertSafePhaseDirName(dirName);
     const dirPath = join(phasesDir, dirName);
 
     // Create directory with .gitkeep
@@ -421,6 +440,7 @@ export const phaseScaffold: QueryHandler = async (args, projectDir) => {
     }
     const slug = generateSlugInternal(name);
     const dirNameNew = `${padded}-${slug}`;
+    assertSafePhaseDirName(dirNameNew, 'scaffold phase directory');
     const phasesParent = planningPaths(projectDir).phases;
     await mkdir(phasesParent, { recursive: true });
     const dirPath = join(phasesParent, dirNameNew);

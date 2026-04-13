@@ -74,27 +74,32 @@ function hashFile(filePath: string): string | null {
   }
 }
 
-function searchJsonEntries(data: unknown, term: string): unknown[] {
+/** Max recursion depth when walking JSON for intel queries (avoids stack overflow). */
+export const MAX_JSON_SEARCH_DEPTH = 48;
+
+export function searchJsonEntries(data: unknown, term: string, depth = 0): unknown[] {
   const lowerTerm = term.toLowerCase();
   const results: unknown[] = [];
+  if (depth > MAX_JSON_SEARCH_DEPTH) return results;
   if (!data || typeof data !== 'object') return results;
 
-  function matchesInValue(value: unknown): boolean {
+  function matchesInValue(value: unknown, d: number): boolean {
+    if (d > MAX_JSON_SEARCH_DEPTH) return false;
     if (typeof value === 'string') return value.toLowerCase().includes(lowerTerm);
-    if (Array.isArray(value)) return value.some(v => matchesInValue(v));
-    if (value && typeof value === 'object') return Object.values(value as object).some(v => matchesInValue(v));
+    if (Array.isArray(value)) return value.some(v => matchesInValue(v, d + 1));
+    if (value && typeof value === 'object') return Object.values(value as object).some(v => matchesInValue(v, d + 1));
     return false;
   }
 
   if (Array.isArray(data)) {
     for (const entry of data) {
-      if (matchesInValue(entry)) results.push(entry);
+      if (matchesInValue(entry, depth + 1)) results.push(entry);
     }
   } else {
     for (const [, value] of Object.entries(data as object)) {
       if (Array.isArray(value)) {
         for (const entry of value) {
-          if (matchesInValue(entry)) results.push(entry);
+          if (matchesInValue(entry, depth + 1)) results.push(entry);
         }
       }
     }

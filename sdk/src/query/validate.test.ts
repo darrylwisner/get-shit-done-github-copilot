@@ -10,7 +10,21 @@ import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { GSDError } from '../errors.js';
 
-import { verifyKeyLinks, validateConsistency, validateHealth } from './validate.js';
+import { verifyKeyLinks, validateConsistency, validateHealth, regexForKeyLinkPattern } from './validate.js';
+
+// ─── regexForKeyLinkPattern ────────────────────────────────────────────────
+
+describe('regexForKeyLinkPattern', () => {
+  it('preserves normal regex patterns used in key_links', () => {
+    const re = regexForKeyLinkPattern('import.*foo.*from.*target');
+    expect(re.test("import { foo } from './target.js';")).toBe(true);
+  });
+
+  it('falls back to literal match for nested-quantifier patterns', () => {
+    const re = regexForKeyLinkPattern('(a+)+');
+    expect(re.source).toContain('\\');
+  });
+});
 
 // ─── verifyKeyLinks ────────────────────────────────────────────────────────
 
@@ -198,7 +212,7 @@ must_haves:
     expect(links[0].detail).toBe('Target referenced in source');
   });
 
-  it('returns Invalid regex pattern for bad regex', async () => {
+  it('falls back to literal match when regex syntax is invalid', async () => {
     await writeFile(join(tmpDir, 'source.ts'), 'const x = 1;');
     await writeFile(join(tmpDir, 'target.ts'), 'const y = 2;');
 
@@ -227,7 +241,7 @@ must_haves:
     const data = result.data as Record<string, unknown>;
     const links = data.links as Array<Record<string, unknown>>;
     expect(links[0].verified).toBe(false);
-    expect((links[0].detail as string).startsWith('Invalid regex pattern')).toBe(true);
+    expect((links[0].detail as string)).toContain('not found');
   });
 
   it('returns error when no must_haves.key_links in plan', async () => {

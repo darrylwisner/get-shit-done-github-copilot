@@ -232,3 +232,28 @@ describe('frontmatterValidate', () => {
     expect(FRONTMATTER_SCHEMAS).toHaveProperty('verification');
   });
 });
+
+// ─── Round-trip (extract → reconstruct → splice) ───────────────────────────
+
+describe('frontmatter round-trip', () => {
+  it('preserves scalar and list fields through extract + splice', () => {
+    const original = `---
+phase: "01"
+plan: "02"
+type: execute
+wave: 1
+depends_on: []
+tags: [a, b]
+---
+# Title
+`;
+    const fm = extractFrontmatter(original) as Record<string, unknown>;
+    const spliced = spliceFrontmatter('# Title\n', fm);
+    expect(spliced.startsWith('---\n')).toBe(true);
+    const round = extractFrontmatter(spliced) as Record<string, unknown>;
+    expect(String(round.phase)).toBe('01');
+    // YAML may round-trip wave as number or string depending on parser output
+    expect(Number(round.wave)).toBe(1);
+    expect(Array.isArray(round.tags)).toBe(true);
+  });
+});

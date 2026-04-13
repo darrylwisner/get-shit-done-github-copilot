@@ -2,7 +2,11 @@
  * Unit tests for shared query helpers.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { GSDError } from '../errors.js';
 import {
   escapeRegex,
   normalizePhaseName,
@@ -13,6 +17,7 @@ import {
   stateExtractField,
   planningPaths,
   normalizeMd,
+  resolvePathUnderProject,
 } from './helpers.js';
 
 // ─── escapeRegex ────────────────────────────────────────────────────────────
@@ -221,5 +226,29 @@ describe('normalizeMd', () => {
     const input = '# Title\n\nSome text.\n\n## Section\n\nMore text.\n';
     const result = normalizeMd(input);
     expect(result).toBe(input);
+  });
+});
+
+// ─── resolvePathUnderProject ────────────────────────────────────────────────
+
+describe('resolvePathUnderProject', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'gsd-path-'));
+    await writeFile(join(tmpDir, 'safe.md'), 'x', 'utf-8');
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('resolves a relative file under the project root', async () => {
+    const p = await resolvePathUnderProject(tmpDir, 'safe.md');
+    expect(p.endsWith('safe.md')).toBe(true);
+  });
+
+  it('rejects paths that escape the project root', async () => {
+    await expect(resolvePathUnderProject(tmpDir, '../../etc/passwd')).rejects.toThrow(GSDError);
   });
 });
