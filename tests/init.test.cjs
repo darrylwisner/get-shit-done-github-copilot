@@ -353,6 +353,76 @@ describe('init commands ROADMAP fallback when phase directory does not exist (#1
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// init ignores archived phases from prior milestones that share a phase number
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('init commands ignore archived phases from prior milestones sharing a number', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    // Current milestone ROADMAP has Phase 2 but no disk directory yet
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      '# v2.0 Roadmap\n\n### Phase 2: New Feature\n**Goal:** New v2.0 feature\n**Requirements**: NEW-01, NEW-02\n**Plans:** TBD\n'
+    );
+    // Prior milestone archive has a shipped Phase 2 with different slug and artifacts
+    const archivedDir = path.join(tmpDir, '.planning', 'milestones', 'v1.0-phases', '02-old-feature');
+    fs.mkdirSync(archivedDir, { recursive: true });
+    fs.writeFileSync(path.join(archivedDir, '2-CONTEXT.md'), '# OLD v1.0 Phase 2 context');
+    fs.writeFileSync(path.join(archivedDir, '2-RESEARCH.md'), '# OLD v1.0 Phase 2 research');
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('init plan-phase prefers current ROADMAP entry over archived v1.0 phase of same number', () => {
+    const result = runGsdTools('init plan-phase 2', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, true);
+    assert.strictEqual(output.phase_name, 'New Feature',
+      'phase_name must come from current ROADMAP.md, not archived v1.0');
+    assert.strictEqual(output.phase_slug, 'new-feature');
+    assert.strictEqual(output.phase_dir, null,
+      'phase_dir must be null — current milestone has no directory yet');
+    assert.strictEqual(output.has_context, false,
+      'has_context must not inherit archived v1.0 artifacts');
+    assert.strictEqual(output.has_research, false,
+      'has_research must not inherit archived v1.0 artifacts');
+    assert.ok(!output.context_path,
+      'context_path must not point at archived v1.0 file');
+    assert.ok(!output.research_path,
+      'research_path must not point at archived v1.0 file');
+    assert.strictEqual(output.phase_req_ids, 'NEW-01, NEW-02');
+  });
+
+  test('init execute-phase prefers current ROADMAP entry over archived v1.0 phase of same number', () => {
+    const result = runGsdTools('init execute-phase 2', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, true);
+    assert.strictEqual(output.phase_name, 'New Feature');
+    assert.strictEqual(output.phase_slug, 'new-feature');
+    assert.strictEqual(output.phase_dir, null);
+    assert.strictEqual(output.phase_req_ids, 'NEW-01, NEW-02');
+  });
+
+  test('init verify-work prefers current ROADMAP entry over archived v1.0 phase of same number', () => {
+    const result = runGsdTools('init verify-work 2', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.phase_found, true);
+    assert.strictEqual(output.phase_name, 'New Feature');
+    assert.strictEqual(output.phase_dir, null);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // cmdInitTodos (INIT-01)
 // ─────────────────────────────────────────────────────────────────────────────
 

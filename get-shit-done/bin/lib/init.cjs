@@ -58,6 +58,16 @@ function cmdInitExecutePhase(cwd, phase, raw, options = {}) {
 
   const roadmapPhase = getRoadmapPhaseInternal(cwd, phase);
 
+  // If findPhaseInternal matched an archived phase from a prior milestone, but
+  // the phase exists in the current milestone's ROADMAP.md, ignore the archive
+  // match — we are initializing a new phase in the current milestone that
+  // happens to share a number with an archived one. Without this, phase_dir,
+  // phase_slug and related fields would point at artifacts from a previous
+  // milestone.
+  if (phaseInfo?.archived && roadmapPhase?.found) {
+    phaseInfo = null;
+  }
+
   // Fallback to ROADMAP.md if no phase directory exists yet
   if (!phaseInfo && roadmapPhase?.found) {
     const phaseName = roadmapPhase.phase_name;
@@ -180,6 +190,16 @@ function cmdInitPlanPhase(cwd, phase, raw, options = {}) {
   let phaseInfo = findPhaseInternal(cwd, phase);
 
   const roadmapPhase = getRoadmapPhaseInternal(cwd, phase);
+
+  // If findPhaseInternal matched an archived phase from a prior milestone, but
+  // the phase exists in the current milestone's ROADMAP.md, ignore the archive
+  // match — we are planning a new phase in the current milestone that happens
+  // to share a number with an archived one. Without this, phase_dir,
+  // phase_slug, has_context and has_research would point at artifacts from a
+  // previous milestone.
+  if (phaseInfo?.archived && roadmapPhase?.found) {
+    phaseInfo = null;
+  }
 
   // Fallback to ROADMAP.md if no phase directory exists yet
   if (!phaseInfo && roadmapPhase?.found) {
@@ -551,6 +571,16 @@ function cmdInitVerifyWork(cwd, phase, raw) {
 
   const config = loadConfig(cwd);
   let phaseInfo = findPhaseInternal(cwd, phase);
+
+  // If findPhaseInternal matched an archived phase from a prior milestone, but
+  // the phase exists in the current milestone's ROADMAP.md, ignore the archive
+  // match — same pattern as cmdInitPhaseOp.
+  if (phaseInfo?.archived) {
+    const roadmapPhase = getRoadmapPhaseInternal(cwd, phase);
+    if (roadmapPhase?.found) {
+      phaseInfo = null;
+    }
+  }
 
   // Fallback to ROADMAP.md if no phase directory exists yet
   if (!phaseInfo) {
