@@ -14,7 +14,7 @@ Read project state to determine current position:
 
 ```bash
 # Get state snapshot
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state json 2>/dev/null || echo "{}"
+gsd-sdk query state.json 2>/dev/null || echo "{}"
 ```
 
 Also read:
@@ -83,7 +83,7 @@ Use `--force` to bypass this check.
 Exit.
 
 **Prior-phase completeness scan:**
-After passing all three hard-stop gates, scan all phases that precede the current phase in ROADMAP.md order for incomplete work. Use the existing `gsd-tools.cjs phase json <N>` output to inspect each prior phase.
+After passing all three hard-stop gates, scan all phases that precede the current phase in ROADMAP.md order for incomplete work. For each prior phase number `N`, use `gsd-sdk query find-phase <N>` JSON (plans, summaries, incomplete_plans, etc.) to inspect that phase.
 
 Detect three categories of incomplete work:
 1. **Plans without summaries** — a PLAN.md exists in a prior phase directory but no matching SUMMARY.md exists (execution started but not completed).
@@ -127,7 +127,7 @@ Choice [S]:
 ```
 2. Commit the deferral record:
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: defer incomplete Phase {src} items to backlog"
+gsd-sdk query commit "docs: defer incomplete Phase {src} items to backlog"
 ```
 3. Continue routing to `determine_next_action` immediately — no second prompt.
 

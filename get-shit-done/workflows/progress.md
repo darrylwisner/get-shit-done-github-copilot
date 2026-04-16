@@ -12,14 +12,14 @@ Read all files referenced by the invoking prompt's execution_context before star
 **Load progress context (paths only):**
 
 ```bash
-INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init progress)
+INIT=$(gsd-sdk query init.progress)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
 Extract from init JSON: `project_exists`, `roadmap_exists`, `state_exists`, `phases`, `current_phase`, `next_phase`, `milestone_version`, `completed_count`, `phase_count`, `paused_at`, `state_path`, `roadmap_path`, `project_path`, `config_path`.
 
 ```bash
-DISCUSS_MODE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
+DISCUSS_MODE=$(gsd-sdk query config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
 ```
 
 If `project_exists` is false (no `.planning/` directory):
@@ -42,11 +42,11 @@ If missing both ROADMAP.md and PROJECT.md: suggest `/gsd-new-project`.
 </step>
 
 <step name="load">
-**Use structured extraction from gsd-tools:**
+**Use structured extraction from `gsd-sdk query` (or legacy gsd-tools.cjs):**
 
 Instead of reading full files, use targeted tools to get only the data needed for the report:
-- `ROADMAP=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze)`
-- `STATE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state-snapshot)`
+- `ROADMAP=$(gsd-sdk query roadmap.analyze)`
+- `STATE=$(gsd-sdk query state-snapshot)`
 
 This minimizes orchestrator context usage.
 </step>
@@ -55,7 +55,7 @@ This minimizes orchestrator context usage.
 **Get comprehensive roadmap analysis (replaces manual parsing):**
 
 ```bash
-ROADMAP=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze)
+ROADMAP=$(gsd-sdk query roadmap.analyze)
 ```
 
 This returns structured JSON with:
@@ -74,7 +74,7 @@ Use this instead of manually reading/parsing ROADMAP.md.
 - Find the 2-3 most recent SUMMARY.md files
 - Use `summary-extract` for efficient parsing:
   ```bash
-  node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" summary-extract <path> --fields one_liner
+  gsd-sdk query summary-extract <path> --fields one_liner
   ```
 - This shows "what we've been working on"
   </step>
@@ -89,11 +89,11 @@ Use this instead of manually reading/parsing ROADMAP.md.
   </step>
 
 <step name="report">
-**Generate progress bar from gsd-tools, then present rich status report:**
+**Generate progress bar from `gsd-sdk query progress` / `progress.json`, then present rich status report:**
 
 ```bash
 # Get formatted progress bar
-PROGRESS_BAR=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" progress bar --raw)
+PROGRESS_BAR=$(gsd-sdk query progress.bar --raw)
 ```
 
 Present:
@@ -168,7 +168,7 @@ Track:
 Scan ALL phases in the current milestone for outstanding verification debt using the CLI (which respects milestone boundaries via `getMilestonePhaseFilter`):
 
 ```bash
-DEBT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" audit-uat --raw 2>/dev/null)
+DEBT=$(gsd-sdk query audit-uat --raw 2>/dev/null)
 ```
 
 Parse JSON for `summary.total_items` and `summary.total_files`.
@@ -231,7 +231,7 @@ Check if `{phase_num}-CONTEXT.md` exists in phase directory.
 Check if current phase has UI indicators:
 
 ```bash
-PHASE_SECTION=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "${CURRENT_PHASE}" 2>/dev/null)
+PHASE_SECTION=$(gsd-sdk query roadmap.get-phase "${CURRENT_PHASE}" 2>/dev/null)
 PHASE_HAS_UI=$(echo "$PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" || echo "false")
 ```
 
@@ -377,7 +377,7 @@ Read ROADMAP.md to get the next phase's name and goal.
 Check if next phase has UI indicators:
 
 ```bash
-NEXT_PHASE_SECTION=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "$((Z+1))" 2>/dev/null)
+NEXT_PHASE_SECTION=$(gsd-sdk query roadmap.get-phase "$((Z+1))" 2>/dev/null)
 NEXT_HAS_UI=$(echo "$NEXT_PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" || echo "false")
 ```
 

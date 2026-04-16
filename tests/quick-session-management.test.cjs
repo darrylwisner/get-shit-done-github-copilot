@@ -57,8 +57,8 @@ describe('quick session management (#2155)', () => {
 
   test('quick command list uses frontmatter get for status', () => {
     assert.ok(
-      quickCmd.includes('frontmatter get'),
-      'list should use frontmatter get to read status'
+      quickCmd.includes('frontmatter get') || quickCmd.includes('frontmatter.get'),
+      'list should use frontmatter get / frontmatter.get to read status'
     );
   });
 

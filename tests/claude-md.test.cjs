@@ -69,7 +69,10 @@ describe('new-project workflow includes CLAUDE.md generation', () => {
     const content = fs.readFileSync(workflowPath, 'utf-8');
     assert.ok(content.includes('generate-claude-md'));
     // Codex fix: workflow now uses $INSTRUCTION_FILE (AGENTS.md for Codex, CLAUDE.md otherwise)
-    assert.ok(content.includes('--files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md "$INSTRUCTION_FILE"'));
+    assert.ok(
+      content.includes('.planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md "$INSTRUCTION_FILE"'),
+      'final roadmap commit should stage ROADMAP, STATE, REQUIREMENTS, and instruction file'
+    );
   });
 
   test('new-project artifacts reference instruction file variable', () => {

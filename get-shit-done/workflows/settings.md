@@ -12,9 +12,9 @@ Read all files referenced by the invoking prompt's execution_context before star
 Ensure config exists and load current state:
 
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-ensure-section
+gsd-sdk query config-ensure-section
 GSD_CONFIG_PATH=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-path)
-INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state load)
+INIT=$(gsd-sdk query state.load)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 

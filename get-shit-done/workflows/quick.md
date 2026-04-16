@@ -125,18 +125,18 @@ If `$VALIDATE_MODE` only:
 **Step 2: Initialize**
 
 ```bash
-INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init quick "$DESCRIPTION")
+INIT=$(gsd-sdk query init.quick "$DESCRIPTION")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_PLANNER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-planner 2>/dev/null)
-AGENT_SKILLS_EXECUTOR=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-executor 2>/dev/null)
-AGENT_SKILLS_CHECKER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-checker 2>/dev/null)
-AGENT_SKILLS_VERIFIER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-verifier 2>/dev/null)
+AGENT_SKILLS_PLANNER=$(gsd-sdk query agent-skills gsd-planner 2>/dev/null)
+AGENT_SKILLS_EXECUTOR=$(gsd-sdk query agent-skills gsd-executor 2>/dev/null)
+AGENT_SKILLS_CHECKER=$(gsd-sdk query agent-skills gsd-checker 2>/dev/null)
+AGENT_SKILLS_VERIFIER=$(gsd-sdk query agent-skills gsd-verifier 2>/dev/null)
 ```
 
 Parse JSON for: `planner_model`, `executor_model`, `checker_model`, `verifier_model`, `commit_docs`, `branch_name`, `quick_id`, `slug`, `date`, `timestamp`, `quick_dir`, `task_dir`, `roadmap_exists`, `planning_exists`.
 
 ```bash
-USE_WORKTREES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.use_worktrees 2>/dev/null || echo "true")
+USE_WORKTREES=$(gsd-sdk query config-get workflow.use_worktrees 2>/dev/null || echo "true")
 ```
 
 If the project uses git submodules, worktree isolation is skipped:
@@ -653,7 +653,7 @@ After executor returns:
 
        if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
           [ -n "$DELETED_FILES" ]; then
-         COMMIT_DOCS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get commit_docs 2>/dev/null || echo "true")
+         COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
            git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
            git commit --amend --no-edit 2>/dev/null || true
@@ -684,7 +684,7 @@ Skip this step entirely if `$FULL_MODE` is false.
 
 **Config gate:**
 ```bash
-CODE_REVIEW_ENABLED=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.code_review 2>/dev/null || echo "true")
+CODE_REVIEW_ENABLED=$(gsd-sdk query config-get workflow.code_review 2>/dev/null || echo "true")
 ```
 If `"false"`, skip with message "Code review skipped (workflow.code_review=false)".
 
@@ -831,7 +831,7 @@ Use Edit tool to make these changes atomically
 
 **Step 8: Final commit and completion**
 
-Stage and commit quick task artifacts. This step MUST always run — even if the executor already committed some files (e.g. when running without worktree isolation). The `gsd-tools commit` command handles already-committed files gracefully.
+Stage and commit quick task artifacts. This step MUST always run — even if the executor already committed some files (e.g. when running without worktree isolation). The `gsd-sdk query commit` command (or legacy `gsd-tools.cjs` commit) handles already-committed files gracefully.
 
 Build file list:
 - `${QUICK_DIR}/${quick_id}-PLAN.md`
@@ -845,14 +845,14 @@ Build file list:
 # Explicitly stage all artifacts before commit — PLAN.md may be untracked
 # if the executor ran without worktree isolation and committed docs early
 # Filter .planning/ files from staging if commit_docs is disabled (#1783)
-COMMIT_DOCS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get commit_docs 2>/dev/null || echo "true")
+COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
 if [ "$COMMIT_DOCS" = "false" ]; then
   file_list_filtered=$(echo "${file_list}" | tr ' ' '\n' | grep -v '^\.planning/' | tr '\n' ' ')
   git add ${file_list_filtered} 2>/dev/null
 else
   git add ${file_list} 2>/dev/null
 fi
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list}
+gsd-sdk query commit "docs(quick-${quick_id}): ${DESCRIPTION}" ${file_list}
 ```
 
 Get final commit hash:

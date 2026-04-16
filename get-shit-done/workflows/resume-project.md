@@ -20,7 +20,7 @@ Instantly restore full project context so "Where were we?" has an immediate, com
 Load all context in one call:
 
 ```bash
-INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init resume)
+INIT=$(gsd-sdk query init.resume)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 

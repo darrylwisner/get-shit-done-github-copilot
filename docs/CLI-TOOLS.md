@@ -8,6 +8,8 @@
 
 `gsd-tools.cjs` is a Node.js CLI utility that replaces repetitive inline bash patterns across GSD's ~50 command, workflow, and agent files. It centralizes: config parsing, model resolution, phase lookup, git commits, summary verification, state management, and template operations.
 
+**Preferred for new orchestration:** Many of the same operations are available as `gsd-sdk query <command>` (see `sdk/src/query/index.ts` and `docs/QUERY-HANDLERS.md`). Use that in workflows and examples where the handler exists; keep `node … gsd-tools.cjs` for commands not yet in the registry (for example graphify) or when you need CJS-only flags.
+
 **Location:** `get-shit-done/bin/gsd-tools.cjs`
 **Modules:** 15 domain modules in `get-shit-done/bin/lib/`
 

@@ -327,13 +327,17 @@ describe('GSDTools', () => {
   // ─── resolveGsdToolsPath() tests ────────────────────────────────────────
 
   describe('resolveGsdToolsPath()', () => {
-    it('returns repo-local path when it exists', async () => {
+    it('prefers bundled gsd-tools over project .claude when the bundled file exists', async () => {
       const localBinDir = join(tmpDir, '.claude', 'get-shit-done', 'bin');
       await mkdir(localBinDir, { recursive: true });
       await writeFile(join(localBinDir, 'gsd-tools.cjs'), '// stub');
 
       const result = resolveGsdToolsPath(tmpDir);
-      expect(result).toBe(join(localBinDir, 'gsd-tools.cjs'));
+      if (existsSync(BUNDLED_GSD_TOOLS_PATH)) {
+        expect(result).toBe(BUNDLED_GSD_TOOLS_PATH);
+      } else {
+        expect(result).toBe(join(localBinDir, 'gsd-tools.cjs'));
+      }
     });
 
     it('falls back to bundled repo path when repo-local does not exist', () => {
@@ -345,7 +349,7 @@ describe('GSDTools', () => {
       expect(result).toBe(expected);
     });
 
-    it('constructor uses repo-local path when available', async () => {
+    it('uses explicit gsdToolsPath when provided (overrides bundled / .claude resolution)', async () => {
       const localBinDir = join(tmpDir, '.claude', 'get-shit-done', 'bin');
       await mkdir(localBinDir, { recursive: true });
       const scriptPath = join(localBinDir, 'gsd-tools.cjs');
@@ -355,8 +359,7 @@ describe('GSDTools', () => {
         { mode: 0o755 },
       );
 
-      // No explicit gsdToolsPath — should auto-resolve to local
-      const tools = new GSDTools({ projectDir: tmpDir });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.exec('test', []);
       expect(result).toEqual({ source: 'local' });
     });

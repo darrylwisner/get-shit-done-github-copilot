@@ -48,7 +48,7 @@ When `--interactive` is set, discuss runs inline with questions (not auto-answer
 Bootstrap via milestone-level init:
 
 ```bash
-INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init milestone-op)
+INIT=$(gsd-sdk query init.milestone-op)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -82,7 +82,7 @@ If `INTERACTIVE` is set, display: `Mode: Interactive (discuss inline, plan+execu
 Run phase discovery:
 
 ```bash
-ROADMAP=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze)
+ROADMAP=$(gsd-sdk query roadmap.analyze)
 ```
 
 Parse the JSON `phases` array.
@@ -141,7 +141,7 @@ Exit cleanly.
 **Fetch details for each phase:**
 
 ```bash
-DETAIL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase ${PHASE_NUM})
+DETAIL=$(gsd-sdk query roadmap.get-phase ${PHASE_NUM})
 ```
 
 Extract `phase_name`, `goal`, `success_criteria` from each. Store for use in execute_phase and transition messages.
@@ -169,7 +169,7 @@ Where N = current phase number (from the ROADMAP, e.g., 63), T = total milestone
 Check if CONTEXT.md already exists for this phase:
 
 ```bash
-PHASE_STATE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op ${PHASE_NUM})
+PHASE_STATE=$(gsd-sdk query init.phase-op ${PHASE_NUM})
 ```
 
 Parse `has_context` from JSON.
@@ -185,7 +185,7 @@ Proceed to 3b.
 **If has_context is false:** Check if discuss is disabled via settings:
 
 ```bash
-SKIP_DISCUSS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.skip_discuss 2>/dev/null || echo "false")
+SKIP_DISCUSS=$(gsd-sdk query config-get workflow.skip_discuss 2>/dev/null || echo "false")
 ```
 
 **If SKIP_DISCUSS is `true`:** Skip discuss entirely — the ROADMAP phase description is the spec. Display:
@@ -197,7 +197,7 @@ Phase ${PHASE_NUM}: Discuss skipped (workflow.skip_discuss=true) — using ROADM
 Write a minimal CONTEXT.md so downstream plan-phase has valid input. Get phase details:
 
 ```bash
-DETAIL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase ${PHASE_NUM})
+DETAIL=$(gsd-sdk query roadmap.get-phase ${PHASE_NUM})
 ```
 
 Extract `goal` and `requirements` from JSON. Write `${phase_dir}/${padded_phase}-CONTEXT.md` with:
@@ -249,7 +249,7 @@ None — discuss phase skipped.
 Commit the minimal context:
 
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(${PADDED_PHASE}): auto-generated context (discuss skipped)" --files "${phase_dir}/${padded_phase}-CONTEXT.md"
+gsd-sdk query commit "docs(${PADDED_PHASE}): auto-generated context (discuss skipped)" "${phase_dir}/${padded_phase}-CONTEXT.md"
 ```
 
 Proceed to 3b.
@@ -270,7 +270,7 @@ Skill(skill="gsd:discuss-phase", args="${PHASE_NUM}")
 After discuss completes (either mode), verify context was written:
 
 ```bash
-PHASE_STATE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op ${PHASE_NUM})
+PHASE_STATE=$(gsd-sdk query init.phase-op ${PHASE_NUM})
 ```
 
 Check `has_context`. If false → go to handle_blocker: "Discuss for phase ${PHASE_NUM} did not produce CONTEXT.md."
@@ -280,7 +280,7 @@ Check `has_context`. If false → go to handle_blocker: "Discuss for phase ${PHA
 Check if this phase has frontend indicators and whether a UI-SPEC already exists:
 
 ```bash
-PHASE_SECTION=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase ${PHASE_NUM} 2>/dev/null)
+PHASE_SECTION=$(gsd-sdk query roadmap.get-phase ${PHASE_NUM} 2>/dev/null)
 echo "$PHASE_SECTION" | grep -iE "UI|interface|frontend|component|layout|page|screen|view|form|dashboard|widget" > /dev/null 2>&1
 HAS_UI=$?
 UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
@@ -289,7 +289,7 @@ UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
 Check if UI phase workflow is enabled:
 
 ```bash
-UI_PHASE_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.ui_phase 2>/dev/null || echo "true")
+UI_PHASE_CFG=$(gsd-sdk query config-get workflow.ui_phase 2>/dev/null || echo "true")
 ```
 
 **If `HAS_UI` is 0 (frontend indicators found) AND `UI_SPEC_FILE` is empty (no UI-SPEC exists) AND `UI_PHASE_CFG` is not `false`:**
@@ -362,7 +362,7 @@ Auto-invoke code review and fix chain. Autonomous mode chains both review and fi
 
 **Config gate:**
 ```bash
-CODE_REVIEW_ENABLED=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.code_review 2>/dev/null || echo "true")
+CODE_REVIEW_ENABLED=$(gsd-sdk query config-get workflow.code_review 2>/dev/null || echo "true")
 ```
 If `"false"`: display "Code review skipped (workflow.code_review=false)" and proceed to 3d.
 
@@ -390,7 +390,7 @@ VERIFY_STATUS=$(grep "^status:" "${PHASE_DIR}"/*-VERIFICATION.md 2>/dev/null | h
 Where `PHASE_DIR` comes from the `init phase-op` call already made in step 3a. If the variable is not in scope, re-fetch:
 
 ```bash
-PHASE_STATE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op ${PHASE_NUM})
+PHASE_STATE=$(gsd-sdk query init.phase-op ${PHASE_NUM})
 ```
 
 Parse `phase_dir` from the JSON.
@@ -486,7 +486,7 @@ UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
 Check if UI review is enabled:
 
 ```bash
-UI_REVIEW_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.ui_review 2>/dev/null || echo "true")
+UI_REVIEW_CFG=$(gsd-sdk query config-get workflow.ui_review 2>/dev/null || echo "true")
 ```
 
 **If `UI_SPEC_FILE` is not empty AND `UI_REVIEW_CFG` is not `false`:**
@@ -545,7 +545,7 @@ Proceed directly to lifecycle step (which handles partial completion — skips a
 **Otherwise:** After each phase completes, re-read ROADMAP.md to catch phases inserted mid-execution (decimal phases like 5.1):
 
 ```bash
-ROADMAP=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze)
+ROADMAP=$(gsd-sdk query roadmap.analyze)
 ```
 
 Re-filter incomplete phases using the same logic as discover_phases:

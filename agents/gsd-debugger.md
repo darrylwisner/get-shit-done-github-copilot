@@ -1227,7 +1227,7 @@ mv .planning/debug/{slug}.md .planning/debug/resolved/
 **Check planning config using state load (commit_docs is available from the output):**
 
 ```bash
-INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state load)
+INIT=$(gsd-sdk query state.load)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 # commit_docs is in the JSON output
 ```
@@ -1245,7 +1245,7 @@ Root cause: {root_cause}"
 
 Then commit planning docs via CLI (respects `commit_docs` config automatically):
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: resolve debug {slug}" --files .planning/debug/resolved/{slug}.md
+gsd-sdk query commit "docs: resolve debug {slug}" .planning/debug/resolved/{slug}.md
 ```
 
 **Append to knowledge base:**
@@ -1276,7 +1276,7 @@ Then append the entry:
 
 Commit the knowledge base update alongside the resolved session:
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: update debug knowledge base with {slug}" --files .planning/debug/knowledge-base.md
+gsd-sdk query commit "docs: update debug knowledge base with {slug}" .planning/debug/knowledge-base.md
 ```
 
 Report completion and offer next steps.

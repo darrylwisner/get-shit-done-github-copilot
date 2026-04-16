@@ -66,8 +66,8 @@ describe('thread session management (#2156)', () => {
 
   test('thread command list reads frontmatter status', () => {
     assert.ok(
-      threadCmd.includes('frontmatter get'),
-      'list mode should read status via frontmatter get'
+      threadCmd.includes('frontmatter get') || threadCmd.includes('frontmatter.get'),
+      'list mode should read status via frontmatter get / frontmatter.get'
     );
   });
 

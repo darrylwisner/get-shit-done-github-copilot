@@ -91,7 +91,7 @@ Set `is_re_verification = false`, proceed with Step 1.
 ```bash
 ls "$PHASE_DIR"/*-PLAN.md 2>/dev/null
 ls "$PHASE_DIR"/*-SUMMARY.md 2>/dev/null
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "$PHASE_NUM"
+gsd-sdk query roadmap.get-phase "$PHASE_NUM"
 grep -E "^| $PHASE_NUM" .planning/REQUIREMENTS.md 2>/dev/null
 ```
 
@@ -104,7 +104,7 @@ In re-verification mode, must-haves come from Step 0.
 **Step 2a: Always load ROADMAP Success Criteria**
 
 ```bash
-PHASE_DATA=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "$PHASE_NUM" --raw)
+PHASE_DATA=$(gsd-sdk query roadmap.get-phase "$PHASE_NUM" --raw)
 ```
 
 Parse the `success_criteria` array from the JSON output. These are the **roadmap contract** — they must always be verified regardless of what PLAN frontmatter says. Store them as `roadmap_truths`.
@@ -206,10 +206,10 @@ overrides:
 
 ## Step 4: Verify Artifacts (Three Levels)
 
-Use gsd-tools for artifact verification against must_haves in PLAN frontmatter:
+Use `gsd-sdk query` for artifact verification against must_haves in PLAN frontmatter:
 
 ```bash
-ARTIFACT_RESULT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" verify artifacts "$PLAN_PATH")
+ARTIFACT_RESULT=$(gsd-sdk query verify.artifacts "$PLAN_PATH")
 ```
 
 Parse JSON result: `{ all_passed, passed, total, artifacts: [{path, exists, issues, passed}] }`
@@ -312,10 +312,10 @@ grep -r -A 3 "<${COMPONENT_NAME}" "${search_path:-src/}" --include="*.tsx" 2>/de
 
 Key links are critical connections. If broken, the goal fails even with all artifacts present.
 
-Use gsd-tools for key link verification against must_haves in PLAN frontmatter:
+Use `gsd-sdk query` for key link verification against must_haves in PLAN frontmatter:
 
 ```bash
-LINKS_RESULT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" verify key-links "$PLAN_PATH")
+LINKS_RESULT=$(gsd-sdk query verify.key-links "$PLAN_PATH")
 ```
 
 Parse JSON result: `{ all_verified, verified, total, links: [{from, to, via, verified, detail}] }`
@@ -397,12 +397,12 @@ Identify files modified in this phase from SUMMARY.md key-files section, or extr
 
 ```bash
 # Option 1: Extract from SUMMARY frontmatter
-SUMMARY_FILES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" summary-extract "$PHASE_DIR"/*-SUMMARY.md --fields key-files)
+SUMMARY_FILES=$(gsd-sdk query summary-extract "$PHASE_DIR"/*-SUMMARY.md --fields key-files)
 
 # Option 2: Verify commits exist (if commit hashes documented)
 COMMIT_HASHES=$(grep -oE "[a-f0-9]{7,40}" "$PHASE_DIR"/*-SUMMARY.md | head -10)
 if [ -n "$COMMIT_HASHES" ]; then
-  COMMITS_VALID=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" verify commits $COMMIT_HASHES)
+  COMMITS_VALID=$(gsd-sdk query verify.commits $COMMIT_HASHES)
 fi
 
 # Fallback: grep for files
@@ -516,7 +516,7 @@ Before reporting gaps, check if any identified gaps are explicitly addressed in 
 **Load the full milestone roadmap:**
 
 ```bash
-ROADMAP_DATA=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze --raw)
+ROADMAP_DATA=$(gsd-sdk query roadmap.analyze --raw)
 ```
 
 Parse the JSON to extract all phases. Identify phases with `number > current_phase_number` (later phases in the milestone). For each later phase, extract its `goal` and `success_criteria`.

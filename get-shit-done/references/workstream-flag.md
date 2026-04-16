@@ -93,23 +93,19 @@ This ensures workstream scope chains automatically through the workflow:
 ## CLI Usage
 
 ```bash
-# GSD_TOOLS resolves to the installed bin path, e.g.:
-#   $HOME/.claude/get-shit-done/bin/gsd-tools.cjs  (global install)
-#   .claude/get-shit-done/bin/gsd-tools.cjs         (local install)
-
-# All gsd-tools commands accept --ws
-node "$GSD_TOOLS" state json --ws feature-a
-node "$GSD_TOOLS" find-phase 3 --ws feature-b
+# All gsd-sdk query commands accept --ws
+gsd-sdk query state.json --ws feature-a
+gsd-sdk query find-phase 3 --ws feature-b
 
 # Session-local switching without --ws on every command
-GSD_SESSION_KEY=my-terminal-a node "$GSD_TOOLS" workstream set feature-a
-GSD_SESSION_KEY=my-terminal-a node "$GSD_TOOLS" state json
-GSD_SESSION_KEY=my-terminal-b node "$GSD_TOOLS" workstream set feature-b
-GSD_SESSION_KEY=my-terminal-b node "$GSD_TOOLS" state json
+GSD_SESSION_KEY=my-terminal-a gsd-sdk query workstream.set feature-a
+GSD_SESSION_KEY=my-terminal-a gsd-sdk query state.json
+GSD_SESSION_KEY=my-terminal-b gsd-sdk query workstream.set feature-b
+GSD_SESSION_KEY=my-terminal-b gsd-sdk query state.json
 
 # Workstream CRUD
-node "$GSD_TOOLS" workstream create <name>
-node "$GSD_TOOLS" workstream list
-node "$GSD_TOOLS" workstream status <name>
-node "$GSD_TOOLS" workstream complete <name>
+gsd-sdk query workstream.create <name>
+gsd-sdk query workstream.list
+gsd-sdk query workstream.status <name>
+gsd-sdk query workstream.complete <name>
 ```

@@ -48,7 +48,7 @@ Context files are resolved in-workflow using `init phase-op` and roadmap/state t
 <process>
 **Mode routing:**
 ```bash
-DISCUSS_MODE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
+DISCUSS_MODE=$(gsd-sdk query config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
 ```
 
 If `DISCUSS_MODE` is `"assumptions"`: Read and execute @~/.claude/get-shit-done/workflows/discuss-phase-assumptions.md end-to-end.
