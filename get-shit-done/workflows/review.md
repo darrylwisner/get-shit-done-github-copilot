@@ -80,7 +80,7 @@ Rules:
 Collect phase artifacts for the review prompt:
 
 ```bash
-INIT=$(gsd-sdk query init.phase-op "${PHASE_ARG}")
+INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op "${PHASE_ARG}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -151,11 +151,10 @@ Write to a temp file: `/tmp/gsd-review-prompt-{phase}.md`
 Read model preferences from planning config. Null/missing values fall back to CLI defaults.
 
 ```bash
-# JSON scalars from gsd-sdk query; use jq -r to strip JSON string quotes (install jq if missing)
-GEMINI_MODEL=$(gsd-sdk query config-get review.models.gemini 2>/dev/null | jq -r '.' 2>/dev/null || true)
-CLAUDE_MODEL=$(gsd-sdk query config-get review.models.claude 2>/dev/null | jq -r '.' 2>/dev/null || true)
-CODEX_MODEL=$(gsd-sdk query config-get review.models.codex 2>/dev/null | jq -r '.' 2>/dev/null || true)
-OPENCODE_MODEL=$(gsd-sdk query config-get review.models.opencode 2>/dev/null | jq -r '.' 2>/dev/null || true)
+GEMINI_MODEL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get review.models.gemini --raw 2>/dev/null || true)
+CLAUDE_MODEL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get review.models.claude --raw 2>/dev/null || true)
+CODEX_MODEL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get review.models.codex --raw 2>/dev/null || true)
+OPENCODE_MODEL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get review.models.opencode --raw 2>/dev/null || true)
 ```
 
 For each selected CLI, invoke in sequence (not parallel — avoid rate limits):
@@ -163,27 +162,27 @@ For each selected CLI, invoke in sequence (not parallel — avoid rate limits):
 **Gemini:**
 ```bash
 if [ -n "$GEMINI_MODEL" ] && [ "$GEMINI_MODEL" != "null" ]; then
-  cat /tmp/gsd-review-prompt-{phase}.md | gemini -m "$GEMINI_MODEL" -p - 2>/dev/null > /tmp/gsd-review-gemini-{phase}.md
+  gemini -m "$GEMINI_MODEL" -p "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-gemini-{phase}.md
 else
-  cat /tmp/gsd-review-prompt-{phase}.md | gemini -p - 2>/dev/null > /tmp/gsd-review-gemini-{phase}.md
+  gemini -p "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-gemini-{phase}.md
 fi
 ```
 
 **Claude (separate session):**
 ```bash
 if [ -n "$CLAUDE_MODEL" ] && [ "$CLAUDE_MODEL" != "null" ]; then
-  cat /tmp/gsd-review-prompt-{phase}.md | claude --model "$CLAUDE_MODEL" -p - 2>/dev/null > /tmp/gsd-review-claude-{phase}.md
+  claude --model "$CLAUDE_MODEL" -p "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-claude-{phase}.md
 else
-  cat /tmp/gsd-review-prompt-{phase}.md | claude -p - 2>/dev/null > /tmp/gsd-review-claude-{phase}.md
+  claude -p "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-claude-{phase}.md
 fi
 ```
 
 **Codex:**
 ```bash
 if [ -n "$CODEX_MODEL" ] && [ "$CODEX_MODEL" != "null" ]; then
-  cat /tmp/gsd-review-prompt-{phase}.md | codex exec --model "$CODEX_MODEL" --skip-git-repo-check - 2>/dev/null > /tmp/gsd-review-codex-{phase}.md
+  codex exec --model "$CODEX_MODEL" --skip-git-repo-check "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-codex-{phase}.md
 else
-  cat /tmp/gsd-review-prompt-{phase}.md | codex exec --skip-git-repo-check - 2>/dev/null > /tmp/gsd-review-codex-{phase}.md
+  codex exec --skip-git-repo-check "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-codex-{phase}.md
 fi
 ```
 
@@ -209,7 +208,7 @@ fi
 
 **Qwen Code:**
 ```bash
-cat /tmp/gsd-review-prompt-{phase}.md | qwen - 2>/dev/null > /tmp/gsd-review-qwen-{phase}.md
+qwen "$(cat /tmp/gsd-review-prompt-{phase}.md)" 2>/dev/null > /tmp/gsd-review-qwen-{phase}.md
 if [ ! -s /tmp/gsd-review-qwen-{phase}.md ]; then
   echo "Qwen review failed or returned empty output." > /tmp/gsd-review-qwen-{phase}.md
 fi
@@ -307,7 +306,7 @@ plans_reviewed: [{list of PLAN.md files}]
 
 Commit:
 ```bash
-gsd-sdk query commit "docs: cross-AI review for phase {N}" {phase_dir}/{padded_phase}-REVIEWS.md
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: cross-AI review for phase {N}" --files {phase_dir}/{padded_phase}-REVIEWS.md
 ```
 </step>
 

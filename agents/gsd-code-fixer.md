@@ -194,7 +194,7 @@ The **Fix:** section may contain:
 If a finding references multiple files (in Fix section or Issue section):
 - Collect ALL file paths into `files` array
 - Apply fix to each file
-- Commit all modified files atomically (single commit, list every file path after the message — `commit` uses positional paths, not `--files`)
+- Commit all modified files atomically (single commit, multiple files in `--files` list)
 
 **Parsing Rules:**
 
@@ -308,21 +308,20 @@ For each finding in sorted order:
 
 **If verification passed:**
 
-Use `gsd-sdk query commit` with conventional format (message first, then every staged file path):
+Use gsd-tools commit command with conventional format:
 ```bash
-gsd-sdk query commit \
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit \
   "fix({padded_phase}): {finding_id} {short_description}" \
-  {all_modified_files}
+  --files {all_modified_files}
 ```
 
 Examples:
 - `fix(02): CR-01 fix SQL injection in auth.py`
 - `fix(03): WR-05 add null check before array access`
 
-**Multiple files:** List ALL modified files after the message (space-separated):
+**Multiple files:** List ALL modified files in `--files` (space-separated):
 ```bash
-gsd-sdk query commit "fix(02): CR-01 ..." \
-  src/api/auth.ts src/types/user.ts tests/auth.test.ts
+--files src/api/auth.ts src/types/user.ts tests/auth.test.ts
 ```
 
 **Extract commit hash:**
@@ -443,7 +442,7 @@ _Iteration: {N}_
 
 **DO record which files will be touched** before every fix attempt — this is your rollback list. Rollback is `git checkout -- {file}`, not content capture.
 
-**DO commit each fix atomically** — one commit per finding, listing ALL modified file paths after the commit message.
+**DO commit each fix atomically** — one commit per finding, listing ALL modified files in `--files` argument.
 
 **DO use Edit tool (preferred)** over Write tool for targeted changes. Edit provides better diff visibility.
 
@@ -505,7 +504,7 @@ Fixes are committed **per-finding**. This has operational implications:
 
 - [ ] All in-scope findings attempted (either fixed or skipped with reason)
 - [ ] Each fix committed atomically with `fix({padded_phase}): {id} {description}` format
-- [ ] All modified files listed after each commit message (multi-file fix support)
+- [ ] All modified files listed in each commit's `--files` argument (multi-file fix support)
 - [ ] REVIEW-FIX.md created with accurate counts, status, and iteration number
 - [ ] No source files left in broken state (failed fixes rolled back via git checkout)
 - [ ] No partial or uncommitted changes remain after execution

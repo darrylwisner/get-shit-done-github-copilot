@@ -134,7 +134,7 @@ cannot forward TUI menu selections back to the host.
 
 Enable text mode:
 - Per-session: pass `--text` flag to any command (e.g., `/gsd-discuss-phase --text`)
-- Per-project: `gsd-sdk query config-set workflow.text_mode true`
+- Per-project: `gsd-tools config-set workflow.text_mode true`
 
 Text mode applies to ALL workflows in the session, not just discuss-phase.
 </answer_validation>
@@ -147,9 +147,9 @@ Text mode applies to ALL workflows in the session, not just discuss-phase.
 Phase number from argument (required).
 
 ```bash
-INIT=$(gsd-sdk query init.phase-op "${PHASE}")
+INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init phase-op "${PHASE}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_ADVISOR=$(gsd-sdk query agent-skills gsd-advisor 2>/dev/null)
+AGENT_SKILLS_ADVISOR=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-advisor 2>/dev/null)
 ```
 
 Parse JSON for: `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded_phase`, `has_research`, `has_context`, `has_plans`, `has_verification`, `plan_count`, `roadmap_exists`, `planning_exists`, `response_language`.
@@ -170,13 +170,6 @@ Exit workflow.
 - Skip interactive questioning entirely
 - Read and execute @~/.claude/get-shit-done/workflows/discuss-phase-power.md end-to-end
 - Do not continue with the steps below
-
-**All mode** — If `--all` is present in ARGUMENTS:
-- In `present_gray_areas`: auto-select ALL gray areas without asking the user (skips the AskUserQuestion selection step)
-- Discussion for each area proceeds fully interactively (user drives the conversation for every area)
-- Does NOT auto-advance to plan-phase afterward — use `--chain` or `--auto` if you want auto-advance
-- Log: `[--all] Auto-selected all gray areas: [list area names].`
-- This is the "discuss everything" shortcut: skip the selection friction, keep full interactive control
 
 **Auto mode** — If `--auto` is present in ARGUMENTS:
 - In `check_existing`: auto-select "Skip" (if context exists) or continue without prompting (if no context/plans)
@@ -338,7 +331,7 @@ Check if any pending todos are relevant to this phase's scope. Surfaces backlog 
 
 **Load and match todos:**
 ```bash
-TODO_MATCHES=$(gsd-sdk query todo.match-phase "${PHASE_NUMBER}")
+TODO_MATCHES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" todo match-phase "${PHASE_NUMBER}")
 ```
 
 Parse JSON for: `todo_count`, `matches[]` (each with `file`, `title`, `area`, `score`, `reasons`).
@@ -463,7 +456,7 @@ Check if advisor mode should activate:
 
 3. Resolve model for advisor agents:
    ```bash
-   ADVISOR_MODEL=$(gsd-sdk query resolve-model gsd-advisor-researcher --raw)
+   ADVISOR_MODEL=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" resolve-model gsd-advisor-researcher --raw)
    ```
 
 If ADVISOR_MODE is false, skip all advisor-specific steps — workflow proceeds with existing conversational flow unchanged.
@@ -529,7 +522,7 @@ We'll clarify HOW to implement this.
 - [Decision from Phase M that applies here]
 ```
 
-**If `--auto` or `--all`:** Auto-select ALL gray areas. Log: `[--auto/--all] Selected all gray areas: [list area names].` Skip the AskUserQuestion below and continue directly to discuss_areas with all areas selected.
+**If `--auto`:** Auto-select ALL gray areas. Log: `[auto] Selected all gray areas: [list area names].` Skip the AskUserQuestion below and continue directly to discuss_areas with all areas selected.
 
 **Otherwise, use AskUserQuestion (multiSelect: true):**
 - header: "Discuss"
@@ -766,7 +759,7 @@ In `--auto` mode, the discuss step MUST complete in a **single pass**. After wri
 
 Check the pass cap from config:
 ```bash
-MAX_PASSES=$(gsd-sdk query config-get workflow.max_discuss_passes 2>/dev/null || echo "3")
+MAX_PASSES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.max_discuss_passes 2>/dev/null || echo "3")
 ```
 
 If you have already written and committed CONTEXT.md, the discuss step is complete. Move on.
@@ -1038,7 +1031,7 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 
 ---
 
-## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
+## ▶ Next Up
 
 **Phase ${PHASE}: [Name]** — [Goal from ROADMAP.md]
 
@@ -1112,7 +1105,7 @@ rm -f "${phase_dir}/${padded_phase}-DISCUSS-CHECKPOINT.json"
 Commit phase context and discussion log:
 
 ```bash
-gsd-sdk query commit "docs(${padded_phase}): capture phase context" "${phase_dir}/${padded_phase}-CONTEXT.md" "${phase_dir}/${padded_phase}-DISCUSSION-LOG.md"
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(${padded_phase}): capture phase context" --files "${phase_dir}/${padded_phase}-CONTEXT.md" "${phase_dir}/${padded_phase}-DISCUSSION-LOG.md"
 ```
 
 Confirm: "Committed: docs(${padded_phase}): capture phase context"
@@ -1122,7 +1115,7 @@ Confirm: "Committed: docs(${padded_phase}): capture phase context"
 Update STATE.md with session info:
 
 ```bash
-gsd-sdk query state.record-session \
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" state record-session \
   --stopped-at "Phase ${PHASE} context gathered" \
   --resume-file "${phase_dir}/${padded_phase}-CONTEXT.md"
 ```
@@ -1130,29 +1123,29 @@ gsd-sdk query state.record-session \
 Commit STATE.md:
 
 ```bash
-gsd-sdk query commit "docs(state): record phase ${PHASE} context session" .planning/STATE.md
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(state): record phase ${PHASE} context session" --files .planning/STATE.md
 ```
 </step>
 
 <step name="auto_advance">
 Check for auto-advance trigger:
 
-1. Parse `--auto` and `--chain` flags from $ARGUMENTS. Note: --all is NOT an auto-advance trigger — it only affects area selection. A session with `--all` but without `--auto` or `--chain` returns to manual next-steps after discussion completes.
+1. Parse `--auto` and `--chain` flags from $ARGUMENTS
 2. **Sync chain flag with intent** — if user invoked manually (no `--auto` and no `--chain`), clear the ephemeral chain flag from any previous interrupted `--auto` chain. This does NOT touch `workflow.auto_advance` (the user's persistent settings preference):
    ```bash
    if [[ ! "$ARGUMENTS" =~ --auto ]] && [[ ! "$ARGUMENTS" =~ --chain ]]; then
-     gsd-sdk query config-set workflow._auto_chain_active false 2>/dev/null
+     node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow._auto_chain_active false 2>/dev/null
    fi
    ```
 3. Read both the chain flag and user preference:
    ```bash
-   AUTO_CHAIN=$(gsd-sdk query config-get workflow._auto_chain_active 2>/dev/null || echo "false")
-   AUTO_CFG=$(gsd-sdk query config-get workflow.auto_advance 2>/dev/null || echo "false")
+   AUTO_CHAIN=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow._auto_chain_active 2>/dev/null || echo "false")
+   AUTO_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.auto_advance 2>/dev/null || echo "false")
    ```
 
 **If `--auto` or `--chain` flag present AND `AUTO_CHAIN` is not true:** Persist chain flag to config (handles direct usage without new-project):
 ```bash
-gsd-sdk query config-set workflow._auto_chain_active true
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow._auto_chain_active true
 ```
 
 **If `--auto` flag present OR `--chain` flag present OR `AUTO_CHAIN` is true OR `AUTO_CFG` is true:**

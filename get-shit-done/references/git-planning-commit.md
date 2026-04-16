@@ -1,15 +1,13 @@
 # Git Planning Commit
 
-Commit planning artifacts via `gsd-sdk query commit`, which checks `commit_docs` config and gitignore status (same behavior as legacy `gsd-tools.cjs commit`).
+Commit planning artifacts using the gsd-tools CLI, which automatically checks `commit_docs` config and gitignore status.
 
 ## Commit via CLI
 
-Pass the message first, then file paths (positional). Do not use `--files` for `commit` (that flag is only for `commit-to-subrepo`).
-
-Always use this for `.planning/` files — it handles `commit_docs` and gitignore checks automatically:
+Always use `gsd-tools.cjs commit` for `.planning/` files — it handles `commit_docs` and gitignore checks automatically:
 
 ```bash
-gsd-sdk query commit "docs({scope}): {description}" .planning/STATE.md .planning/ROADMAP.md
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs({scope}): {description}" --files .planning/STATE.md .planning/ROADMAP.md
 ```
 
 The CLI will return `skipped` (with reason) if `commit_docs` is `false` or `.planning/` is gitignored. No manual conditional checks needed.
@@ -19,7 +17,7 @@ The CLI will return `skipped` (with reason) if `commit_docs` is `false` or `.pla
 To fold `.planning/` file changes into the previous commit:
 
 ```bash
-gsd-sdk query commit "" .planning/codebase/*.md --amend
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "" --files .planning/codebase/*.md --amend
 ```
 
 ## Commit Message Patterns
