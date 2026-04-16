@@ -828,7 +828,7 @@ start of execution when `--reviews` flag is present or reviews mode is active.
 Load planning context:
 
 ```bash
-INIT=$(gsd-sdk query init.plan-phase "${PHASE}")
+INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init plan-phase "${PHASE}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -896,8 +896,6 @@ Query the graph for phase-relevant dependency context (single query per D-06):
 node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" graphify query "<phase-goal-keyword>" --budget 2000
 ```
 
-(graphify is not exposed on `gsd-sdk query` yet; use `gsd-tools.cjs` for graphify only.)
-
 Use the keyword that best captures the phase goal. Examples:
 - Phase "User Authentication" -> query term "auth"
 - Phase "Payment Integration" -> query term "payment"
@@ -933,7 +931,7 @@ Apply discovery level protocol (see discovery_levels section).
 
 **Step 1 — Generate digest index:**
 ```bash
-gsd-sdk query history-digest
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" history-digest
 ```
 
 **Step 2 — Select relevant phases (typically 2-4):**
@@ -978,7 +976,7 @@ Read the most recent milestone retrospective and cross-milestone trends. Extract
 </step>
 
 <step name="inject_global_learnings">
-If `features.global_learnings` is `true`: run `gsd-sdk query learnings.query --tag <tag> --limit 5` once per tag from PLAN.md frontmatter `tags` (or use the single most specific keyword). The handler matches one `--tag` at a time. Prefix matches with `[Prior learning from <project>]` as weak priors. Project-local decisions take precedence. Skip silently if disabled or no matches.
+If `features.global_learnings` is `true`: run `gsd-tools learnings query --tag <phase_tags> --limit 5`, prefix matches with `[Prior learning from <project>]` as weak priors. Project-local decisions take precedence. Skip silently if disabled or no matches. For tags, use PLAN.md frontmatter `tags` field or keywords from the phase objective, comma-separated (e.g. `--tag auth,database,api`).
 </step>
 
 <step name="gather_phase_context">
@@ -1092,7 +1090,7 @@ The filename MUST follow the exact pattern: `{padded_phase}-{NN}-PLAN.md`
 - Phase 3, Plan 2 → `03-02-PLAN.md`
 - Phase 2.1, Plan 1 → `02.1-01-PLAN.md`
 
-**Incorrect (will break GSD plan filename conventions / tooling detection):**
+**Incorrect (will break gsd-tools detection):**
 - ❌ `PLAN-01-auth.md`
 - ❌ `01-PLAN-01.md`
 - ❌ `plan-01.md`
@@ -1104,10 +1102,10 @@ Include all frontmatter fields.
 </step>
 
 <step name="validate_plan">
-Validate each created PLAN.md using `gsd-sdk query`:
+Validate each created PLAN.md using gsd-tools:
 
 ```bash
-VALID=$(gsd-sdk query frontmatter.validate "$PLAN_PATH" --schema plan)
+VALID=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" frontmatter validate "$PLAN_PATH" --schema plan)
 ```
 
 Returns JSON: `{ valid, missing, present, schema }`
@@ -1120,7 +1118,7 @@ Required plan frontmatter fields:
 Also validate plan structure:
 
 ```bash
-STRUCTURE=$(gsd-sdk query verify.plan-structure "$PLAN_PATH")
+STRUCTURE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" verify plan-structure "$PLAN_PATH")
 ```
 
 Returns JSON: `{ valid, errors, warnings, task_count, tasks }`
@@ -1157,8 +1155,7 @@ Plans:
 
 <step name="git_commit">
 ```bash
-gsd-sdk query commit "docs($PHASE): create phase plan" \
-  .planning/phases/$PHASE-*/$PHASE-*-PLAN.md .planning/ROADMAP.md
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs($PHASE): create phase plan" --files .planning/phases/$PHASE-*/$PHASE-*-PLAN.md .planning/ROADMAP.md
 ```
 </step>
 

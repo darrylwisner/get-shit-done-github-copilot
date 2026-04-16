@@ -44,22 +44,6 @@ function withProjectRoot(cwd, result) {
   if (config.response_language) {
     result.response_language = config.response_language;
   }
-  // Inject project identity into all init outputs so handoff blocks
-  // can include project context for cross-session continuity.
-  if (config.project_code) {
-    result.project_code = config.project_code;
-  }
-  // Extract project title from PROJECT.md first H1 heading.
-  const projectMdPath = path.join(planningDir(cwd), 'PROJECT.md');
-  try {
-    if (fs.existsSync(projectMdPath)) {
-      const content = fs.readFileSync(projectMdPath, 'utf8');
-      const h1Match = content.match(/^#\s+(.+)$/m);
-      if (h1Match) {
-        result.project_title = h1Match[1].trim();
-      }
-    }
-  } catch { /* intentionally empty */ }
   return result;
 }
 
@@ -254,12 +238,6 @@ function cmdInitPlanPhase(cwd, phase, raw, options = {}) {
     nyquist_validation_enabled: config.nyquist_validation,
     commit_docs: config.commit_docs,
     text_mode: config.text_mode,
-    // Auto-advance config — included so workflows don't need separate config-get
-    // calls for these values, which causes infinite config-read loops on some models
-    // (e.g. Kimi K2.5). See #2192.
-    auto_advance: !!(config.auto_advance),
-    auto_chain_active: !!(config._auto_chain_active),
-    mode: config.mode || 'interactive',
 
     // Phase info
     phase_found: !!phaseInfo,
@@ -1046,17 +1024,6 @@ function cmdInitManager(cwd, raw) {
 
   // Dependency satisfaction: check if all depends_on phases are complete
   const completedNums = new Set(phases.filter(p => p.disk_status === 'complete').map(p => p.number));
-
-  // Also include phases from previously shipped milestones — they are all
-  // complete by definition (a milestone only ships when all phases are done).
-  // rawContent is the full ROADMAP.md (including <details>-wrapped shipped
-  // milestone sections that extractCurrentMilestone strips out).
-  const _allCompletedPattern = /-\s*\[x\]\s*.*Phase\s+(\d+[A-Z]?(?:\.\d+)*)[:\s]/gi;
-  let _allMatch;
-  while ((_allMatch = _allCompletedPattern.exec(rawContent)) !== null) {
-    completedNums.add(_allMatch[1]);
-  }
-
   for (const phase of phases) {
     if (!phase.depends_on || /^none$/i.test(phase.depends_on.trim())) {
       phase.deps_satisfied = true;
@@ -1623,207 +1590,75 @@ function cmdAgentSkills(cwd, agentType, raw) {
 /**
  * Generate a skill manifest from a skills directory.
  *
- * Scans the canonical skill discovery roots and returns a normalized
- * inventory object with discovered skills, root metadata, and installation
- * summary flags. A legacy `skillsDir` override is still accepted for focused
- * scans, but the default mode is multi-root discovery.
+ * Scans the given skills directory for subdirectories containing SKILL.md,
+ * extracts frontmatter (name, description) and trigger conditions from the
+ * body text, and returns an array of skill descriptors.
  *
- * @param {string} cwd - Project root directory
- * @param {string|null} [skillsDir] - Optional absolute path to a specific skills directory
- * @returns {{
- *   skills: Array<{name: string, description: string, triggers: string[], path: string, file_path: string, root: string, scope: string, installed: boolean, deprecated: boolean}>,
- *   roots: Array<{root: string, path: string, scope: string, present: boolean, skill_count?: number, command_count?: number, deprecated?: boolean}>,
- *   installation: { gsd_skills_installed: boolean, legacy_claude_commands_installed: boolean },
- *   counts: { skills: number, roots: number }
- * }}
+ * @param {string} skillsDir - Absolute path to the skills directory
+ * @returns {Array<{name: string, description: string, triggers: string[], path: string}>}
  */
-function buildSkillManifest(cwd, skillsDir = null) {
+function buildSkillManifest(skillsDir) {
   const { extractFrontmatter } = require('./frontmatter.cjs');
-  const os = require('os');
 
-  const canonicalRoots = skillsDir ? [{
-    root: path.resolve(skillsDir),
-    path: path.resolve(skillsDir),
-    scope: 'custom',
-    present: fs.existsSync(skillsDir),
-    kind: 'skills',
-  }] : [
-    {
-      root: '.claude/skills',
-      path: path.join(cwd, '.claude', 'skills'),
-      scope: 'project',
-      kind: 'skills',
-    },
-    {
-      root: '.agents/skills',
-      path: path.join(cwd, '.agents', 'skills'),
-      scope: 'project',
-      kind: 'skills',
-    },
-    {
-      root: '.cursor/skills',
-      path: path.join(cwd, '.cursor', 'skills'),
-      scope: 'project',
-      kind: 'skills',
-    },
-    {
-      root: '.github/skills',
-      path: path.join(cwd, '.github', 'skills'),
-      scope: 'project',
-      kind: 'skills',
-    },
-    {
-      root: '.codex/skills',
-      path: path.join(cwd, '.codex', 'skills'),
-      scope: 'project',
-      kind: 'skills',
-    },
-    {
-      root: '~/.claude/skills',
-      path: path.join(os.homedir(), '.claude', 'skills'),
-      scope: 'global',
-      kind: 'skills',
-    },
-    {
-      root: '~/.codex/skills',
-      path: path.join(os.homedir(), '.codex', 'skills'),
-      scope: 'global',
-      kind: 'skills',
-    },
-    {
-      root: '.claude/get-shit-done/skills',
-      path: path.join(os.homedir(), '.claude', 'get-shit-done', 'skills'),
-      scope: 'import-only',
-      kind: 'skills',
-      deprecated: true,
-    },
-    {
-      root: '.claude/commands/gsd',
-      path: path.join(os.homedir(), '.claude', 'commands', 'gsd'),
-      scope: 'legacy-commands',
-      kind: 'commands',
-      deprecated: true,
-    },
-  ];
+  if (!fs.existsSync(skillsDir)) return [];
 
-  const skills = [];
-  const roots = [];
-  let legacyClaudeCommandsInstalled = false;
-  for (const rootInfo of canonicalRoots) {
-    const rootPath = rootInfo.path;
-    const rootSummary = {
-      root: rootInfo.root,
-      path: rootPath,
-      scope: rootInfo.scope,
-      present: fs.existsSync(rootPath),
-      deprecated: !!rootInfo.deprecated,
-    };
-
-    if (!rootSummary.present) {
-      roots.push(rootSummary);
-      continue;
-    }
-
-    if (rootInfo.kind === 'commands') {
-      let entries = [];
-      try {
-        entries = fs.readdirSync(rootPath, { withFileTypes: true });
-      } catch {
-        roots.push(rootSummary);
-        continue;
-      }
-
-      const commandFiles = entries.filter(entry => entry.isFile() && entry.name.endsWith('.md'));
-      rootSummary.command_count = commandFiles.length;
-      if (rootSummary.command_count > 0) legacyClaudeCommandsInstalled = true;
-      roots.push(rootSummary);
-      continue;
-    }
-
-    let entries;
-    try {
-      entries = fs.readdirSync(rootPath, { withFileTypes: true });
-    } catch {
-      roots.push(rootSummary);
-      continue;
-    }
-
-    let skillCount = 0;
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-
-      const skillMdPath = path.join(rootPath, entry.name, 'SKILL.md');
-      if (!fs.existsSync(skillMdPath)) continue;
-
-      let content;
-      try {
-        content = fs.readFileSync(skillMdPath, 'utf-8');
-      } catch {
-        continue;
-      }
-
-      const frontmatter = extractFrontmatter(content);
-      const name = frontmatter.name || entry.name;
-      const description = frontmatter.description || '';
-
-      // Extract trigger lines from body text (after frontmatter)
-      const triggers = [];
-      const bodyMatch = content.match(/^---[\s\S]*?---\s*\n([\s\S]*)$/);
-      if (bodyMatch) {
-        const body = bodyMatch[1];
-        const triggerLines = body.match(/^TRIGGER\s+when:\s*(.+)$/gmi);
-        if (triggerLines) {
-          for (const line of triggerLines) {
-            const m = line.match(/^TRIGGER\s+when:\s*(.+)$/i);
-            if (m) triggers.push(m[1].trim());
-          }
-        }
-      }
-
-      skills.push({
-        name,
-        description,
-        triggers,
-        path: entry.name,
-        file_path: `${entry.name}/SKILL.md`,
-        root: rootInfo.root,
-        scope: rootInfo.scope,
-        installed: rootInfo.scope !== 'import-only',
-        deprecated: !!rootInfo.deprecated,
-      });
-      skillCount++;
-    }
-
-    rootSummary.skill_count = skillCount;
-    roots.push(rootSummary);
+  let entries;
+  try {
+    entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+  } catch {
+    return [];
   }
 
-  skills.sort((a, b) => {
-    const rootCmp = a.root.localeCompare(b.root);
-    return rootCmp !== 0 ? rootCmp : a.name.localeCompare(b.name);
-  });
+  const manifest = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
 
-  const gsdSkillsInstalled = skills.some(skill => skill.name.startsWith('gsd-'));
+    const skillMdPath = path.join(skillsDir, entry.name, 'SKILL.md');
+    if (!fs.existsSync(skillMdPath)) continue;
 
-  return {
-    skills,
-    roots,
-    installation: {
-      gsd_skills_installed: gsdSkillsInstalled,
-      legacy_claude_commands_installed: legacyClaudeCommandsInstalled,
-    },
-    counts: {
-      skills: skills.length,
-      roots: roots.length,
-    },
-  };
+    let content;
+    try {
+      content = fs.readFileSync(skillMdPath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    const frontmatter = extractFrontmatter(content);
+    const name = frontmatter.name || entry.name;
+    const description = frontmatter.description || '';
+
+    // Extract trigger lines from body text (after frontmatter)
+    const triggers = [];
+    const bodyMatch = content.match(/^---[\s\S]*?---\s*\n([\s\S]*)$/);
+    if (bodyMatch) {
+      const body = bodyMatch[1];
+      const triggerLines = body.match(/^TRIGGER\s+when:\s*(.+)$/gmi);
+      if (triggerLines) {
+        for (const line of triggerLines) {
+          const m = line.match(/^TRIGGER\s+when:\s*(.+)$/i);
+          if (m) triggers.push(m[1].trim());
+        }
+      }
+    }
+
+    manifest.push({
+      name,
+      description,
+      triggers,
+      path: entry.name,
+    });
+  }
+
+  // Sort by name for deterministic output
+  manifest.sort((a, b) => a.name.localeCompare(b.name));
+  return manifest;
 }
 
 /**
  * Command: generate skill manifest JSON.
  *
  * Options:
- *   --skills-dir <path>  Optional absolute path to a single skills directory
+ *   --skills-dir <path>  Path to skills directory (required)
  *   --write              Also write to .planning/skill-manifest.json
  */
 function cmdSkillManifest(cwd, args, raw) {
@@ -1832,7 +1667,12 @@ function cmdSkillManifest(cwd, args, raw) {
     ? args[skillsDirIdx + 1]
     : null;
 
-  const manifest = buildSkillManifest(cwd, skillsDir);
+  if (!skillsDir) {
+    output([], raw);
+    return;
+  }
+
+  const manifest = buildSkillManifest(skillsDir);
 
   // Optionally write to .planning/skill-manifest.json
   if (args.includes('--write')) {

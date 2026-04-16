@@ -279,7 +279,7 @@ Show next steps:
 ```
 ───────────────────────────────────────────────────────────────
 
-## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
+## ▶ Next Up
 
 **Review state** — verify project is in expected state after revert
 

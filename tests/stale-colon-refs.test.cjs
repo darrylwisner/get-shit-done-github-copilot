@@ -20,11 +20,10 @@ const ROOT = path.resolve(__dirname, '..');
 
 /**
  * Recursively collect files matching the given extensions, excluding
- * CHANGELOG.md, node_modules/, .git/, dist/, local planning overlays, and
- * root CLAUDE.md (gitignored local IDE overlay — see repo .gitignore).
+ * CHANGELOG.md, node_modules/, .git/, and dist/.
  */
 function collectFiles(dir, extensions, results = []) {
-  const EXCLUDED_DIRS = new Set(['node_modules', '.git', 'dist', '.claude', '.worktrees', '.planning']);
+  const EXCLUDED_DIRS = new Set(['node_modules', '.git', 'dist', '.claude', '.worktrees']);
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -37,9 +36,6 @@ function collectFiles(dir, extensions, results = []) {
     if (entry.isDirectory()) {
       collectFiles(full, extensions, results);
     } else if (entry.isFile()) {
-      if (entry.name === 'CLAUDE.md' && path.resolve(dir) === path.resolve(ROOT)) {
-        continue;
-      }
       const ext = path.extname(entry.name);
       if (extensions.has(ext) && entry.name !== 'CHANGELOG.md') {
         results.push(full);

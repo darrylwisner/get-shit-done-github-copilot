@@ -19,10 +19,10 @@ const crypto = require('crypto');
 const INTEL_DIR = '.planning/intel';
 
 const INTEL_FILES = {
-  files: 'file-roles.json',
-  apis: 'api-map.json',
-  deps: 'dependency-graph.json',
-  arch: 'arch-decisions.json',
+  files: 'files.json',
+  apis: 'apis.json',
+  deps: 'deps.json',
+  arch: 'arch.md',
   stack: 'stack.json'
 };
 
@@ -204,8 +204,10 @@ function intelQuery(term, planningDir) {
   const matches = [];
   let total = 0;
 
-  // Search all JSON intel files
+  // Search JSON intel files
   for (const [_key, filename] of Object.entries(INTEL_FILES)) {
+    if (filename.endsWith('.md')) continue; // Skip arch.md here
+
     const filePath = intelFilePath(planningDir, filename);
     const data = safeReadJson(filePath);
     if (!data) continue;
@@ -215,6 +217,14 @@ function intelQuery(term, planningDir) {
       matches.push({ source: filename, entries: found });
       total += found.length;
     }
+  }
+
+  // Search arch.md
+  const archPath = intelFilePath(planningDir, INTEL_FILES.arch);
+  const archMatches = searchArchMd(archPath, term);
+  if (archMatches.length > 0) {
+    matches.push({ source: INTEL_FILES.arch, entries: archMatches });
+    total += archMatches.length;
   }
 
   return { matches, term, total };
@@ -247,10 +257,20 @@ function intelStatus(planningDir) {
 
     let updatedAt = null;
 
-    // All intel files are JSON — read _meta.updated_at
-    const data = safeReadJson(filePath);
-    if (data && data._meta && data._meta.updated_at) {
-      updatedAt = data._meta.updated_at;
+    if (filename.endsWith('.md')) {
+      // For arch.md, use file mtime
+      try {
+        const stat = fs.statSync(filePath);
+        updatedAt = stat.mtime.toISOString();
+      } catch (_e) {
+        // intentionally silent: fall through on error
+      }
+    } else {
+      // For JSON files, read _meta.updated_at
+      const data = safeReadJson(filePath);
+      if (data && data._meta && data._meta.updated_at) {
+        updatedAt = data._meta.updated_at;
+      }
     }
 
     let stale = true;
@@ -389,7 +409,8 @@ function intelValidate(planningDir) {
       continue;
     }
 
-    // All intel files are JSON — validate _meta and entries structure
+    // Skip non-JSON files (arch.md)
+    if (filename.endsWith('.md')) continue;
 
     // Parse JSON
     let data;

@@ -36,8 +36,6 @@ Parse `$ARGUMENTS` for:
 - `--research` flag → store `$RESEARCH_MODE=true`
 - Remaining text → use as `$DESCRIPTION` if non-empty
 
-After parsing, normalize: if `$DISCUSS_MODE` and `$RESEARCH_MODE` and `$VALIDATE_MODE` are all true, set `$FULL_MODE=true`. This ensures `--discuss --research --validate` is treated identically to `--full`.
-
 If `$DESCRIPTION` is empty after parsing, prompt user interactively:
 
 
@@ -61,6 +59,15 @@ If `$FULL_MODE` (all phases enabled — `--full` or all granular flags):
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  GSD ► QUICK TASK (FULL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+◆ Discussion + research + plan checking + verification enabled
+```
+
+If `$DISCUSS_MODE` and `$RESEARCH_MODE` and `$VALIDATE_MODE` (no `$FULL_MODE` — composed granularly):
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► QUICK TASK (DISCUSS + RESEARCH + VALIDATE)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ◆ Discussion + research + plan checking + verification enabled
@@ -125,18 +132,18 @@ If `$VALIDATE_MODE` only:
 **Step 2: Initialize**
 
 ```bash
-INIT=$(gsd-sdk query init.quick "$DESCRIPTION")
+INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init quick "$DESCRIPTION")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_PLANNER=$(gsd-sdk query agent-skills gsd-planner 2>/dev/null)
-AGENT_SKILLS_EXECUTOR=$(gsd-sdk query agent-skills gsd-executor 2>/dev/null)
-AGENT_SKILLS_CHECKER=$(gsd-sdk query agent-skills gsd-checker 2>/dev/null)
-AGENT_SKILLS_VERIFIER=$(gsd-sdk query agent-skills gsd-verifier 2>/dev/null)
+AGENT_SKILLS_PLANNER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-planner 2>/dev/null)
+AGENT_SKILLS_EXECUTOR=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-executor 2>/dev/null)
+AGENT_SKILLS_CHECKER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-checker 2>/dev/null)
+AGENT_SKILLS_VERIFIER=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-verifier 2>/dev/null)
 ```
 
 Parse JSON for: `planner_model`, `executor_model`, `checker_model`, `verifier_model`, `commit_docs`, `branch_name`, `quick_id`, `slug`, `date`, `timestamp`, `quick_dir`, `task_dir`, `roadmap_exists`, `planning_exists`.
 
 ```bash
-USE_WORKTREES=$(gsd-sdk query config-get workflow.use_worktrees 2>/dev/null || echo "true")
+USE_WORKTREES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.use_worktrees 2>/dev/null || echo "true")
 ```
 
 If the project uses git submodules, worktree isolation is skipped:
@@ -621,21 +628,10 @@ After executor returns:
        # Snapshot files on main to detect resurrections
        PRE_MERGE_FILES=$(git ls-files .planning/)
 
-       # Pre-merge deletion guard: block merges that delete tracked .planning/ files
-       DELETIONS=$(git diff --diff-filter=D --name-only HEAD..."$WT_BRANCH" 2>/dev/null || true)
-       if [ -n "$DELETIONS" ]; then
-         echo "BLOCKED: Worktree branch $WT_BRANCH contains file deletions: $DELETIONS"
-         echo "Review these deletions before merging. If intentional, remove this guard and re-run."
+       git merge "$WT_BRANCH" --no-edit -m "chore: merge quick task worktree ($WT_BRANCH)" 2>&1 || {
+         echo "⚠ Merge conflict — resolve manually"
          rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
          continue
-       fi
-
-       git merge "$WT_BRANCH" --no-ff --no-edit -m "chore: merge quick task worktree ($WT_BRANCH)" 2>&1 || {
-         echo "⚠ Merge conflict from worktree $WT_BRANCH — resolve manually"
-         echo "  STATE.md backup:   $STATE_BACKUP"
-         echo "  ROADMAP.md backup: $ROADMAP_BACKUP"
-         echo "  Restore with: cp \$STATE_BACKUP .planning/STATE.md && cp \$ROADMAP_BACKUP .planning/ROADMAP.md"
-         break
        }
 
        # Restore orchestrator-owned files
@@ -643,7 +639,7 @@ After executor returns:
        if [ -s "$ROADMAP_BACKUP" ]; then cp "$ROADMAP_BACKUP" .planning/ROADMAP.md; fi
        rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
 
-       # Remove files deleted on main but re-added by worktree (--no-ff guarantees a merge commit so HEAD~1 is reliable)
+       # Remove files deleted on main but re-added by worktree
        DELETED_FILES=$(git diff --diff-filter=A --name-only HEAD~1 -- .planning/ 2>/dev/null || true)
        for RESURRECTED in $DELETED_FILES; do
          if ! echo "$PRE_MERGE_FILES" | grep -qxF "$RESURRECTED"; then
@@ -653,7 +649,7 @@ After executor returns:
 
        if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
           [ -n "$DELETED_FILES" ]; then
-         COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
+         COMMIT_DOCS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
            git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
            git commit --amend --no-edit 2>/dev/null || true
@@ -684,7 +680,7 @@ Skip this step entirely if `$FULL_MODE` is false.
 
 **Config gate:**
 ```bash
-CODE_REVIEW_ENABLED=$(gsd-sdk query config-get workflow.code_review 2>/dev/null || echo "true")
+CODE_REVIEW_ENABLED=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.code_review 2>/dev/null || echo "true")
 ```
 If `"false"`, skip with message "Code review skipped (workflow.code_review=false)".
 
@@ -831,7 +827,7 @@ Use Edit tool to make these changes atomically
 
 **Step 8: Final commit and completion**
 
-Stage and commit quick task artifacts. This step MUST always run — even if the executor already committed some files (e.g. when running without worktree isolation). The `gsd-sdk query commit` command (or legacy `gsd-tools.cjs` commit) handles already-committed files gracefully.
+Stage and commit quick task artifacts. This step MUST always run — even if the executor already committed some files (e.g. when running without worktree isolation). The `gsd-tools commit` command handles already-committed files gracefully.
 
 Build file list:
 - `${QUICK_DIR}/${quick_id}-PLAN.md`
@@ -845,14 +841,14 @@ Build file list:
 # Explicitly stage all artifacts before commit — PLAN.md may be untracked
 # if the executor ran without worktree isolation and committed docs early
 # Filter .planning/ files from staging if commit_docs is disabled (#1783)
-COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
+COMMIT_DOCS=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get commit_docs 2>/dev/null || echo "true")
 if [ "$COMMIT_DOCS" = "false" ]; then
   file_list_filtered=$(echo "${file_list}" | tr ' ' '\n' | grep -v '^\.planning/' | tr '\n' ' ')
   git add ${file_list_filtered} 2>/dev/null
 else
   git add ${file_list} 2>/dev/null
 fi
-gsd-sdk query commit "docs(quick-${quick_id}): ${DESCRIPTION}" ${file_list}
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list}
 ```
 
 Get final commit hash:

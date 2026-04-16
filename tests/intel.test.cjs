@@ -160,7 +160,7 @@ describe('intelQuery', () => {
   });
 
   test('finds matches in JSON file keys', () => {
-    writeIntelJson(planningDir, 'file-roles.json', {
+    writeIntelJson(planningDir, 'files.json', {
       _meta: { updated_at: new Date().toISOString() },
       entries: {
         'src/auth/controller.ts': { size: 1024, type: 'typescript' },
@@ -170,12 +170,12 @@ describe('intelQuery', () => {
 
     const result = intelQuery('auth', planningDir);
     assert.strictEqual(result.total, 1);
-    assert.strictEqual(result.matches[0].source, 'file-roles.json');
+    assert.strictEqual(result.matches[0].source, 'files.json');
     assert.strictEqual(result.matches[0].entries[0].key, 'src/auth/controller.ts');
   });
 
   test('finds matches in JSON file values', () => {
-    writeIntelJson(planningDir, 'dependency-graph.json', {
+    writeIntelJson(planningDir, 'deps.json', {
       _meta: { updated_at: new Date().toISOString() },
       entries: {
         express: { version: '4.18.0', type: 'runtime', used_by: ['src/server.ts'] },
@@ -188,7 +188,7 @@ describe('intelQuery', () => {
   });
 
   test('search is case-insensitive', () => {
-    writeIntelJson(planningDir, 'file-roles.json', {
+    writeIntelJson(planningDir, 'files.json', {
       entries: {
         'src/AuthController.ts': { type: 'typescript' },
       },
@@ -198,25 +198,24 @@ describe('intelQuery', () => {
     assert.strictEqual(result.total, 1);
   });
 
-  test('finds matches in arch-decisions.json entries', () => {
-    writeIntelJson(planningDir, 'arch-decisions.json', {
-      _meta: { updated_at: new Date().toISOString() },
-      entries: {
-        'jwt-auth': { decision: 'Use JWT tokens for stateless authentication', status: 'accepted' },
-        'rest-api': { decision: 'REST API endpoints for all services', status: 'accepted' },
-      },
-    });
+  test('finds matches in arch.md text', () => {
+    writeIntelMd(planningDir, 'arch.md', [
+      '# Architecture',
+      '',
+      'The system uses a layered architecture with REST API endpoints.',
+      'Authentication is handled by JWT tokens.',
+    ].join('\n'));
 
     const result = intelQuery('JWT', planningDir);
     assert.strictEqual(result.total, 1);
-    assert.strictEqual(result.matches[0].source, 'arch-decisions.json');
+    assert.strictEqual(result.matches[0].source, 'arch.md');
   });
 
   test('searches across multiple intel files', () => {
-    writeIntelJson(planningDir, 'file-roles.json', {
+    writeIntelJson(planningDir, 'files.json', {
       entries: { 'src/auth.ts': { exports: ['authenticate'] } },
     });
-    writeIntelJson(planningDir, 'api-map.json', {
+    writeIntelJson(planningDir, 'apis.json', {
       entries: { '/api/auth': { method: 'POST', handler: 'authenticate' } },
     });
 
@@ -245,30 +244,30 @@ describe('intelStatus', () => {
   test('reports missing files as stale', () => {
     const result = intelStatus(planningDir);
     assert.strictEqual(result.overall_stale, true);
-    assert.strictEqual(result.files['file-roles.json'].exists, false);
-    assert.strictEqual(result.files['file-roles.json'].stale, true);
+    assert.strictEqual(result.files['files.json'].exists, false);
+    assert.strictEqual(result.files['files.json'].stale, true);
   });
 
   test('reports fresh files as not stale', () => {
-    writeIntelJson(planningDir, 'file-roles.json', {
+    writeIntelJson(planningDir, 'files.json', {
       _meta: { updated_at: new Date().toISOString() },
       entries: {},
     });
 
     const result = intelStatus(planningDir);
-    assert.strictEqual(result.files['file-roles.json'].exists, true);
-    assert.strictEqual(result.files['file-roles.json'].stale, false);
+    assert.strictEqual(result.files['files.json'].exists, true);
+    assert.strictEqual(result.files['files.json'].stale, false);
   });
 
   test('reports old files as stale', () => {
     const oldDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-    writeIntelJson(planningDir, 'file-roles.json', {
+    writeIntelJson(planningDir, 'files.json', {
       _meta: { updated_at: oldDate },
       entries: {},
     });
 
     const result = intelStatus(planningDir);
-    assert.strictEqual(result.files['file-roles.json'].stale, true);
+    assert.strictEqual(result.files['files.json'].stale, true);
     assert.strictEqual(result.overall_stale, true);
   });
 });
@@ -304,24 +303,24 @@ describe('intelDiff', () => {
     );
 
     // Add a file after snapshot
-    writeIntelJson(planningDir, 'file-roles.json', { entries: {} });
+    writeIntelJson(planningDir, 'files.json', { entries: {} });
 
     const result = intelDiff(planningDir);
-    assert.ok(result.added.includes('file-roles.json'));
+    assert.ok(result.added.includes('files.json'));
   });
 
   test('detects changed files since snapshot', () => {
     // Write initial file
-    writeIntelJson(planningDir, 'file-roles.json', { entries: { a: 1 } });
+    writeIntelJson(planningDir, 'files.json', { entries: { a: 1 } });
 
     // Take snapshot
     intelSnapshot(planningDir);
 
     // Modify file
-    writeIntelJson(planningDir, 'file-roles.json', { entries: { a: 1, b: 2 } });
+    writeIntelJson(planningDir, 'files.json', { entries: { a: 1, b: 2 } });
 
     const result = intelDiff(planningDir);
-    assert.ok(result.changed.includes('file-roles.json'));
+    assert.ok(result.changed.includes('files.json'));
   });
 });
 
@@ -342,7 +341,7 @@ describe('intelSnapshot', () => {
   });
 
   test('saves snapshot with file hashes', () => {
-    writeIntelJson(planningDir, 'file-roles.json', { entries: {} });
+    writeIntelJson(planningDir, 'files.json', { entries: {} });
 
     const result = intelSnapshot(planningDir);
     assert.strictEqual(result.saved, true);
@@ -352,7 +351,7 @@ describe('intelSnapshot', () => {
     const snapshot = JSON.parse(
       fs.readFileSync(path.join(planningDir, 'intel', '.last-refresh.json'), 'utf8')
     );
-    assert.ok(snapshot.hashes['file-roles.json']);
+    assert.ok(snapshot.hashes['files.json']);
   });
 });
 
@@ -380,11 +379,11 @@ describe('intelValidate', () => {
   });
 
   test('reports warnings for missing _meta.updated_at', () => {
-    writeIntelJson(planningDir, 'file-roles.json', { entries: {} });
-    writeIntelJson(planningDir, 'api-map.json', { entries: {} });
-    writeIntelJson(planningDir, 'dependency-graph.json', { entries: {} });
+    writeIntelJson(planningDir, 'files.json', { entries: {} });
+    writeIntelJson(planningDir, 'apis.json', { entries: {} });
+    writeIntelJson(planningDir, 'deps.json', { entries: {} });
     writeIntelJson(planningDir, 'stack.json', { entries: {} });
-    writeIntelJson(planningDir, 'arch-decisions.json', { entries: {} });
+    writeIntelMd(planningDir, 'arch.md', '# Architecture\n');
 
     const result = intelValidate(planningDir);
     assert.strictEqual(result.valid, true);
@@ -394,11 +393,11 @@ describe('intelValidate', () => {
   test('reports invalid JSON as error', () => {
     const intelPath = path.join(planningDir, 'intel');
     fs.mkdirSync(intelPath, { recursive: true });
-    fs.writeFileSync(path.join(intelPath, 'file-roles.json'), 'not valid json', 'utf8');
-    writeIntelJson(planningDir, 'api-map.json', { entries: {} });
-    writeIntelJson(planningDir, 'dependency-graph.json', { entries: {} });
+    fs.writeFileSync(path.join(intelPath, 'files.json'), 'not valid json', 'utf8');
+    writeIntelJson(planningDir, 'apis.json', { entries: {} });
+    writeIntelJson(planningDir, 'deps.json', { entries: {} });
     writeIntelJson(planningDir, 'stack.json', { entries: {} });
-    writeIntelJson(planningDir, 'arch-decisions.json', { entries: {} });
+    writeIntelMd(planningDir, 'arch.md', '# Architecture\n');
 
     const result = intelValidate(planningDir);
     assert.strictEqual(result.valid, false);
@@ -407,15 +406,15 @@ describe('intelValidate', () => {
 
   test('passes validation with complete fresh intel', () => {
     const now = new Date().toISOString();
-    writeIntelJson(planningDir, 'file-roles.json', {
+    writeIntelJson(planningDir, 'files.json', {
       _meta: { updated_at: now },
       entries: {},
     });
-    writeIntelJson(planningDir, 'api-map.json', {
+    writeIntelJson(planningDir, 'apis.json', {
       _meta: { updated_at: now },
       entries: {},
     });
-    writeIntelJson(planningDir, 'dependency-graph.json', {
+    writeIntelJson(planningDir, 'deps.json', {
       _meta: { updated_at: now },
       entries: {},
     });
@@ -423,10 +422,7 @@ describe('intelValidate', () => {
       _meta: { updated_at: now },
       entries: {},
     });
-    writeIntelJson(planningDir, 'arch-decisions.json', {
-      _meta: { updated_at: now },
-      entries: {},
-    });
+    writeIntelMd(planningDir, 'arch.md', '# Architecture\n');
 
     const result = intelValidate(planningDir);
     assert.strictEqual(result.valid, true);
@@ -450,12 +446,12 @@ describe('intelPatchMeta', () => {
   });
 
   test('patches _meta.updated_at and increments version', () => {
-    writeIntelJson(planningDir, 'file-roles.json', {
+    writeIntelJson(planningDir, 'files.json', {
       _meta: { updated_at: '2025-01-01T00:00:00Z', version: 1 },
       entries: {},
     });
 
-    const filePath = path.join(planningDir, 'intel', 'file-roles.json');
+    const filePath = path.join(planningDir, 'intel', 'files.json');
     const result = intelPatchMeta(filePath);
 
     assert.strictEqual(result.patched, true);
@@ -466,9 +462,9 @@ describe('intelPatchMeta', () => {
   });
 
   test('creates _meta if missing', () => {
-    writeIntelJson(planningDir, 'file-roles.json', { entries: {} });
+    writeIntelJson(planningDir, 'files.json', { entries: {} });
 
-    const filePath = path.join(planningDir, 'intel', 'file-roles.json');
+    const filePath = path.join(planningDir, 'intel', 'files.json');
     const result = intelPatchMeta(filePath);
 
     assert.strictEqual(result.patched, true);
