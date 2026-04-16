@@ -108,12 +108,22 @@ describe('parseCliArgs', () => {
     expect(() => parseCliArgs(['run', 'hello', '--not-a-real-option'])).toThrow();
   });
 
-  it('parses query with --pick stripped before strict parse', () => {
+  it('parses query permissively (keeps gsd-tools flags like --pick, --json)', () => {
     const result = parseCliArgs([
       'query', 'state.load', '--pick', 'data', '--project-dir', 'C:\\tmp\\proj',
     ]);
     expect(result.command).toBe('query');
     expect(result.projectDir).toBe('C:\\tmp\\proj');
+    expect(result.queryArgv).toEqual(['state.load', '--pick', 'data']);
+  });
+
+  it('parses query with extra flags forwarded in queryArgv', () => {
+    const result = parseCliArgs([
+      'query', 'audit-open', '--json', '--project-dir', 'D:\\proj',
+    ]);
+    expect(result.command).toBe('query');
+    expect(result.projectDir).toBe('D:\\proj');
+    expect(result.queryArgv).toEqual(['audit-open', '--json']);
   });
 
   // ─── Init command parsing ──────────────────────────────────────────────

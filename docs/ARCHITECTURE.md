@@ -54,7 +54,7 @@ GSD is a **meta-prompting framework** that sits between the user and AI coding a
        │              │                 │
 ┌──────▼──────────────▼─────────────────▼──────────────┐
 │              CLI TOOLS LAYER                          │
-│   get-shit-done/bin/gsd-tools.cjs                     │
+│   gsd-sdk query (sdk/src/query) + gsd-tools.cjs       │
 │   (State, config, phase, roadmap, verify, templates)  │
 └──────────────────────┬───────────────────────────────┘
                        │
@@ -76,7 +76,7 @@ Every agent spawned by an orchestrator gets a clean context window (up to 200K t
 ### 2. Thin Orchestrators
 
 Workflow files (`get-shit-done/workflows/*.md`) never do heavy lifting. They:
-- Load context via `gsd-tools.cjs init <workflow>`
+- Load context via `gsd-sdk query init.<workflow>` (or legacy `gsd-tools.cjs init <workflow>`)
 - Spawn specialized agents with focused prompts
 - Collect results and route to the next step
 - Update state between steps
@@ -118,7 +118,7 @@ User-facing entry points. Each file contains YAML frontmatter (name, description
 ### Workflows (`get-shit-done/workflows/*.md`)
 
 Orchestration logic that commands reference. Contains the step-by-step process including:
-- Context loading via `gsd-tools.cjs init`
+- Context loading via `gsd-sdk query` init handlers (or legacy `gsd-tools.cjs init`)
 - Agent spawn instructions with model resolution
 - Gate/checkpoint definitions
 - State update patterns
