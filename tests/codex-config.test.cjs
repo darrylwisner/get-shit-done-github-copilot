@@ -781,6 +781,34 @@ describe('installCodexConfig (integration)', () => {
     assert.ok(checkerToml.includes('name = "gsd-plan-checker"'), 'plan-checker has name');
     assert.ok(checkerToml.includes('sandbox_mode = "read-only"'), 'plan-checker is read-only');
   });
+
+  // PATHS-01: no ~/.claude references should leak into generated .toml files (#2320)
+  // Covers both trailing-slash and bare end-of-string forms, and scans all .toml
+  // files (agents/ subdirectory + top-level config.toml if present).
+  (hasAgents ? test : test.skip)('generated .toml files contain no leaked ~/.claude paths (PATHS-01)', () => {
+    const { installCodexConfig } = require('../bin/install.js');
+    installCodexConfig(tmpTarget, agentsSrc);
+
+    // Collect all .toml files: per-agent files in agents/ plus top-level config.toml
+    const agentsDir = path.join(tmpTarget, 'agents');
+    const tomlFiles = fs.readdirSync(agentsDir)
+      .filter(f => f.endsWith('.toml'))
+      .map(f => path.join(agentsDir, f));
+    const topLevel = path.join(tmpTarget, 'config.toml');
+    if (fs.existsSync(topLevel)) tomlFiles.push(topLevel);
+    assert.ok(tomlFiles.length > 0, 'at least one .toml file generated');
+
+    // Match ~/.claude, $HOME/.claude, or ./.claude with or without trailing slash
+    const leakPattern = /(?:~|\$HOME|\.)\/\.claude(?:\/|$)/;
+    const leaks = [];
+    for (const filePath of tomlFiles) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      if (leakPattern.test(content)) {
+        leaks.push(path.relative(tmpTarget, filePath));
+      }
+    }
+    assert.deepStrictEqual(leaks, [], `No .toml files should contain .claude paths; found leaks in: ${leaks.join(', ')}`);
+  });
 });
 
 // ─── Codex config.toml [features] safety (#1202) ─────────────────────────────
