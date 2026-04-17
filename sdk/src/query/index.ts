@@ -381,6 +381,7 @@ export function createRegistry(eventStream?: GSDEventStream): QueryRegistry {
   registry.register('milestone complete', milestoneComplete);
   registry.register('summary.extract', summaryExtract);
   registry.register('summary extract', summaryExtract);
+  registry.register('summary-extract', summaryExtract);
   registry.register('history.digest', historyDigest);
   registry.register('history digest', historyDigest);
   registry.register('history-digest', historyDigest);

@@ -1359,5 +1359,154 @@ describe('findProjectRoot integration via --cwd', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// #2192: init plan-phase must include auto_advance, auto_chain_active, and mode
+// so workflows don't need separate config-get calls that loop on Kimi K2.5
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('#2192: init plan-phase includes auto-advance config to prevent separate config-get loops', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '01-auth'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      ['# Roadmap', '', '## Milestone v1', '', '### Phase 1: Auth', '**Goal:** Auth'].join('\n')
+    );
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('init plan-phase includes auto_advance field (defaults false)', () => {
+    const result = runGsdTools('init plan-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.ok('auto_advance' in output, 'init plan-phase must include auto_advance field');
+    assert.strictEqual(output.auto_advance, false, 'auto_advance should default to false');
+  });
+
+  test('init plan-phase includes auto_chain_active field (defaults false)', () => {
+    const result = runGsdTools('init plan-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.ok('auto_chain_active' in output, 'init plan-phase must include auto_chain_active field');
+    assert.strictEqual(output.auto_chain_active, false, 'auto_chain_active should default to false');
+  });
+
+  test('init plan-phase includes mode field (defaults to interactive)', () => {
+    const result = runGsdTools('init plan-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.ok('mode' in output, 'init plan-phase must include mode field');
+    assert.strictEqual(output.mode, 'interactive', 'mode should default to interactive');
+  });
+
+  test('init plan-phase reflects auto_advance true when set in config', () => {
+    const configPath = path.join(tmpDir, '.planning', 'config.json');
+    const cfg = { workflow: { auto_advance: true } };
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+
+    const result = runGsdTools('init plan-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.auto_advance, true, 'auto_advance should reflect config value');
+  });
+
+  test('init plan-phase reflects auto_chain_active true when set in config', () => {
+    const configPath = path.join(tmpDir, '.planning', 'config.json');
+    const cfg = { workflow: { _auto_chain_active: true } };
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+
+    const result = runGsdTools('init plan-phase 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.auto_chain_active, true, 'auto_chain_active should reflect config value');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// withProjectRoot: project identity injection (#1948)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('withProjectRoot project identity', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('injects project_code when config.project_code is set', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ project_code: 'CK' })
+    );
+
+    const result = runGsdTools(['init', 'quick', 'test task'], tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.project_code, 'CK');
+  });
+
+  test('injects project_title extracted from PROJECT.md H1', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ project_code: 'CK' })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'PROJECT.md'),
+      '# CareKit\n\nA care management platform.\n'
+    );
+
+    const result = runGsdTools(['init', 'quick', 'test task'], tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.project_title, 'CareKit');
+  });
+
+  test('omits project_code and project_title when project_code is not set', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({})
+    );
+
+    const result = runGsdTools(['init', 'quick', 'test task'], tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.project_code, undefined,
+      'project_code should not be present when not configured');
+    // project_title may or may not be present depending on PROJECT.md existence,
+    // but without project_code the workflow omits the identity suffix entirely
+  });
+
+  test('omits project_title when PROJECT.md does not exist', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ project_code: 'CK' })
+    );
+    // Ensure no PROJECT.md exists (createTempProject doesn't create one)
+    const projectMdPath = path.join(tmpDir, '.planning', 'PROJECT.md');
+    if (fs.existsSync(projectMdPath)) fs.unlinkSync(projectMdPath);
+
+    const result = runGsdTools(['init', 'quick', 'test task'], tmpDir, { HOME: tmpDir });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.project_code, 'CK',
+      'project_code should still be present');
+    assert.strictEqual(output.project_title, undefined,
+      'project_title should not be present when PROJECT.md is missing');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // roadmap analyze command
 // ─────────────────────────────────────────────────────────────────────────────
