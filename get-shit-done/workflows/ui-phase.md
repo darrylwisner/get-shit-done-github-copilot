@@ -29,6 +29,11 @@ Parse JSON for: `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded
 
 **File paths:** `state_path`, `roadmap_path`, `requirements_path`, `context_path`, `research_path`.
 
+Detect sketch findings:
+```bash
+SKETCH_FINDINGS_PATH=$(ls ./.claude/skills/sketch-findings-*/SKILL.md 2>/dev/null | head -1)
+```
+
 Resolve UI agent models:
 
 ```bash
@@ -77,6 +82,13 @@ Note: stack decisions (component library, styling approach) will be asked during
 ```
 Continue (non-blocking).
 
+**If `SKETCH_FINDINGS_PATH` is not empty:**
+```
+⚡ Sketch findings detected: {SKETCH_FINDINGS_PATH}
+   Validated design decisions from /gsd-sketch will be loaded into the UI researcher.
+   Pre-validated decisions (layout, palette, typography, spacing) should be treated as locked — not re-asked.
+```
+
 ## 4. Check Existing UI-SPEC
 
 ```bash
@@ -124,6 +136,7 @@ Answer: "What visual and interaction contracts does this phase need?"
 - {requirements_path} (Requirements)
 - {context_path} (USER DECISIONS from /gsd-discuss-phase)
 - {research_path} (Technical Research — stack decisions)
+- {SKETCH_FINDINGS_PATH} (Sketch Findings — validated design decisions, CSS patterns, visual direction from /gsd-sketch, if exists)
 </files_to_read>
 
 ${AGENT_SKILLS_UI}

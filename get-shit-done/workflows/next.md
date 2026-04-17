@@ -134,6 +134,29 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: defer incompl
 **If the user chooses "Force" (F):** Continue to `determine_next_action` without recording deferral.
 </step>
 
+<step name="spike_sketch_notice">
+Check for pending spike/sketch work and surface a notice (does not change routing):
+
+```bash
+# Check for pending spikes (verdict: PENDING in any README)
+PENDING_SPIKES=$(grep -rl 'verdict: PENDING' .planning/spikes/*/README.md 2>/dev/null | wc -l | tr -d ' ')
+
+# Check for pending sketches (winner: null in any README)
+PENDING_SKETCHES=$(grep -rl 'winner: null' .planning/sketches/*/README.md 2>/dev/null | wc -l | tr -d ' ')
+```
+
+If either count is > 0, display before routing:
+```
+⚠ Pending exploratory work:
+  {PENDING_SPIKES} spike(s) with unresolved verdicts in .planning/spikes/
+  {PENDING_SKETCHES} sketch(es) without a winning variant in .planning/sketches/
+
+  Resume with `/gsd-spike` or `/gsd-sketch`, or continue with phase work below.
+```
+
+Only show lines for non-zero counts. If both are 0, skip this notice entirely.
+</step>
+
 <step name="determine_next_action">
 Apply routing rules based on state:
 
