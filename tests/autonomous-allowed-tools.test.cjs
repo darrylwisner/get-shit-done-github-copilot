@@ -18,7 +18,7 @@ describe('commands/gsd/autonomous.md allowed-tools', () => {
     const content = fs.readFileSync(filePath, 'utf-8');
 
     // Extract the YAML frontmatter block between the first pair of --- delimiters
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     assert.ok(frontmatterMatch, 'autonomous.md must have YAML frontmatter');
 
     const frontmatter = frontmatterMatch[1];

@@ -151,7 +151,12 @@ export class GSDTools {
     let jsonStr = trimmed;
     if (jsonStr.startsWith('@file:')) {
       const filePath = jsonStr.slice(6).trim();
-      jsonStr = await readFile(filePath, 'utf-8');
+      try {
+        jsonStr = await readFile(filePath, 'utf-8');
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to read gsd-tools @file: indirection at "${filePath}": ${reason}`);
+      }
     }
 
     return JSON.parse(jsonStr);
@@ -294,13 +299,14 @@ export class GSDTools {
 // ─── Path resolution ────────────────────────────────────────────────────────
 
 /**
- * Resolve gsd-tools.cjs path with bundled-repo fallback.
- * Probe order: project-local → repo-bundled → global home directory.
+ * Resolve gsd-tools.cjs path.
+ * Probe order: SDK-bundled repo copy → `project/.claude/get-shit-done/` →
+ * `~/.claude/get-shit-done/`.
  */
 export function resolveGsdToolsPath(projectDir: string): string {
   const candidates = [
-    join(projectDir, '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs'),
     BUNDLED_GSD_TOOLS_PATH,
+    join(projectDir, '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs'),
     join(homedir(), '.claude', 'get-shit-done', 'bin', 'gsd-tools.cjs'),
   ];
 
