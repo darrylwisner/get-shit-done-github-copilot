@@ -205,30 +205,7 @@ This step cannot be skipped. Before proceeding to `check_existing` or any other 
 
 Write these answers inline before continuing. If a blocking anti-pattern cannot be answered from the context in `.continue-here.md`, stop and ask the user for clarification.
 
-**If no `.continue-here.md` exists, or no `blocking` rows are found:** Proceed directly to `check_spec`.
-</step>
-
-<step name="check_spec">
-Check if a SPEC.md (from `/gsd-spec-phase`) exists for this phase. SPEC.md locks requirements before implementation decisions — if present, this discussion focuses on HOW to implement, not WHAT to build.
-
-```bash
-ls ${phase_dir}/*-SPEC.md 2>/dev/null | grep -v AI-SPEC | head -1 || true
-```
-
-**If SPEC.md is found:**
-1. Read the SPEC.md file.
-2. Count the number of requirements (numbered items in the `## Requirements` section).
-3. Display:
-   ```
-   Found SPEC.md — {N} requirements locked. Focusing on implementation decisions.
-   ```
-4. Set internal flag `spec_loaded = true`.
-5. Store the requirements, boundaries, and acceptance criteria from SPEC.md as `<locked_requirements>` — these flow directly into CONTEXT.md without re-asking.
-6. Continue to `check_existing`.
-
-**If no SPEC.md is found:** Continue to `check_existing` with `spec_loaded = false` (default behavior unchanged).
-
-**Note:** SPEC.md files named `AI-SPEC.md` (from `/gsd-ai-integration-phase`) are excluded — those serve a different purpose.
+**If no `.continue-here.md` exists, or no `blocking` rows are found:** Proceed directly to `check_existing`.
 </step>
 
 <step name="check_existing">
@@ -452,12 +429,6 @@ Analyze the phase to identify gray areas worth discussing. **Use both `prior_dec
    - Scan `<prior_decisions>` for relevant choices (e.g., "Ctrl+C only, no single-key shortcuts")
    - These are **pre-answered** — don't re-ask unless this phase has conflicting needs
    - Note applicable prior decisions for use in presentation
-
-2b. **SPEC.md awareness** — If `spec_loaded = true` (SPEC.md was found in `check_spec`):
-   - The `<locked_requirements>` from SPEC.md are pre-answered: Goal, Boundaries, Constraints, Acceptance Criteria.
-   - Do NOT generate gray areas about WHAT to build or WHY — those are locked.
-   - Only generate gray areas about HOW to implement: technical approach, library choices, UX/UI patterns, interaction details, error handling style.
-   - When presenting gray areas, include a note: "Requirements are locked by SPEC.md — discussing implementation decisions only."
 
 3. **Gray areas by category** — For each relevant category (UI, UX, Behavior, Empty States, Content), identify 1-2 specific ambiguities that would change implementation. **Annotate with code context where relevant** (e.g., "You already have a Card component" or "No existing pattern for this").
 
@@ -937,12 +908,6 @@ mkdir -p ".planning/phases/${padded_phase}-${phase_slug}"
 
 **File location:** `${phase_dir}/${padded_phase}-CONTEXT.md`
 
-**SPEC.md integration** — If `spec_loaded = true`:
-- Add a `<spec_lock>` section immediately after `<domain>` (see template below).
-- Add the SPEC.md file to `<canonical_refs>` with note "Locked requirements — MUST read before planning".
-- Do NOT duplicate requirements text from SPEC.md into `<decisions>` — agents read SPEC.md directly.
-- The `<decisions>` section contains only implementation decisions from this discussion.
-
 **Structure the content by what was discussed:**
 
 ```markdown
@@ -957,19 +922,6 @@ mkdir -p ".planning/phases/${padded_phase}-${phase_slug}"
 [Clear statement of what this phase delivers — the scope anchor]
 
 </domain>
-
-[If spec_loaded = true, insert this section:]
-<spec_lock>
-## Requirements (locked via SPEC.md)
-
-**{N} requirements are locked.** See `{padded_phase}-SPEC.md` for full requirements, boundaries, and acceptance criteria.
-
-Downstream agents MUST read `{padded_phase}-SPEC.md` before planning or implementing. Requirements are not duplicated here.
-
-**In scope (from SPEC.md):** [copy the "In scope" bullet list from SPEC.md Boundaries]
-**Out of scope (from SPEC.md):** [copy the "Out of scope" bullet list from SPEC.md Boundaries]
-
-</spec_lock>
 
 <decisions>
 ## Implementation Decisions

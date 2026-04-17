@@ -857,7 +857,6 @@ function cmdInitMilestoneOp(cwd, raw) {
 
 function cmdInitMapCodebase(cwd, raw) {
   const config = loadConfig(cwd);
-  const now = new Date();
 
   // Check for existing codebase maps
   const codebaseDir = path.join(planningRoot(cwd), 'codebase');
@@ -875,10 +874,6 @@ function cmdInitMapCodebase(cwd, raw) {
     search_gitignored: config.search_gitignored,
     parallelization: config.parallelization,
     subagent_timeout: config.subagent_timeout,
-
-    // Timestamps
-    date: now.toISOString().split('T')[0],
-    timestamp: now.toISOString(),
 
     // Paths
     codebase_dir: '.planning/codebase',
