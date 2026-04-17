@@ -410,25 +410,97 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: initialize pr
 
 **If auto mode:** Skip — config was collected in Step 2a. Proceed to Step 5.5.
 
-**Check for global defaults** at `~/.gsd/defaults.json`. If the file exists, offer to use saved defaults:
+**Check for global defaults** at `~/.gsd/defaults.json`. If the file exists, read and display its contents before asking:
 
+```bash
+DEFAULTS_RAW=$(cat ~/.gsd/defaults.json 2>/dev/null)
 ```
+
+Format the JSON into human-readable bullets using these label mappings:
+- `mode` → "Mode"
+- `granularity` → "Granularity"
+- `parallelization` → "Execution" (`true` → "Parallel", `false` → "Sequential")
+- `commit_docs` → "Git Tracking" (`true` → "Yes", `false` → "No")
+- `model_profile` → "AI Models"
+- `workflow.research` → "Research" (`true` → "Yes", `false` → "No")
+- `workflow.plan_check` → "Plan Check" (`true` → "Yes", `false` → "No")
+- `workflow.verifier` → "Verifier" (`true` → "Yes", `false` → "No")
+
+Display above the prompt:
+
+```text
+Your saved defaults (~/.gsd/defaults.json):
+  • Mode: [value]
+  • Granularity: [value]
+  • Execution: [Parallel|Sequential]
+  • Git Tracking: [Yes|No]
+  • AI Models: [value]
+  • Research: [Yes|No]
+  • Plan Check: [Yes|No]
+  • Verifier: [Yes|No]
+```
+
+Then ask:
+
+```text
 AskUserQuestion([
   {
-    question: "Use your saved default settings? (from ~/.gsd/defaults.json)",
+    question: "Use these saved defaults?",
     header: "Defaults",
     multiSelect: false,
     options: [
-      { label: "Yes (Recommended)", description: "Use saved defaults, skip settings questions" },
-      { label: "No", description: "Configure settings manually" }
+      { label: "Use as-is (Recommended)", description: "Proceed with the defaults shown above" },
+      { label: "Modify some settings", description: "Keep defaults, change a few" },
+      { label: "Configure fresh", description: "Walk through all questions from scratch" }
     ]
   }
 ])
 ```
 
-If "Yes": read `~/.gsd/defaults.json`, use those values for config.json, and skip directly to **Commit config.json** below.
+**If "Use as-is":** use the defaults values for config.json and skip directly to **Commit config.json** below.
 
-If "No" or `~/.gsd/defaults.json` doesn't exist: proceed with the questions below.
+**If "Modify some settings":** present a selection of every setting with its current saved value.
+
+**If TEXT_MODE is active** (non-Claude runtimes): display a numbered list and ask the user to type the numbers of settings they want to change (comma-separated). Parse the response and proceed.
+
+```text
+Which settings do you want to change? (enter numbers, comma-separated)
+
+  1. Mode — Currently: [value]
+  2. Granularity — Currently: [value]
+  3. Execution — Currently: [Parallel|Sequential]
+  4. Git Tracking — Currently: [Yes|No]
+  5. AI Models — Currently: [value]
+  6. Research — Currently: [Yes|No]
+  7. Plan Check — Currently: [Yes|No]
+  8. Verifier — Currently: [Yes|No]
+```
+
+**Otherwise** (Claude runtime with AskUserQuestion): use multiSelect:
+
+```text
+AskUserQuestion([
+  {
+    question: "Which settings do you want to change?",
+    header: "Change Settings",
+    multiSelect: true,
+    options: [
+      { label: "Mode", description: "Currently: [value]" },
+      { label: "Granularity", description: "Currently: [value]" },
+      { label: "Execution", description: "Currently: [Parallel|Sequential]" },
+      { label: "Git Tracking", description: "Currently: [Yes|No]" },
+      { label: "AI Models", description: "Currently: [value]" },
+      { label: "Research", description: "Currently: [Yes|No]" },
+      { label: "Plan Check", description: "Currently: [Yes|No]" },
+      { label: "Verifier", description: "Currently: [Yes|No]" }
+    ]
+  }
+])
+```
+
+For each selected setting, ask only that question using the option set from Round 1 / Round 2 below. Merge user answers over the saved defaults — unchanged settings retain their saved values. Then skip to **Commit config.json**.
+
+**If "Configure fresh" or `~/.gsd/defaults.json` doesn't exist:** proceed with the questions below.
 
 **Round 1 — Core workflow settings (4 questions):**
 
