@@ -593,6 +593,10 @@ UAT_PATH=$(_gsd_field "$INIT" uat_path)
 CONTEXT_PATH=$(_gsd_field "$INIT" context_path)
 REVIEWS_PATH=$(_gsd_field "$INIT" reviews_path)
 PATTERNS_PATH=$(_gsd_field "$INIT" patterns_path)
+
+# Detect spike/sketch findings skills (project-local)
+SPIKE_FINDINGS_PATH=$(ls ./.claude/skills/spike-findings-*/SKILL.md 2>/dev/null | head -1)
+SKETCH_FINDINGS_PATH=$(ls ./.claude/skills/sketch-findings-*/SKILL.md 2>/dev/null | head -1)
 ```
 
 ## 7.5. Verify Nyquist Artifacts
@@ -706,6 +710,8 @@ Planner prompt:
 - {uat_path} (UAT Gaps - if --gaps)
 - {reviews_path} (Cross-AI Review Feedback - if --reviews)
 - {UI_SPEC_PATH} (UI Design Contract — visual/interaction specs, if exists)
+- {SPIKE_FINDINGS_PATH} (Spike Findings — validated patterns, constraints, landmines from experiments, if exists)
+- {SKETCH_FINDINGS_PATH} (Sketch Findings — validated design decisions, CSS patterns, visual direction, if exists)
 ${CONTEXT_WINDOW >= 500000 ? `
 **Cross-phase context (1M model enrichment):**
 - CONTEXT.md files from the 3 most recent completed phases (locked decisions — maintain consistency)

@@ -82,6 +82,8 @@ When the conversation reaches natural conclusions or the developer signals readi
 | Research question | `.planning/research/questions.md` (append) | Open questions that need deeper investigation |
 | Requirement | `REQUIREMENTS.md` (append) | Clear requirements that emerged from discussion |
 | New phase | `ROADMAP.md` (append) | Scope large enough to warrant its own phase |
+| Spike | `/gsd-spike` (invoke) | Feasibility uncertainty surfaced — "will this API work?", "can we do X?" |
+| Sketch | `/gsd-sketch` (invoke) | Design direction unclear — "what should this look like?", "how should this feel?" |
 
 Present suggestions:
 ```
