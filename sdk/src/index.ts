@@ -120,6 +120,7 @@ export class GSD {
       projectDir: this.projectDir,
       gsdToolsPath: this.gsdToolsPath,
       workstream: this.workstream,
+      eventStream: this.eventStream,
     });
   }
 

@@ -116,6 +116,198 @@ describe('withProjectRoot', () => {
     const enriched = withProjectRoot(tmpDir, result, {});
     expect(enriched.response_language).toBeUndefined();
   });
+
+  // Regression: #2400 — checkAgentsInstalled was looking at the wrong default
+  // directory (~/.claude/get-shit-done/agents) while the installer writes to
+  // ~/.claude/agents, causing agents_installed: false even on clean installs.
+  it('reports agents_installed: true when all expected agents exist in GSD_AGENTS_DIR', async () => {
+    const { MODEL_PROFILES } = await import('./config-query.js');
+    const agentsDir = join(tmpDir, 'fake-agents');
+    await mkdir(agentsDir, { recursive: true });
+    for (const name of Object.keys(MODEL_PROFILES)) {
+      await writeFile(join(agentsDir, `${name}.md`), '# stub');
+    }
+    const prev = process.env.GSD_AGENTS_DIR;
+    process.env.GSD_AGENTS_DIR = agentsDir;
+    try {
+      const enriched = withProjectRoot(tmpDir, {});
+      expect(enriched.agents_installed).toBe(true);
+      expect(enriched.missing_agents).toEqual([]);
+    } finally {
+      if (prev === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prev;
+    }
+  });
+
+  it('reports missing agents when GSD_AGENTS_DIR is empty', async () => {
+    const agentsDir = join(tmpDir, 'empty-agents');
+    await mkdir(agentsDir, { recursive: true });
+    const prev = process.env.GSD_AGENTS_DIR;
+    process.env.GSD_AGENTS_DIR = agentsDir;
+    try {
+      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      expect(enriched.agents_installed).toBe(false);
+      expect((enriched.missing_agents as string[]).length).toBeGreaterThan(0);
+    } finally {
+      if (prev === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prev;
+    }
+  });
+
+  // Regression: #2400 follow-up — installer honors CLAUDE_CONFIG_DIR for custom
+  // Claude install roots. The SDK check must follow the same precedence or it
+  // false-negatives agent presence on non-default installs.
+  it('honors CLAUDE_CONFIG_DIR when GSD_AGENTS_DIR is unset', async () => {
+    const { MODEL_PROFILES } = await import('./config-query.js');
+    const configDir = join(tmpDir, 'custom-claude');
+    const agentsDir = join(configDir, 'agents');
+    await mkdir(agentsDir, { recursive: true });
+    for (const name of Object.keys(MODEL_PROFILES)) {
+      await writeFile(join(agentsDir, `${name}.md`), '# stub');
+    }
+    const prevAgents = process.env.GSD_AGENTS_DIR;
+    const prevClaude = process.env.CLAUDE_CONFIG_DIR;
+    delete process.env.GSD_AGENTS_DIR;
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    try {
+      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      expect(enriched.agents_installed).toBe(true);
+      expect(enriched.missing_agents).toEqual([]);
+    } finally {
+      if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prevAgents;
+      if (prevClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = prevClaude;
+    }
+  });
+
+  // #2402 — runtime-aware resolution: GSD_RUNTIME selects which runtime's
+  // config-dir env chain to consult, so non-Claude installs stop
+  // false-negating.
+  it('GSD_RUNTIME=codex resolves agents under CODEX_HOME/agents', async () => {
+    const { MODEL_PROFILES } = await import('./config-query.js');
+    const codexHome = join(tmpDir, 'codex-home');
+    const agentsDir = join(codexHome, 'agents');
+    await mkdir(agentsDir, { recursive: true });
+    for (const name of Object.keys(MODEL_PROFILES)) {
+      await writeFile(join(agentsDir, `${name}.md`), '# stub');
+    }
+    const prevAgents = process.env.GSD_AGENTS_DIR;
+    const prevRuntime = process.env.GSD_RUNTIME;
+    const prevCodex = process.env.CODEX_HOME;
+    delete process.env.GSD_AGENTS_DIR;
+    process.env.GSD_RUNTIME = 'codex';
+    process.env.CODEX_HOME = codexHome;
+    try {
+      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      expect(enriched.agents_installed).toBe(true);
+      expect(enriched.missing_agents).toEqual([]);
+    } finally {
+      if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prevAgents;
+      if (prevRuntime === undefined) delete process.env.GSD_RUNTIME;
+      else process.env.GSD_RUNTIME = prevRuntime;
+      if (prevCodex === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = prevCodex;
+    }
+  });
+
+  it('config.runtime drives detection when GSD_RUNTIME is unset', async () => {
+    const { MODEL_PROFILES } = await import('./config-query.js');
+    const geminiHome = join(tmpDir, 'gemini-home');
+    const agentsDir = join(geminiHome, 'agents');
+    await mkdir(agentsDir, { recursive: true });
+    for (const name of Object.keys(MODEL_PROFILES)) {
+      await writeFile(join(agentsDir, `${name}.md`), '# stub');
+    }
+    const prevAgents = process.env.GSD_AGENTS_DIR;
+    const prevRuntime = process.env.GSD_RUNTIME;
+    const prevGemini = process.env.GEMINI_CONFIG_DIR;
+    delete process.env.GSD_AGENTS_DIR;
+    delete process.env.GSD_RUNTIME;
+    process.env.GEMINI_CONFIG_DIR = geminiHome;
+    try {
+      const enriched = withProjectRoot(tmpDir, {}, { runtime: 'gemini' }) as Record<string, unknown>;
+      expect(enriched.agents_installed).toBe(true);
+    } finally {
+      if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prevAgents;
+      if (prevRuntime === undefined) delete process.env.GSD_RUNTIME;
+      else process.env.GSD_RUNTIME = prevRuntime;
+      if (prevGemini === undefined) delete process.env.GEMINI_CONFIG_DIR;
+      else process.env.GEMINI_CONFIG_DIR = prevGemini;
+    }
+  });
+
+  it('GSD_RUNTIME wins over config.runtime', async () => {
+    const { MODEL_PROFILES } = await import('./config-query.js');
+    const codexHome = join(tmpDir, 'codex-win');
+    const agentsDir = join(codexHome, 'agents');
+    await mkdir(agentsDir, { recursive: true });
+    for (const name of Object.keys(MODEL_PROFILES)) {
+      await writeFile(join(agentsDir, `${name}.md`), '# stub');
+    }
+    const prevAgents = process.env.GSD_AGENTS_DIR;
+    const prevRuntime = process.env.GSD_RUNTIME;
+    const prevCodex = process.env.CODEX_HOME;
+    delete process.env.GSD_AGENTS_DIR;
+    process.env.GSD_RUNTIME = 'codex';
+    process.env.CODEX_HOME = codexHome;
+    try {
+      // config says gemini, env says codex — codex should win and find agents.
+      const enriched = withProjectRoot(tmpDir, {}, { runtime: 'gemini' }) as Record<string, unknown>;
+      expect(enriched.agents_installed).toBe(true);
+    } finally {
+      if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prevAgents;
+      if (prevRuntime === undefined) delete process.env.GSD_RUNTIME;
+      else process.env.GSD_RUNTIME = prevRuntime;
+      if (prevCodex === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = prevCodex;
+    }
+  });
+
+  it('unknown GSD_RUNTIME falls through to config/Claude default', () => {
+    const prevAgents = process.env.GSD_AGENTS_DIR;
+    const prevRuntime = process.env.GSD_RUNTIME;
+    delete process.env.GSD_AGENTS_DIR;
+    process.env.GSD_RUNTIME = 'not-a-runtime';
+    try {
+      // Should not throw; falls back to Claude — missing_agents on a blank tmpDir.
+      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      expect(typeof enriched.agents_installed).toBe('boolean');
+    } finally {
+      if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prevAgents;
+      if (prevRuntime === undefined) delete process.env.GSD_RUNTIME;
+      else process.env.GSD_RUNTIME = prevRuntime;
+    }
+  });
+
+  it('GSD_AGENTS_DIR takes precedence over CLAUDE_CONFIG_DIR', async () => {
+    const { MODEL_PROFILES } = await import('./config-query.js');
+    const winningDir = join(tmpDir, 'winning-agents');
+    const losingDir = join(tmpDir, 'losing-config', 'agents');
+    await mkdir(winningDir, { recursive: true });
+    await mkdir(losingDir, { recursive: true });
+    // Only populate the winning dir.
+    for (const name of Object.keys(MODEL_PROFILES)) {
+      await writeFile(join(winningDir, `${name}.md`), '# stub');
+    }
+    const prevAgents = process.env.GSD_AGENTS_DIR;
+    const prevClaude = process.env.CLAUDE_CONFIG_DIR;
+    process.env.GSD_AGENTS_DIR = winningDir;
+    process.env.CLAUDE_CONFIG_DIR = join(tmpDir, 'losing-config');
+    try {
+      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      expect(enriched.agents_installed).toBe(true);
+    } finally {
+      if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
+      else process.env.GSD_AGENTS_DIR = prevAgents;
+      if (prevClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = prevClaude;
+    }
+  });
 });
 
 describe('initExecutePhase', () => {
