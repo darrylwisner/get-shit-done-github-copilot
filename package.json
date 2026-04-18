@@ -11,7 +11,12 @@
     "get-shit-done",
     "agents",
     "hooks",
-    "scripts"
+    "scripts",
+    "sdk/src",
+    "sdk/prompts",
+    "sdk/package.json",
+    "sdk/package-lock.json",
+    "sdk/tsconfig.json"
   ],
   "keywords": [
     "claude",
