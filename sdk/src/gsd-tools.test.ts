@@ -43,7 +43,7 @@ describe('GSDTools', () => {
         `process.stdout.write(JSON.stringify({ status: "ok", count: 42 }));`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.exec('state', ['load']);
 
       expect(result).toEqual({ status: 'ok', count: 42 });
@@ -61,7 +61,7 @@ describe('GSDTools', () => {
         `process.stdout.write('@file:${resultFile.replace(/\\/g, '\\\\')}');`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.exec('state', ['load']);
 
       expect(result).toEqual(bigData);
@@ -73,7 +73,7 @@ describe('GSDTools', () => {
         `// outputs nothing`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.exec('state', ['load']);
 
       expect(result).toBeNull();
@@ -85,7 +85,7 @@ describe('GSDTools', () => {
         `process.stderr.write('something went wrong\\n'); process.exit(1);`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
 
       try {
         await tools.exec('state', ['load']);
@@ -104,7 +104,6 @@ describe('GSDTools', () => {
       const tools = new GSDTools({
         projectDir: tmpDir,
         gsdToolsPath: '/nonexistent/path/gsd-tools.cjs',
-        preferNativeQuery: false,
       });
 
       await expect(tools.exec('state', ['load'])).rejects.toThrow(GSDToolsError);
@@ -116,7 +115,7 @@ describe('GSDTools', () => {
         `process.stdout.write('Not JSON at all');`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
 
       try {
         await tools.exec('state', ['load']);
@@ -135,7 +134,7 @@ describe('GSDTools', () => {
         `process.stdout.write('@file:/tmp/does-not-exist-${Date.now()}.json');`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
 
       await expect(tools.exec('state', ['load'])).rejects.toThrow(GSDToolsError);
     });
@@ -150,7 +149,6 @@ describe('GSDTools', () => {
         projectDir: tmpDir,
         gsdToolsPath: scriptPath,
         timeoutMs: 500,
-        preferNativeQuery: false,
       });
 
       try {
@@ -182,7 +180,7 @@ describe('GSDTools', () => {
         `,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.stateLoad();
 
       expect(result).toBe('phase=3\nstatus=executing');
@@ -198,7 +196,7 @@ describe('GSDTools', () => {
         `,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.commit('test message', ['file1.md', 'file2.md']);
 
       expect(result).toBe('f89ae07');
@@ -217,7 +215,7 @@ describe('GSDTools', () => {
         `,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.roadmapAnalyze();
 
       expect(result).toEqual({ phases: [] });
@@ -236,7 +234,7 @@ describe('GSDTools', () => {
         `,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.verifySummary('/path/to/SUMMARY.md');
 
       expect(result).toBe('passed');
@@ -259,7 +257,7 @@ describe('GSDTools', () => {
         `process.stdout.write(${JSON.stringify(largeJson)});`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.exec('state', ['load']);
 
       expect(Array.isArray(result)).toBe(true);
@@ -304,7 +302,7 @@ describe('GSDTools', () => {
         `,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.initNewProject();
 
       expect(result.researcher_model).toBe('claude-sonnet-4-6');
@@ -320,7 +318,7 @@ describe('GSDTools', () => {
         `process.stderr.write('init failed\\n'); process.exit(1);`,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
 
       await expect(tools.initNewProject()).rejects.toThrow(GSDToolsError);
     });
@@ -361,7 +359,7 @@ describe('GSDTools', () => {
         { mode: 0o755 },
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.exec('test', []);
       expect(result).toEqual({ source: 'local' });
     });
@@ -384,7 +382,7 @@ describe('GSDTools', () => {
         `,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.configSet('workflow.auto_advance', 'true');
 
       expect(result).toBe('workflow.auto_advance=true');
@@ -400,7 +398,7 @@ describe('GSDTools', () => {
         `,
       );
 
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
+      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
       const result = await tools.configSet('mode', 'yolo');
 
       expect(result).toBe('mode=yolo');
