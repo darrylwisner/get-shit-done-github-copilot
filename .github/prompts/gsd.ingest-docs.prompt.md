@@ -1,7 +1,7 @@
 ---
-name: gsd.import
-description: "Ingest external plans with conflict detection against project decisions before writing anything."
-argument-hint: "--from <filepath>"
+name: gsd.ingest-docs
+description: "Scan a repo for mixed ADRs, PRDs, SPECs, and DOCs and bootstrap or merge the full .planning/ setup from them. Classifies each doc in parallel, synthesizes a consolidated context with a conflicts report, and routes to new-project or merge-milestone depending on whether .planning/ already exists."
+argument-hint: "[path] [--mode new|merge] [--manifest <file>] [--resolve auto|interactive]"
 tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
@@ -35,15 +35,20 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Import external plan files into the GSD planning system with conflict detection against PROJECT.md decisions.
+Build the full `.planning/` setup (or merge into an existing one) from multiple pre-existing planning documents — ADRs, PRDs, SPECs, DOCs — in one pass.
 
-- **--from**: Import an external plan file, detect conflicts, write as GSD PLAN.md, validate via gsd-plan-checker.
+- **Net-new bootstrap** (`--mode new`, default when `.planning/` is absent): produces PROJECT.md + REQUIREMENTS.md + ROADMAP.md + STATE.md from synthesized doc content, delegating final generation to `gsd-roadmapper`.
+- **Merge into existing** (`--mode merge`, default when `.planning/` is present): appends phases and requirements derived from the ingested docs; hard-blocks any contradiction with existing locked decisions.
 
-Future: `--prd` mode for PRD extraction is planned for a follow-up PR.
+Auto-synthesizes most conflicts using the precedence rule `ADR > SPEC > PRD > DOC` (overridable via manifest). Surfaces unresolved cases in `.planning/INGEST-CONFLICTS.md` with three buckets: auto-resolved, competing-variants, unresolved-blockers. The BLOCKER gate from the shared conflict engine prevents any destination file from being written when unresolved contradictions exist.
+
+**Inputs:** directory-convention discovery (`docs/adr/`, `docs/prd/`, `docs/specs/`, `docs/rfc/`, root-level `{ADR,PRD,SPEC,RFC}-*.md`), or an explicit `--manifest <file>` YAML listing `{path, type, precedence?}` per doc.
+
+**v1 constraints:** hard cap of 50 docs per invocation; `--resolve interactive` is reserved for a future release.
 </objective>
 
 <execution_context>
-- Read file at: ./.claude/get-shit-done/workflows/import.md
+- Read file at: ./.claude/get-shit-done/workflows/ingest-docs.md
 - Read file at: ./.claude/get-shit-done/references/ui-brand.md
 - Read file at: ./.claude/get-shit-done/references/gate-prompts.md
 - Read file at: ./.claude/get-shit-done/references/doc-conflict-engine.md
@@ -54,5 +59,5 @@ $ARGUMENTS
 </context>
 
 <process>
-Execute the import workflow end-to-end.
+Execute the ingest-docs workflow end-to-end. Preserve all approval gates (discovery, conflict report, routing) and the BLOCKER safety rule.
 </process>
