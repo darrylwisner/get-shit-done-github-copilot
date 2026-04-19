@@ -56,8 +56,7 @@ function isExcludedPath(filePath) {
     /CHECKPOINT/i.test(path.basename(p)) ||
     /[/\\](?:security|techsec|injection)[/\\.]/i.test(p) ||
     /security\.cjs$/.test(p) ||
-    p.includes('/.claude/hooks/') ||
-    p.includes('.claude/hooks/')
+    p.includes('/.claude/hooks/')
   );
 }
 
