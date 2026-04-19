@@ -20,6 +20,7 @@ const HOOKS_TO_COPY = [
   'gsd-context-monitor.js',
   'gsd-prompt-guard.js',
   'gsd-read-guard.js',
+  'gsd-read-injection-scanner.js',
   'gsd-statusline.js',
   'gsd-workflow-guard.js',
   // Community hooks (bash, opt-in via .planning/config.json hooks.community)
