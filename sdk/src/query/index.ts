@@ -44,6 +44,7 @@ import {
   initExecutePhase, initPlanPhase, initNewMilestone, initQuick,
   initResume, initVerifyWork, initPhaseOp, initTodos, initMilestoneOp,
   initMapCodebase, initNewWorkspace, initListWorkspaces, initRemoveWorkspace,
+  initIngestDocs,
 } from './init.js';
 import { initNewProject, initProgress, initManager } from './init-complex.js';
 import { agentSkills } from './skills.js';
@@ -338,6 +339,7 @@ export function createRegistry(eventStream?: GSDEventStream): QueryRegistry {
   registry.register('init.new-workspace', initNewWorkspace);
   registry.register('init.list-workspaces', initListWorkspaces);
   registry.register('init.remove-workspace', initRemoveWorkspace);
+  registry.register('init.ingest-docs', initIngestDocs);
   // Space-delimited aliases for CJS compatibility
   registry.register('init execute-phase', initExecutePhase);
   registry.register('init plan-phase', initPlanPhase);
@@ -352,6 +354,7 @@ export function createRegistry(eventStream?: GSDEventStream): QueryRegistry {
   registry.register('init new-workspace', initNewWorkspace);
   registry.register('init list-workspaces', initListWorkspaces);
   registry.register('init remove-workspace', initRemoveWorkspace);
+  registry.register('init ingest-docs', initIngestDocs);
 
   // Complex init handlers
   registry.register('init.new-project', initNewProject);

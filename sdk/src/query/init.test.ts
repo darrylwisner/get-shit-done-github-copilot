@@ -24,6 +24,7 @@ import {
   initNewWorkspace,
   initListWorkspaces,
   initRemoveWorkspace,
+  initIngestDocs,
 } from './init.js';
 
 let tmpDir: string;
@@ -304,5 +305,26 @@ describe('initRemoveWorkspace', () => {
     const result = await initRemoveWorkspace(['../../bad'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
+  });
+});
+
+describe('initIngestDocs', () => {
+  it('returns flat JSON with ingest-docs branching fields', async () => {
+    const result = await initIngestDocs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.project_exists).toBe(false);
+    expect(data.planning_exists).toBe(true);
+    expect(typeof data.has_git).toBe('boolean');
+    expect(data.project_path).toBe('.planning/PROJECT.md');
+    expect(data.commit_docs).toBeDefined();
+    expect(data.project_root).toBe(tmpDir);
+  });
+
+  it('reports project_exists true when PROJECT.md is present', async () => {
+    await writeFile(join(tmpDir, '.planning', 'PROJECT.md'), '# project');
+    const result = await initIngestDocs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.project_exists).toBe(true);
+    expect(data.planning_exists).toBe(true);
   });
 });

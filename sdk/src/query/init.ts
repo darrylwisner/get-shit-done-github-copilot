@@ -945,6 +945,26 @@ export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
   return { data: result };
 };
 
+// ─── initIngestDocs ───────────────────────────────────────────────────────
+
+/**
+ * Init handler for ingest-docs workflow.
+ * Mirrors `initResume` shape but without current-agent-id lookup — the
+ * ingest-docs workflow reads `project_exists`, `planning_exists`, `has_git`,
+ * and `project_path` to branch between new-project vs merge-milestone modes.
+ */
+export const initIngestDocs: QueryHandler = async (_args, projectDir) => {
+  const config = await loadConfig(projectDir);
+  const result: Record<string, unknown> = {
+    project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
+    planning_exists: pathExists(projectDir, '.planning'),
+    has_git: pathExists(projectDir, '.git'),
+    project_path: '.planning/PROJECT.md',
+    commit_docs: config.commit_docs,
+  };
+  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+};
+
 // ─── docsInit ────────────────────────────────────────────────────────────
 
 export const docsInit: QueryHandler = async (_args, projectDir) => {

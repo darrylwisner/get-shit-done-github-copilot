@@ -68,7 +68,9 @@ function cleanup(dir) {
 }
 
 function runInstaller(configDir) {
-  execFileSync(process.execPath, [INSTALL_SCRIPT, '--claude', '--global', '--yes'], {
+  // --no-sdk: this test covers .sh hook version stamping only; skip SDK
+  // build (covered by install-smoke.yml).
+  execFileSync(process.execPath, [INSTALL_SCRIPT, '--claude', '--global', '--yes', '--no-sdk'], {
     encoding: 'utf-8',
     stdio: 'pipe',
     env: { ...process.env, CLAUDE_CONFIG_DIR: configDir },

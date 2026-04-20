@@ -58,7 +58,10 @@ function cleanup(dir) {
  * Returns the path to the installed hooks directory.
  */
 function runInstaller(configDir) {
-  execFileSync(process.execPath, [INSTALL_SCRIPT, '--claude', '--global', '--yes'], {
+  // --no-sdk: this test covers hook deployment only; skip SDK build to avoid
+  // flakiness and keep the test fast (SDK install path has dedicated coverage
+  // in install-smoke.yml).
+  execFileSync(process.execPath, [INSTALL_SCRIPT, '--claude', '--global', '--yes', '--no-sdk'], {
     encoding: 'utf-8',
     stdio: 'pipe',
     env: {
