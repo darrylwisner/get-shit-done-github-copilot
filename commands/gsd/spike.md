@@ -1,7 +1,7 @@
 ---
 name: gsd:spike
 description: Rapidly spike an idea with throwaway experiments to validate feasibility before planning
-argument-hint: "<idea to validate> [--quick]"
+argument-hint: "<idea to validate> [--quick] [--text]"
 allowed-tools:
   - Read
   - Write
@@ -10,6 +10,10 @@ allowed-tools:
   - Grep
   - Glob
   - AskUserQuestion
+  - WebSearch
+  - WebFetch
+  - mcp__context7__resolve-library-id
+  - mcp__context7__query-docs
 ---
 <objective>
 Rapid feasibility validation through focused, throwaway experiments. Each spike answers one
@@ -33,9 +37,10 @@ Idea: $ARGUMENTS
 
 **Available flags:**
 - `--quick` — Skip decomposition/alignment, jump straight to building. Use when you already know what to spike.
+- `--text` — Use plain-text numbered lists instead of AskUserQuestion (for non-Claude runtimes).
 </context>
 
 <process>
 Execute the spike workflow from @~/.claude/get-shit-done/workflows/spike.md end-to-end.
-Preserve all workflow gates (decomposition, risk ordering, verification, MANIFEST updates, commit patterns).
+Preserve all workflow gates (prior spike check, decomposition, research, risk ordering, observability assessment, verification, MANIFEST updates, commit patterns).
 </process>

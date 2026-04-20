@@ -41,53 +41,28 @@ COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
 ```
 </step>
 
-<step name="curate">
-## Curate Spikes One-at-a-Time
+<step name="auto_include">
+## Auto-Include All Spikes
 
-Present each unprocessed spike in ascending order. For each spike, show:
+Include all unprocessed spikes automatically. Present a brief inventory showing what's being processed:
 
-- **Spike number and name**
-- **Validates:** the Given/When/Then from frontmatter
-- **Verdict:** VALIDATED / INVALIDATED / PARTIAL
-- **Tags:** from frontmatter
-- **Key findings:** summarize the Results section from the README
-- **Grey areas:** anything uncertain or partially proven
+```
+Processing N spikes:
+  001 — name (VALIDATED)
+  002 — name (PARTIAL)
+  003 — name (INVALIDATED)
+```
 
-Then ask the user:
-
-╔══════════════════════════════════════════════════════════════╗
-║  CHECKPOINT: Decision Required                               ║
-╚══════════════════════════════════════════════════════════════╝
-
-Spike {NNN}: {name} — {verdict}
-
-{key findings summary}
-
-──────────────────────────────────────────────────────────────
-→ Include / Exclude / Partial / Help me UAT this
-──────────────────────────────────────────────────────────────
-
-**If "Help me UAT this":**
-1. Read the spike's README "How to Run" and "What to Expect" sections
-2. Present step-by-step instructions
-3. Ask: "Does this match what you expected?"
-4. After UAT, return to the include/exclude/partial decision
-
-**If "Partial":**
-Ask what specifically to include or exclude. Record their notes alongside the spike.
+Every spike carries forward:
+- **VALIDATED** spikes provide proven patterns
+- **PARTIAL** spikes provide constrained patterns
+- **INVALIDATED** spikes provide landmines and dead ends
 </step>
 
 <step name="group">
 ## Auto-Group by Feature Area
 
-After all spikes are curated:
-
-1. Read all included spikes' tags, names, `related` fields, and content
-2. Propose feature-area groupings, e.g.:
-   - "**WebSocket Streaming** — spikes 001, 004, 007"
-   - "**Foo API Integration** — spikes 002, 003"
-   - "**PDF Parsing** — spike 005"
-3. Present the grouping for approval — user may merge, split, rename, or rearrange
+Group spikes by feature area based on tags, names, `related` fields, and content. Proceed directly into synthesis.
 
 Each group becomes one reference file in the generated skill.
 </step>
@@ -193,13 +168,9 @@ Write `.planning/spikes/WRAP-UP-SUMMARY.md` for project history:
 **Feature areas:** [list]
 **Skill output:** `./.claude/skills/spike-findings-[project]/`
 
-## Included Spikes
-| # | Name | Verdict | Feature Area |
-|---|------|---------|--------------|
-
-## Excluded Spikes
-| # | Name | Reason |
-|---|------|--------|
+## Processed Spikes
+| # | Name | Type | Verdict | Feature Area |
+|---|------|------|---------|--------------|
 
 ## Key Findings
 [consolidated findings summary]
@@ -232,7 +203,7 @@ gsd-sdk query commit "docs(spike-wrap-up): package [N] spike findings into proje
  GSD ► SPIKE WRAP-UP COMPLETE ✓
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Curated:** {N} spikes ({included} included, {excluded} excluded)
+**Processed:** {N} spikes
 **Feature areas:** {list}
 **Skill:** `./.claude/skills/spike-findings-[project]/`
 **Summary:** `.planning/spikes/WRAP-UP-SUMMARY.md`
@@ -240,34 +211,71 @@ gsd-sdk query commit "docs(spike-wrap-up): package [N] spike findings into proje
 
 The spike-findings skill will auto-load in future build conversations.
 ```
+</step>
 
-───────────────────────────────────────────────────────────────
+<step name="whats_next">
+## What's Next — Intelligent Spike Routing
 
-## ▶ Next Up
+Analyze the full spike landscape (MANIFEST.md, all curated findings, feature-area groupings, validated/invalidated/partial verdicts) and present three categories of next-step options:
 
-**Start building** — plan the real implementation
+### Category A: Integration Spikes — "Do any validated spikes need to be tested together?"
 
-`/gsd-plan-phase`
+Review every pair and cluster of VALIDATED spikes. Look for:
 
-───────────────────────────────────────────────────────────────
+- **Shared resources:** Two spikes that both touch the same API, database, state, or data format but were tested independently. Will they conflict, race, or step on each other?
+- **Data handoffs:** Spike A produces output that Spike B consumes. The formats were assumed compatible but never proven.
+- **Timing/ordering:** Spikes that work in isolation but have sequencing dependencies in the real flow (e.g., auth must complete before streaming starts).
+- **Resource contention:** Spikes that individually work but may compete for connections, memory, rate limits, or tokens when combined.
 
-**Also available:**
-- `/gsd-add-phase` — add a phase based on spike findings
-- `/gsd-spike` — spike additional ideas
-- `/gsd-explore` — continue exploring
+If integration risks exist, present them as concrete proposed spikes:
 
-───────────────────────────────────────────────────────────────
+> **Integration spike candidates:**
+> - "Spikes 001 + 003 together: streaming through the authenticated connection" — these were tested separately but the real app needs both at once
+> - "Spikes 002 + 005 data handoff: does the parser output match what the renderer expects?"
+
+If no meaningful integration risks exist, say so and skip this category.
+
+### Category B: Frontier Spikes — "What else should we spike?"
+
+Think laterally about the overall idea from MANIFEST.md and what's been proven so far. Consider:
+
+- **Gaps in the vision:** What does the user's idea need that hasn't been spiked yet? Look at the MANIFEST.md idea description and identify capabilities that are assumed but unproven.
+- **Discovered dependencies:** Findings from completed spikes that reveal new questions. A spike that validated "X works" may imply "but we'd also need Y" — surface those implied needs.
+- **Alternative approaches:** If any spike was PARTIAL or INVALIDATED, suggest a different angle to achieve the same goal.
+- **Adjacent capabilities:** Things that aren't strictly required but would meaningfully improve the idea if feasible — worth a quick spike to find out.
+- **Comparison opportunities:** If a spike used one library/approach and it worked but felt heavy or awkward, suggest a comparison spike with an alternative.
+
+Present frontier spikes as concrete proposals with names, validation questions (Given/When/Then), and risk-ordering:
+
+> **Frontier spike candidates:**
+> 1. `NNN-descriptive-name` — Given [X], when [Y], then [Z]. *Why now: [reason this is the logical next thing to explore]*
+> 2. `NNN-descriptive-name` — Given [X], when [Y], then [Z]. *Why now: [reason]*
+
+Number them continuing from the highest existing spike number.
+
+### Category C: Standard Options
+
+- `/gsd-plan-phase` — Start planning the real implementation
+- `/gsd-add-phase` — Add a phase based on spike findings
+- `/gsd-spike` — Spike additional ideas
+- `/gsd-explore` — Continue exploring
+- Other
+
+### Presenting the Options
+
+Present all applicable categories, then ask the user which direction to go. If the user picks a frontier or integration spike, write the spike definitions directly into `.planning/spikes/MANIFEST.md` (appending to the existing table) and kick off `/gsd-spike` with those spikes pre-defined — the user shouldn't have to re-describe what was just proposed.
 </step>
 
 </process>
 
 <success_criteria>
-- [ ] Every unprocessed spike presented for individual curation
-- [ ] Feature-area grouping proposed and approved
+- [ ] All unprocessed spikes auto-included and processed
+- [ ] Spikes grouped by feature area
 - [ ] Spike-findings skill exists at `./.claude/skills/` with SKILL.md, references/, sources/
-- [ ] Core source files from included spikes copied into sources/
+- [ ] Core source files from all spikes copied into sources/
 - [ ] Reference files contain validated patterns, code snippets, landmines, constraints
 - [ ] `.planning/spikes/WRAP-UP-SUMMARY.md` written for project history
 - [ ] Project CLAUDE.md has auto-load routing line
-- [ ] Summary presented with next-step routing
+- [ ] Summary presented
+- [ ] Intelligent next-step analysis presented with integration spike candidates, frontier spike candidates, and standard options
 </success_criteria>

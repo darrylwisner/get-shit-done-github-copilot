@@ -1,7 +1,7 @@
 ---
 name: gsd:sketch
 description: Rapidly sketch UI/design ideas using throwaway HTML mockups with multi-variant exploration
-argument-hint: "<design idea to explore> [--quick]"
+argument-hint: "<design idea to explore> [--quick] [--text]"
 allowed-tools:
   - Read
   - Write
@@ -10,6 +10,10 @@ allowed-tools:
   - Grep
   - Glob
   - AskUserQuestion
+  - WebSearch
+  - WebFetch
+  - mcp__context7__resolve-library-id
+  - mcp__context7__query-docs
 ---
 <objective>
 Explore design directions through throwaway HTML mockups before committing to implementation.
@@ -41,5 +45,5 @@ Design idea: $ARGUMENTS
 
 <process>
 Execute the sketch workflow from @~/.claude/get-shit-done/workflows/sketch.md end-to-end.
-Preserve all workflow gates (intake, decomposition, variant evaluation, MANIFEST updates, commit patterns).
+Preserve all workflow gates (intake, decomposition, target stack research, variant evaluation, MANIFEST updates, commit patterns).
 </process>
