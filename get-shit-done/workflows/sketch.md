@@ -92,6 +92,28 @@ Bad sketches:
 Present the table and get alignment before building.
 </step>
 
+<step name="research_stack">
+## Research the Target Stack
+
+Before sketching, ground the design in what's actually buildable. Sketches are HTML, but they should reflect real constraints of the target implementation.
+
+**a. Identify the target stack.** Check for package.json, Cargo.toml, etc. If the user mentioned a framework (React, SwiftUI, Flutter, etc.), note it.
+
+**b. Check component/pattern availability.** Use context7 (resolve-library-id → query-docs) or web search to answer:
+- What layout primitives does the target framework provide? (grid systems, nav patterns, panel components)
+- Are there existing component libraries in use? (shadcn, Material UI, etc.) What components are available?
+- What interaction patterns are idiomatic? (e.g., sheet vs modal vs dialog in mobile)
+
+**c. Note constraints that affect design.** Some things that look great in HTML are painful or impossible in certain stacks:
+- Platform conventions (iOS nav patterns, desktop menu bars, terminal grid constraints)
+- Framework limitations (what's easy vs requires custom work)
+- Existing design tokens or theme systems already in the project
+
+**d. Let research inform variants.** Use findings to make variants that are actually buildable — at least one variant should follow the path of least resistance for the target stack.
+
+**Skip when unnecessary.** If it's a greenfield project with no stack chosen, or the user explicitly says "just explore visually, don't worry about implementation," skip this step entirely. The point is grounding, not gatekeeping.
+</step>
+
 <step name="create_manifest">
 Create or update `.planning/sketches/MANIFEST.md`:
 
@@ -255,7 +277,8 @@ After all sketches complete, present the summary:
 <success_criteria>
 - [ ] `.planning/sketches/` created (auto-creates if needed, no project init required)
 - [ ] Design direction explored conversationally before any code (unless --quick)
-- [ ] Each sketch has 2-3 variants for comparison
+- [ ] Target stack researched — component availability, constraints, and idioms noted (unless greenfield/skipped)
+- [ ] Each sketch has 2-3 variants for comparison (at least one follows path of least resistance for target stack)
 - [ ] User can open and interact with sketches in a browser
 - [ ] Winning variant selected and marked for each sketch
 - [ ] All variants preserved (winner marked, not others deleted)
