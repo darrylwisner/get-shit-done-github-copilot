@@ -20,7 +20,7 @@ const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
 const repoRoot = path.resolve(__dirname, '..');
 const executePlanPath = path.join(repoRoot, 'get-shit-done', 'workflows', 'execute-plan.md');
 const planningConfigPath = path.join(repoRoot, 'get-shit-done', 'references', 'planning-config.md');
-const configCjsPath = path.join(repoRoot, 'get-shit-done', 'bin', 'lib', 'config.cjs');
+const configCjsPath = path.join(repoRoot, 'get-shit-done', 'bin', 'lib', 'config-schema.cjs');
 
 describe('inline_plan_threshold config key (#1979)', () => {
   let tmpDir;

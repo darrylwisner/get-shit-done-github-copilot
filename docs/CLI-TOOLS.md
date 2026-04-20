@@ -11,7 +11,7 @@
 **Preferred for new orchestration:** Many of the same operations are available as `gsd-sdk query <command>` (see `sdk/src/query/index.ts` and `docs/QUERY-HANDLERS.md`). Use that in workflows and examples where the handler exists; keep `node … gsd-tools.cjs` for commands not yet in the registry (for example graphify) or when you need CJS-only flags.
 
 **Location:** `get-shit-done/bin/gsd-tools.cjs`
-**Modules:** 15 domain modules in `get-shit-done/bin/lib/`
+**Modules:** see the [Module Architecture](#module-architecture) table; the `get-shit-done/bin/lib/` directory is authoritative.
 
 **Usage:**
 ```bash
@@ -67,6 +67,13 @@ node gsd-tools.cjs state resolve-blocker --text "..."
 
 # Record session continuity
 node gsd-tools.cjs state record-session --stopped-at "..." [--resume-file path]
+
+# Phase start — update STATE.md Status/Last activity for a new phase
+node gsd-tools.cjs state begin-phase --phase N --name SLUG --plans COUNT
+
+# Agent-discoverable blocker signalling (used by discuss-phase / UI flows)
+node gsd-tools.cjs state signal-waiting --type TYPE --question "..." --options "A|B" --phase P
+node gsd-tools.cjs state signal-resume
 ```
 
 ### State Snapshot
@@ -356,6 +363,12 @@ node gsd-tools.cjs todo complete <filename>
 # UAT audit — scan all phases for unresolved items
 node gsd-tools.cjs audit-uat
 
+# Cross-artifact audit queue — scan `.planning/` for unresolved audit items
+node gsd-tools.cjs audit-open [--json]
+
+# Reverse-migrate a GSD-2 project into the current structure (backs `/gsd-from-gsd2`)
+node gsd-tools.cjs from-gsd2 [--path <dir>] [--force] [--dry-run]
+
 # Git commit with config checks
 node gsd-tools.cjs commit <message> [--files f1 f2] [--amend] [--no-verify]
 ```
@@ -365,6 +378,31 @@ node gsd-tools.cjs commit <message> [--files f1 f2] [--amend] [--no-verify]
 # Web search (requires Brave API key)
 node gsd-tools.cjs websearch <query> [--limit N] [--freshness day|week|month]
 ```
+
+---
+
+## Graphify
+
+Build, query, and inspect the project knowledge graph in `.planning/graphs/`. Requires `graphify.enabled: true` in `config.json` (see [Configuration Reference](CONFIGURATION.md#graphify-settings)). Graphify is **CJS-only**: `gsd-sdk query` does not yet register graphify handlers — always use `node gsd-tools.cjs graphify …`.
+
+```bash
+# Build or rebuild the knowledge graph
+node gsd-tools.cjs graphify build
+
+# Search the graph for a term
+node gsd-tools.cjs graphify query <term>
+
+# Show graph freshness and statistics
+node gsd-tools.cjs graphify status
+
+# Show changes since the last build
+node gsd-tools.cjs graphify diff
+
+# Write a named snapshot of the current graph
+node gsd-tools.cjs graphify snapshot [name]
+```
+
+User-facing entry point: `/gsd-graphify` (see [Command Reference](COMMANDS.md#gsd-graphify)).
 
 ---
 
@@ -387,3 +425,8 @@ node gsd-tools.cjs websearch <query> [--limit N] [--freshness day|week|month]
 | UAT | `lib/uat.cjs` | Cross-phase UAT/verification audit |
 | Profile Output | `lib/profile-output.cjs` | Developer profile formatting |
 | Profile Pipeline | `lib/profile-pipeline.cjs` | Session analysis pipeline |
+| Graphify | `lib/graphify.cjs` | Knowledge graph build/query/status/diff/snapshot (backs `/gsd-graphify`) |
+| Learnings | `lib/learnings.cjs` | Extract learnings from phases/SUMMARY artifacts (backs `/gsd-extract-learnings`) |
+| Audit | `lib/audit.cjs` | Phase/milestone audit queue handlers; `audit-open` helper |
+| GSD2 Import | `lib/gsd2-import.cjs` | Reverse-migration importer from GSD-2 projects (backs `/gsd-from-gsd2`) |
+| Intel | `lib/intel.cjs` | Queryable codebase intelligence index (backs `/gsd-intel`) |

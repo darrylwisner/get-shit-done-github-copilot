@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 
 const GSD_ROOT = path.join(__dirname, '..', 'get-shit-done');
-const CONFIG_CJS_PATH = path.join(GSD_ROOT, 'bin', 'lib', 'config.cjs');
+const CONFIG_CJS_PATH = path.join(GSD_ROOT, 'bin', 'lib', 'config-schema.cjs');
 const CONFIG_TEMPLATE_PATH = path.join(GSD_ROOT, 'templates', 'config.json');
 const PLAN_PHASE_PATH = path.join(GSD_ROOT, 'workflows', 'plan-phase.md');
 

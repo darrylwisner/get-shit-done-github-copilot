@@ -86,6 +86,27 @@
   - [Worktree Toggle](#66-worktree-toggle)
   - [Project Code Prefixing](#67-project-code-prefixing)
   - [Claude Code Skills Migration](#68-claude-code-skills-migration)
+- [v1.32 Features](#v132-features)
+  - [STATE.md Consistency Gates](#69-statemd-consistency-gates)
+  - [Autonomous `--to N` Flag](#70-autonomous---to-n-flag)
+  - [Research Gate](#71-research-gate)
+  - [Verifier Milestone Scope Filtering](#72-verifier-milestone-scope-filtering)
+  - [Read-Before-Edit Guard Hook](#73-read-before-edit-guard-hook)
+  - [Context Reduction](#74-context-reduction)
+  - [Discuss-Phase `--power` Flag](#75-discuss-phase---power-flag)
+  - [Debug `--diagnose` Flag](#76-debug---diagnose-flag)
+  - [Phase Dependency Analysis](#77-phase-dependency-analysis)
+  - [Anti-Pattern Severity Levels](#78-anti-pattern-severity-levels)
+  - [Methodology Artifact Type](#79-methodology-artifact-type)
+  - [Planner Reachability Check](#80-planner-reachability-check)
+  - [Playwright-MCP UI Verification](#81-playwright-mcp-ui-verification)
+  - [Pause-Work Expansion](#82-pause-work-expansion)
+  - [Response Language Config](#83-response-language-config)
+  - [Manual Update Procedure](#84-manual-update-procedure)
+  - [New Runtime Support (Trae, Cline, Augment Code)](#85-new-runtime-support-trae-cline-augment-code)
+  - [Autonomous `--interactive` Flag](#86-autonomous---interactive-flag)
+  - [Commit-Docs Guard Hook](#87-commit-docs-guard-hook)
+  - [Community Hooks Opt-In](#88-community-hooks-opt-in)
 - [v1.34.0 Features](#v1340-features)
   - [Global Learnings Store](#89-global-learnings-store)
   - [Queryable Codebase Intelligence](#90-queryable-codebase-intelligence)
@@ -116,11 +137,13 @@
   - [SDK Workstream Support](#113-sdk-workstream-support)
   - [Context-Window-Aware Prompt Thinning](#114-context-window-aware-prompt-thinning)
   - [Configurable CLAUDE.md Path](#115-configurable-claudemd-path)
+  - [TDD Pipeline Mode](#116-tdd-pipeline-mode)
 - [v1.37.0 Features](#v1370-features)
   - [Spike Command](#117-spike-command)
   - [Sketch Command](#118-sketch-command)
   - [Agent Size-Budget Enforcement](#119-agent-size-budget-enforcement)
   - [Shared Boilerplate Extraction](#120-shared-boilerplate-extraction)
+  - [Knowledge Graph Integration](#121-knowledge-graph-integration)
 - [v1.32 Features](#v132-features)
   - [STATE.md Consistency Gates](#69-statemd-consistency-gates)
   - [Autonomous `--to N` Flag](#70-autonomous---to-n-flag)
@@ -2371,6 +2394,20 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 
 **Produces:** `{phase}-LEARNINGS.md` with YAML frontmatter (phase, project, counts per category, missing_artifacts)
 
+**Optional integration — `capture_thought`:** `capture_thought` is a **convention, not a bundled tool**. GSD does not ship one and does not require one. The workflow checks whether any MCP server in the current session exposes a tool named `capture_thought` and, if so, calls it once per extracted learning with the signature below. If no such tool is present, the step is skipped silently and `LEARNINGS.md` remains the primary output.
+
+Expected tool signature:
+```javascript
+capture_thought({
+  category: "decision" | "lesson" | "pattern" | "surprise",
+  phase: <phase_number>,
+  content: <learning_text>,
+  source: <artifact_name>
+})
+```
+
+Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style servers, `claude-mem`, or `mem0`-style servers) can implement this tool name to have learnings routed into their knowledge base automatically with `project`, `phase`, and `source` metadata. Everyone else can use `/gsd-extract-learnings` without any extra setup — the `LEARNINGS.md` artifact is the feature.
+
 ---
 
 ### 113. SDK Workstream Support
@@ -2507,3 +2544,19 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 - REQ-BOILER-03: Agents that previously inlined these blocks MUST now reference them via `@` required_reading
 
 **Reference files:** `references/mandatory-initial-read.md`, `references/project-skills-discovery.md`
+
+---
+
+### 121. Knowledge Graph Integration
+
+**Purpose:** Build, query, and inspect a lightweight knowledge graph of the project in `.planning/graphs/`. Opt-in per project. Exposed as the `/gsd-graphify` user-facing command and the `gsd-tools.cjs graphify …` programmatic verb family. Complements `/gsd-intel` (snapshot-oriented) with a graph-oriented view of nodes and edges across commands, agents, workflows, and phases.
+
+**Requirements:**
+- REQ-GRAPH-01: Opt-in via `graphify.enabled: true` in `.planning/config.json`. When disabled, `/gsd-graphify` prints an activation hint and stops without writing.
+- REQ-GRAPH-02: Slash-command `/gsd-graphify` exposes subcommands `build`, `query <term>`, `status`, `diff`. The programmatic CLI `node gsd-tools.cjs graphify …` additionally exposes `snapshot`, which is also invoked automatically as the final step of `graphify build`.
+- REQ-GRAPH-03: Build runs within the configurable `graphify.build_timeout` (seconds); exceeding the timeout aborts cleanly without leaving a partial graph.
+- REQ-GRAPH-04: `graphify.cjs` falls back to `graph.links` when `graph.edges` is absent so older graph artifacts keep rendering.
+- REQ-GRAPH-05: CJS-only surface; `gsd-sdk query` does not yet register graphify handlers.
+
+**Configuration:** `graphify.enabled`, `graphify.build_timeout`
+**Reference files:** `commands/gsd/graphify.md`, `bin/lib/graphify.cjs`
