@@ -14,6 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - **Installer now builds `@gsd-build/sdk` from the in-repo `sdk/` source tree** so `gsd-sdk` lands on PATH with the query handlers that match the installed GSD version. Resolves `command not found: gsd-sdk` errors that affected every `/gsd-*` command after a fresh install or `/gsd-update` to 1.36+. Adds `--no-sdk` to opt out and `--sdk` to force rebuild. Implements the `--sdk` flag that was previously documented in README but never wired up. Replaces the initial PR #2386 design that installed the stale npm `@gsd-build/sdk` (published 2026-03-27) — the installer now runs `npm install && npm run build && npm install -g .` inside `sdk/` so users always get an SDK in lockstep with the rest of the repo. Root `package.json` `files` ships the sdk source tree for npm-registry installs (#2385)
+- **`gsd-read-injection-scanner` hook now ships to users** — the scanner was added in 1.37.0 (#2201) but was never added to `scripts/build-hooks.js`' `HOOKS_TO_COPY` allowlist, so it never landed in `hooks/dist/` and `install.js` skipped it with "Skipped read injection scanner hook — gsd-read-injection-scanner.js not found at target". Effectively disabled the read-time prompt-injection scanner for every user on 1.37.0/1.37.1. Added to the build allowlist and regression test (#2406)
 
 ## [1.37.1] - 2026-04-17
 
