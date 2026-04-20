@@ -50,7 +50,7 @@ If `PATH_NOT_FOUND` or `MANIFEST_NOT_FOUND`: display error and exit.
 Run the init query:
 
 ```bash
-INIT=$(gsd-sdk query init.ingest-docs 2>/dev/null || gsd-sdk query init.default)
+INIT=$(gsd-sdk query init.ingest-docs)
 ```
 
 Parse `project_exists`, `planning_exists`, `has_git`, `project_path` from INIT.
