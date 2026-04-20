@@ -80,6 +80,9 @@ describe('config-field-docs', () => {
       phase_branch_template: 'git.phase_branch_template',
       milestone_branch_template: 'git.milestone_branch_template',
       quick_branch_template: 'git.quick_branch_template',
+      security_enforcement: 'workflow.security_enforcement',
+      security_asvs_level: 'workflow.security_asvs_level',
+      security_block_on: 'workflow.security_block_on',
     };
 
     const missing = keys.filter(k => {
