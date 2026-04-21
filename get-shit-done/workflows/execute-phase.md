@@ -623,21 +623,6 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
          break
        }
 
-       # Post-merge deletion audit: detect bulk file deletions in merge commit (#2384)
-       # --diff-filter=D HEAD~1 HEAD shows files deleted by the merge commit itself.
-       # Exclude .planning/ — orchestrator-owned deletions there are expected (resurrections
-       # are handled below). Require ALLOW_BULK_DELETE=1 to bypass for intentional large refactors.
-       MERGE_DEL_COUNT=$(git diff --diff-filter=D --name-only HEAD~1 HEAD 2>/dev/null | grep -vc '^\.planning/' || true)
-       if [ "$MERGE_DEL_COUNT" -gt 5 ] && [ "${ALLOW_BULK_DELETE:-0}" != "1" ]; then
-         MERGE_DELETIONS=$(git diff --diff-filter=D --name-only HEAD~1 HEAD 2>/dev/null | grep -v '^\.planning/' || true)
-         echo "⚠ BLOCKED: Merge of $WT_BRANCH deleted $MERGE_DEL_COUNT files outside .planning/ — reverting to protect repository integrity (#2384)"
-         echo "$MERGE_DELETIONS"
-         echo "  If these deletions are intentional, re-run with ALLOW_BULK_DELETE=1"
-         git reset --hard HEAD~1 2>/dev/null || true
-         rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
-         continue
-       fi
-
        # Restore orchestrator-owned files (main always wins)
        if [ -s "$STATE_BACKUP" ]; then
          cp "$STATE_BACKUP" .planning/STATE.md
@@ -649,15 +634,10 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
 
        # Detect files deleted on main but re-added by worktree merge
        # (e.g., archived phase directories that were intentionally removed)
-       # A "resurrected" file must have a deletion event in main's ancestry —
-       # brand-new files (e.g. SUMMARY.md just created by the executor) have no
-       # such history and must NOT be removed (#2501).
        DELETED_FILES=$(git diff --diff-filter=A --name-only HEAD~1 -- .planning/ 2>/dev/null || true)
        for RESURRECTED in $DELETED_FILES; do
-         # Only delete if this file was previously tracked on main and then
-         # deliberately removed (has a deletion event in git history).
-         WAS_DELETED=$(git log --follow --diff-filter=D --name-only --format="" HEAD~1 -- "$RESURRECTED" 2>/dev/null | grep -c . || true)
-         if [ "${WAS_DELETED:-0}" -gt 0 ]; then
+         # Check if this file was NOT in main's pre-merge tree
+         if ! echo "$PRE_MERGE_FILES" | grep -qxF "$RESURRECTED"; then
            git rm -f "$RESURRECTED" 2>/dev/null || true
          fi
        done
@@ -685,19 +665,7 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
        fi
 
        # Remove the worktree
-       if ! git worktree remove "$WT" --force; then
-         WT_NAME=$(basename "$WT")
-         if [ -f ".git/worktrees/${WT_NAME}/locked" ]; then
-           echo "⚠ Worktree $WT is locked — attempting to unlock and retry"
-           git worktree unlock "$WT" 2>/dev/null || true
-           if ! git worktree remove "$WT" --force; then
-             echo "⚠ Residual worktree at $WT — manual cleanup required after session exits:"
-             echo "    git worktree unlock \"$WT\" && git worktree remove \"$WT\" --force && git branch -D \"$WT_BRANCH\""
-           fi
-         else
-           echo "⚠ Residual worktree at $WT (remove failed) — investigate manually"
-         fi
-       fi
+       git worktree remove "$WT" --force 2>/dev/null || true
 
        # Delete the temporary branch
        git branch -D "$WT_BRANCH" 2>/dev/null || true
@@ -720,29 +688,22 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
    merging their work creates failures.
 
    ```bash
-   # Resolve test command: project config > Makefile > language sniff
-   TEST_CMD=$(gsd-sdk query config-get workflow.test_command --default "" 2>/dev/null || true)
-   if [ -z "$TEST_CMD" ]; then
-     if [ -f "Makefile" ] && grep -q "^test:" Makefile; then
-       TEST_CMD="make test"
-     elif [ -f "Justfile" ] || [ -f "justfile" ]; then
-       TEST_CMD="just test"
-     elif [ -f "package.json" ]; then
-       TEST_CMD="npm test"
-     elif [ -f "Cargo.toml" ]; then
-       TEST_CMD="cargo test"
-     elif [ -f "go.mod" ]; then
-       TEST_CMD="go test ./..."
-     elif [ -f "pyproject.toml" ] || [ -f "requirements.txt" ]; then
-       TEST_CMD="python -m pytest -x -q --tb=short 2>&1 || uv run python -m pytest -x -q --tb=short"
-     else
-       TEST_CMD="true"
-       echo "⚠ No test runner detected — skipping post-merge test gate"
-     fi
-   fi
    # Detect test runner and run quick smoke test (timeout: 5 minutes)
    TEST_EXIT=0
-   timeout 300 bash -c "$TEST_CMD" 2>&1
+   timeout 300 bash -c '
+   if [ -f "package.json" ]; then
+     npm test 2>&1
+   elif [ -f "Cargo.toml" ]; then
+     cargo test 2>&1
+   elif [ -f "go.mod" ]; then
+     go test ./... 2>&1
+   elif [ -f "pyproject.toml" ] || [ -f "requirements.txt" ]; then
+     python -m pytest -x -q --tb=short 2>&1 || uv run python -m pytest -x -q --tb=short 2>&1
+   else
+     echo "⚠ No test runner detected — skipping post-merge test gate"
+     exit 0
+   fi
+   '
    TEST_EXIT=$?
    if [ "${TEST_EXIT}" -eq 0 ]; then
      echo "✓ Post-merge test gate passed — no cross-plan conflicts"
@@ -885,12 +846,13 @@ Plans with `autonomous: false` require user interaction.
 
 **Auto-mode checkpoint handling:**
 
-Read auto-advance config (chain flag OR user preference — same boolean as `check.auto-mode`):
+Read auto-advance config (chain flag + user preference):
 ```bash
-AUTO_MODE=$(gsd-sdk query check auto-mode --pick active 2>/dev/null || echo "false")
+AUTO_CHAIN=$(gsd-sdk query config-get workflow._auto_chain_active 2>/dev/null || echo "false")
+AUTO_CFG=$(gsd-sdk query config-get workflow.auto_advance 2>/dev/null || echo "false")
 ```
 
-When executor returns a checkpoint AND `AUTO_MODE` is `true`:
+When executor returns a checkpoint AND (`AUTO_CHAIN` is `"true"` OR `AUTO_CFG` is `"true"`):
 - **human-verify** → Auto-spawn continuation agent with `{user_response}` = `"approved"`. Log `⚡ Auto-approved checkpoint`.
 - **decision** → Auto-spawn continuation agent with `{user_response}` = first option from checkpoint details. Log `⚡ Auto-selected: [option]`.
 - **human-action** → Present to user (existing behavior below). Auth gates cannot be automated.
@@ -1149,27 +1111,16 @@ Collect all unique test file paths into `REGRESSION_FILES`.
 **Step 3: Run regression tests (if any found)**
 
 ```bash
-# Resolve test command: project config > Makefile > language sniff
-REG_TEST_CMD=$(gsd-sdk query config-get workflow.test_command --default "" 2>/dev/null || true)
-if [ -z "$REG_TEST_CMD" ]; then
-  if [ -f "Makefile" ] && grep -q "^test:" Makefile; then
-    REG_TEST_CMD="make test"
-  elif [ -f "Justfile" ] || [ -f "justfile" ]; then
-    REG_TEST_CMD="just test"
-  elif [ -f "package.json" ]; then
-    REG_TEST_CMD="npm test"
-  elif [ -f "Cargo.toml" ]; then
-    REG_TEST_CMD="cargo test"
-  elif [ -f "go.mod" ]; then
-    REG_TEST_CMD="go test ./..."
-  elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
-    REG_TEST_CMD="python -m pytest ${REGRESSION_FILES} -q --tb=short"
-  else
-    REG_TEST_CMD="true"
-  fi
-fi
 # Detect test runner and run prior phase tests
-eval "$REG_TEST_CMD" 2>&1
+if [ -f "package.json" ]; then
+  npm test 2>&1
+elif [ -f "Cargo.toml" ]; then
+  cargo test 2>&1
+elif [ -f "go.mod" ]; then
+  go test ./... 2>&1
+elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+  python -m pytest ${REGRESSION_FILES} -q --tb=short 2>&1
+fi
 ```
 
 **Step 4: Report results**
@@ -1451,38 +1402,6 @@ gsd-sdk query learnings.copy 2>/dev/null || echo "⚠ Learnings copy failed — 
 Copy failure must NOT block phase completion.
 </step>
 
-<step name="close_phase_todos">
-**Auto-close pending todos tagged for this phase (#2433).**
-
-This step runs AFTER `update_roadmap` marks the phase complete. It moves any pending todos that carry `resolves_phase: <current-phase-number>` to the completed directory.
-
-```bash
-PHASE_NUM="${PHASE_NUMBER}"
-PENDING_DIR=".planning/todos/pending"
-COMPLETED_DIR=".planning/todos/completed"
-mkdir -p "$COMPLETED_DIR"
-
-CLOSED=()
-for TODO_FILE in "$PENDING_DIR"/*.md; do
-  [ -f "$TODO_FILE" ] || continue
-  # Extract resolves_phase from YAML frontmatter (first --- block only)
-  RP=$(awk '/^---/{c++;next} c==1 && /^resolves_phase:/{print $2;exit} c==2{exit}' "$TODO_FILE" 2>/dev/null || true)
-  if [ "$RP" = "$PHASE_NUM" ] || [ "$RP" = "\"$PHASE_NUM\"" ]; then
-    mv "$TODO_FILE" "$COMPLETED_DIR/"
-    CLOSED+=("$(basename "$TODO_FILE")")
-  fi
-done
-
-if [ ${#CLOSED[@]} -gt 0 ]; then
-  gsd-sdk query commit "docs(phase-${PHASE_NUMBER}): auto-close ${#CLOSED[@]} todo(s) resolved by this phase" .planning/todos/completed/ .planning/STATE.md || true
-  echo "◆ Closed ${#CLOSED[@]} todo(s) resolved by Phase ${PHASE_NUMBER}:"
-  for f in "${CLOSED[@]}"; do echo "  ✓ $f"; done
-fi
-```
-
-**If no todos have `resolves_phase: <this-phase>`:** Skip silently — this step is always additive and never blocks phase completion.
-</step>
-
 <step name="update_project_md">
 **Evolve PROJECT.md to reflect phase completion (prevents planning document drift — #956):**
 
@@ -1535,12 +1454,13 @@ STOP. Do not proceed to auto-advance or transition.
 **Auto-advance detection:**
 
 1. Parse `--auto` flag from $ARGUMENTS
-2. Read consolidated auto-mode (`active` = chain flag OR user preference; chain flag already synced in init step):
+2. Read both the chain flag and user preference (chain flag already synced in init step):
    ```bash
-   AUTO_MODE=$(gsd-sdk query check auto-mode --pick active 2>/dev/null || echo "false")
+   AUTO_CHAIN=$(gsd-sdk query config-get workflow._auto_chain_active 2>/dev/null || echo "false")
+   AUTO_CFG=$(gsd-sdk query config-get workflow.auto_advance 2>/dev/null || echo "false")
    ```
 
-**If `--auto` flag present OR `AUTO_MODE` is true (AND verification passed with no gaps):**
+**If `--auto` flag present OR `AUTO_CHAIN` is true OR `AUTO_CFG` is true (AND verification passed with no gaps):**
 
 ```
 ╔══════════════════════════════════════════╗
@@ -1553,7 +1473,7 @@ Execute the transition workflow inline (do NOT use Task — orchestrator context
 
 Read and follow `~/.claude/get-shit-done/workflows/transition.md`, passing through the `--auto` flag so it propagates to the next phase invocation.
 
-**If neither `--auto` nor `AUTO_MODE` is true:**
+**If none of `--auto`, `AUTO_CHAIN`, or `AUTO_CFG` is true:**
 
 **STOP. Do not auto-advance. Do not execute transition. Do not plan next phase. Present options to the user and wait.**
 

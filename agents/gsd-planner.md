@@ -215,8 +215,6 @@ Every task has four required fields:
 
 **Nyquist Rule:** Every `<verify>` must include an `<automated>` command. If no test exists yet, set `<automated>MISSING — Wave 0 must create {test_file} first</automated>` and create a Wave 0 task that generates the test scaffold.
 
-**Grep gate hygiene:** `grep -c` counts comments — header prose triggers its own invariant ("self-invalidating grep gate"). Use `grep -v '^#' | grep -c token`. Bare `== 0` gates on unfiltered files are forbidden.
-
 **<done>:** Acceptance criteria - measurable state of completion.
 - Good: "Valid credentials return 200 + JWT cookie, invalid credentials return 401"
 - Bad: "Authentication is complete"
@@ -812,11 +810,10 @@ if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 
 Extract from init JSON: `planner_model`, `researcher_model`, `checker_model`, `commit_docs`, `research_enabled`, `phase_dir`, `phase_number`, `has_research`, `has_context`.
 
-Also load planning state (position, decisions, blockers) via the SDK — **use `node` to invoke the CLI** (not `npx`):
+Also read STATE.md for position, decisions, blockers:
 ```bash
-node ./node_modules/@gsd-build/sdk/dist/cli.js query state.load 2>/dev/null
+cat .planning/STATE.md 2>/dev/null
 ```
-If the SDK is not installed under `node_modules`, use the same `query state.load` argv with your local `gsd-sdk` CLI on `PATH`.
 
 If STATE.md missing but .planning/ exists, offer to reconstruct or continue without.
 </step>
@@ -1200,10 +1197,6 @@ Execute: `/gsd-execute-phase {phase} --gaps-only`
 ## Checkpoint Reached / Revision Complete
 
 Follow templates in checkpoints and revision_mode sections respectively.
-
-## Chunked Mode Returns
-
-See @~/.claude/get-shit-done/references/planner-chunked.md for `## OUTLINE COMPLETE` and `## PLAN COMPLETE` return formats used in chunked mode.
 
 </structured_returns>
 

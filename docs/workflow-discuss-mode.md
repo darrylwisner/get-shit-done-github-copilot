@@ -27,10 +27,10 @@ correction. Good for:
 
 ```bash
 # Enable assumptions mode
-node gsd-tools.cjs config-set workflow.discuss_mode assumptions
+gsd-tools config-set workflow.discuss_mode assumptions
 
 # Switch back to interview mode
-node gsd-tools.cjs config-set workflow.discuss_mode discuss
+gsd-tools config-set workflow.discuss_mode discuss
 ```
 
 The setting is per-project (stored in `.planning/config.json`).

@@ -212,7 +212,7 @@ must_haves:
     expect(links[0].detail).toBe('Target referenced in source');
   });
 
-  it('reports invalid regex like gsd-tools.cjs (try/catch on new RegExp)', async () => {
+  it('falls back to literal match when regex syntax is invalid', async () => {
     await writeFile(join(tmpDir, 'source.ts'), 'const x = 1;');
     await writeFile(join(tmpDir, 'target.ts'), 'const y = 2;');
 
@@ -241,7 +241,7 @@ must_haves:
     const data = result.data as Record<string, unknown>;
     const links = data.links as Array<Record<string, unknown>>;
     expect(links[0].verified).toBe(false);
-    expect((links[0].detail as string)).toMatch(/Invalid regex pattern/);
+    expect((links[0].detail as string)).toContain('not found');
   });
 
   it('returns error when no must_haves.key_links in plan', async () => {

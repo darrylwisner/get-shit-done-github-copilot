@@ -72,11 +72,10 @@ if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 
 Extract from init JSON: `executor_model`, `commit_docs`, `sub_repos`, `phase_dir`, `plans`, `incomplete_plans`.
 
-Also load planning state (position, decisions, blockers) via the SDK — **use `node` to invoke the CLI** (not `npx`):
+Also read STATE.md for position, decisions, blockers:
 ```bash
-node ./node_modules/@gsd-build/sdk/dist/cli.js query state.load 2>/dev/null
+cat .planning/STATE.md 2>/dev/null
 ```
-If the SDK is not installed under `node_modules`, use the same `query state.load` argv with your local `gsd-sdk` CLI on `PATH`.
 
 If STATE.md missing but .planning/ exists: offer to reconstruct or continue without.
 If .planning/ missing: Error — project not initialized.

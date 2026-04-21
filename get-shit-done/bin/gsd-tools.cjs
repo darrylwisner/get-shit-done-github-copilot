@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 
 /**
- * @deprecated The supported programmatic surface is `gsd-sdk query` (SDK query registry)
- * and the `@gsd-build/sdk` package. This Node CLI remains the compatibility implementation
- * for shell scripts and older workflows; prefer calling the SDK from agents and automation.
- *
  * GSD Tools — CLI utility for GSD workflow operations
  *
  * Replaces repetitive inline bash patterns across ~50 GSD command/workflow/agent files.
@@ -49,7 +45,6 @@
  *   roadmap get-phase <phase>          Extract phase section from ROADMAP.md
  *   roadmap analyze                    Full roadmap parse with disk status
  *   roadmap update-plan-progress <N>   Update progress table row from disk (PLAN vs SUMMARY counts)
- *   roadmap annotate-dependencies <N>  Add wave dependency notes + cross-cutting constraints to ROADMAP.md
  *
  * Requirements Operations:
  *   requirements mark-complete <ids>   Mark requirement IDs as complete in REQUIREMENTS.md
@@ -691,10 +686,8 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
         roadmap.cmdRoadmapAnalyze(cwd, raw);
       } else if (subcommand === 'update-plan-progress') {
         roadmap.cmdRoadmapUpdatePlanProgress(cwd, args[2], raw);
-      } else if (subcommand === 'annotate-dependencies') {
-        roadmap.cmdRoadmapAnnotateDependencies(cwd, args[2], raw);
       } else {
-        error('Unknown roadmap subcommand. Available: get-phase, analyze, update-plan-progress, annotate-dependencies');
+        error('Unknown roadmap subcommand. Available: get-phase, analyze, update-plan-progress');
       }
       break;
     }
@@ -767,8 +760,7 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
         verify.cmdValidateConsistency(cwd, raw);
       } else if (subcommand === 'health') {
         const repairFlag = args.includes('--repair');
-        const backfillFlag = args.includes('--backfill');
-        verify.cmdValidateHealth(cwd, { repair: repairFlag, backfill: backfillFlag }, raw);
+        verify.cmdValidateHealth(cwd, { repair: repairFlag }, raw);
       } else if (subcommand === 'agents') {
         verify.cmdValidateAgents(cwd, raw);
       } else {
@@ -1204,6 +1196,10 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
         'agents',
         path.join('commands', 'gsd'),
         'hooks',
+        // OpenCode/Kilo flat command dir
+        'command',
+        // Codex/Copilot skills dir
+        'skills',
       ];
 
       function walkDir(dir, baseDir) {
