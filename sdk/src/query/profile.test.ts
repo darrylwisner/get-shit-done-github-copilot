@@ -7,8 +7,7 @@ import { mkdtemp, writeFile, mkdir, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { writeProfile } from './profile-output.js';
-import { learningsCopy } from './profile.js';
+import { writeProfile, learningsCopy } from './profile.js';
 
 describe('writeProfile', () => {
   let tmpDir: string;
@@ -22,32 +21,14 @@ describe('writeProfile', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('writes USER-PROFILE.md from --input JSON (CJS template + dimensions shape)', async () => {
+  it('writes USER-PROFILE.md from --input JSON', async () => {
     const analysisPath = join(tmpDir, 'analysis.json');
-    const outPath = join(tmpDir, '.planning', 'USER-PROFILE.md');
-    await writeFile(
-      analysisPath,
-      JSON.stringify({
-        profile_version: '1.0',
-        data_source: 'test',
-        dimensions: {
-          communication_style: {
-            rating: 'terse-direct',
-            confidence: 'HIGH',
-            claude_instruction: 'Keep it short.',
-            summary: 'Test summary.',
-            evidence: [],
-          },
-        },
-      }),
-      'utf-8',
-    );
-    const result = await writeProfile(['--input', analysisPath, '--output', outPath], tmpDir);
+    await writeFile(analysisPath, JSON.stringify({ communication_style: 'terse' }), 'utf-8');
+    const result = await writeProfile(['--input', analysisPath], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(data.profile_path).toBe(outPath);
-    expect(data.dimensions_scored).toBe(1);
-    const md = await readFile(outPath, 'utf-8');
-    expect(md).toContain('Developer Profile');
+    expect(data.written).toBe(true);
+    const md = await readFile(join(tmpDir, '.planning', 'USER-PROFILE.md'), 'utf-8');
+    expect(md).toContain('User Developer Profile');
     expect(md).toMatch(/Communication Style/i);
   });
 });
@@ -64,11 +45,10 @@ describe('learningsCopy', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns zero counts when LEARNINGS.md is missing (matches learnings.cjs)', async () => {
+  it('returns copied:false when LEARNINGS.md is missing', async () => {
     const result = await learningsCopy([], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(data.total).toBe(0);
-    expect(data.created).toBe(0);
-    expect(data.skipped).toBe(0);
+    expect(data.copied).toBe(false);
+    expect(data.reason).toContain('LEARNINGS');
   });
 });

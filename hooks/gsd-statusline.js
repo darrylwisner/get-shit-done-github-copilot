@@ -147,15 +147,10 @@ function runStatusline() {
       if (sessionSafe) {
         try {
           const bridgePath = path.join(os.tmpdir(), `claude-ctx-${session}.json`);
-          // used_pct written to the bridge must match CC's native /context reporting:
-          // raw used = 100 - remaining_percentage (no buffer normalization applied).
-          // The normalized `used` value is correct for the statusline progress bar but
-          // inflates the context monitor warning messages by ~13 points (#2451).
-          const rawUsedPct = Math.round(100 - remaining);
           const bridgeData = JSON.stringify({
             session_id: session,
             remaining_percentage: remaining,
-            used_pct: rawUsedPct,
+            used_pct: used,
             timestamp: Math.floor(Date.now() / 1000)
           });
           fs.writeFileSync(bridgePath, bridgeData);

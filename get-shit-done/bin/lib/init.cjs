@@ -458,11 +458,8 @@ function cmdInitNewMilestone(cwd, raw) {
 
   try {
     if (fs.existsSync(phasesDir)) {
-      // Bug #2445: filter phase dirs to current milestone only so stale dirs
-      // from a prior milestone that were not archived don't inflate the count.
-      const isDirInMilestone = getMilestonePhaseFilter(cwd);
       phaseDirCount = fs.readdirSync(phasesDir, { withFileTypes: true })
-        .filter(entry => entry.isDirectory() && isDirInMilestone(entry.name))
+        .filter(entry => entry.isDirectory())
         .length;
     }
   } catch {}
