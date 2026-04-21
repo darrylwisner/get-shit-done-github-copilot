@@ -25,6 +25,11 @@ describe('agentSkills', () => {
   let tmpDir: string;
   let homeDir: string;
 
+  it('returns empty string when no agent type (matches gsd-tools)', async () => {
+    const r = await agentSkills([], tmpdir());
+    expect(r.data).toBe('');
+  });
+
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'gsd-skills-'));
     homeDir = await mkdtemp(join(tmpdir(), 'gsd-skills-home-'));
@@ -35,6 +40,8 @@ describe('agentSkills', () => {
     await writeSkill(join(homeDir, '.codex', 'skills'), 'global-codex');
     await writeSkill(join(homeDir, '.claude', 'get-shit-done', 'skills'), 'legacy-import');
     vi.stubEnv('HOME', homeDir);
+    // Windows `os.homedir()` reads USERPROFILE, not HOME
+    vi.stubEnv('USERPROFILE', homeDir);
   });
 
   afterEach(async () => {

@@ -199,6 +199,10 @@ export interface GSDOptions {
   projectDir: string;
   /** Path to gsd-tools.cjs. Falls back to <projectDir>/.claude/, then the bundled repo path, then ~/.claude/. */
   gsdToolsPath?: string;
+  /**
+   * Optional session correlation id for query mutation events when using {@link GSD.createTools}.
+   */
+  sessionId?: string;
   /** Model to use for execution sessions. */
   model?: string;
   /** Maximum budget per plan execution in USD. Default: 5.0. */

@@ -2,14 +2,14 @@
  * State query handlers — STATE.md loading, field extraction, and snapshots.
  *
  * Ported from get-shit-done/bin/lib/state.cjs and core.cjs.
- * Provides state.load (rebuild frontmatter from body + disk), state.get
+ * Provides `state json` / `state.json` (rebuilt frontmatter JSON, `stateJson`), `state.get`
  * (field/section extraction), and state-snapshot (structured snapshot).
  *
  * @example
  * ```typescript
- * import { stateLoad, stateGet, stateSnapshot } from './state.js';
+ * import { stateJson, stateGet, stateSnapshot } from './state.js';
  *
- * const loaded = await stateLoad([], '/project');
+ * const loaded = await stateJson([], '/project');
  * // { data: { gsd_state_version: '1.0', milestone: 'v3.0', ... } }
  *
  * const field = await stateGet(['Status'], '/project');
@@ -187,7 +187,7 @@ export async function buildStateFrontmatter(bodyContent: string, projectDir: str
 // ─── Exported handlers ─────────────────────────────────────────────────────
 
 /**
- * Query handler for state.load / state.json.
+ * Query handler for `state json` / `state.json` (CJS `cmdStateJson`).
  *
  * Reads STATE.md, rebuilds frontmatter from body + disk scanning.
  * Returns cached frontmatter-only fields (stopped_at, paused_at) when not in body.
@@ -198,7 +198,7 @@ export async function buildStateFrontmatter(bodyContent: string, projectDir: str
  * @param projectDir - Project root directory
  * @returns QueryResult with rebuilt state frontmatter
  */
-export const stateLoad: QueryHandler = async (_args, projectDir) => {
+export const stateJson: QueryHandler = async (_args, projectDir) => {
   const statePath = planningPaths(projectDir).state;
 
   let content: string;
@@ -319,10 +319,12 @@ export const stateSnapshot: QueryHandler = async (_args, projectDir) => {
   // Parse numeric fields
   const totalPhases = totalPhasesRaw ? parseInt(totalPhasesRaw, 10) : null;
   const totalPlansInPhase = totalPlansRaw ? parseInt(totalPlansRaw, 10) : null;
-  const progressPercent = progressRaw ? (() => {
-    const m = progressRaw.match(/(\d+)%/);
-    return m ? parseInt(m[1], 10) : null;
-  })() : null;
+  // Match gsd-tools `cmdStateSnapshot` (state.cjs): parseInt(progressRaw.replace('%',''), 10) — NaN → null
+  let progressPercent: number | null = null;
+  if (progressRaw) {
+    const n = parseInt(progressRaw.replace(/%/g, ''), 10);
+    progressPercent = Number.isFinite(n) ? n : null;
+  }
 
   // Extract decisions table
   const decisions: Array<{ phase: string; summary: string; rationale: string }> = [];

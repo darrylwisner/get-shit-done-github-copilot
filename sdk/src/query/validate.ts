@@ -16,8 +16,11 @@
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+
+import { MODEL_PROFILES } from './config-query.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter, parseMustHavesBlock } from './frontmatter.js';
 import { escapeRegex, normalizePhaseName, planningPaths, resolvePathUnderProject } from './helpers.js';
@@ -109,34 +112,42 @@ export const verifyKeyLinks: QueryHandler = async (args, projectDir) => {
     };
 
     let sourceContent: string | null = null;
-    try {
-      const fromPath = await resolvePathUnderProject(projectDir, check.from);
-      sourceContent = await readFile(fromPath, 'utf-8');
-    } catch {
-      // Source file not found or path invalid
+    if (check.from) {
+      try {
+        const sourcePath = await resolvePathUnderProject(projectDir, check.from);
+        sourceContent = await readFile(sourcePath, 'utf-8');
+      } catch {
+        // Source file not found or path escapes project
+      }
     }
 
     if (!sourceContent) {
       check.detail = 'Source file not found';
     } else if (linkObj.pattern) {
-      const regex = regexForKeyLinkPattern(linkObj.pattern as string);
-      if (regex.test(sourceContent)) {
-        check.verified = true;
-        check.detail = 'Pattern found in source';
-      } else {
-        let targetContent: string | null = null;
-        try {
-          const toPath = await resolvePathUnderProject(projectDir, check.to);
-          targetContent = await readFile(toPath, 'utf-8');
-        } catch {
-          // Target file not found
-        }
-        if (targetContent && regex.test(targetContent)) {
+      try {
+        const regex = new RegExp(linkObj.pattern as string);
+        if (regex.test(sourceContent)) {
           check.verified = true;
-          check.detail = 'Pattern found in target';
+          check.detail = 'Pattern found in source';
         } else {
-          check.detail = `Pattern "${linkObj.pattern}" not found in source or target`;
+          let targetContent: string | null = null;
+          if (check.to) {
+            try {
+              const targetPath = await resolvePathUnderProject(projectDir, check.to);
+              targetContent = await readFile(targetPath, 'utf-8');
+            } catch {
+              // Target file not found or path escapes project
+            }
+          }
+          if (targetContent && regex.test(targetContent)) {
+            check.verified = true;
+            check.detail = 'Pattern found in target';
+          } else {
+            check.detail = `Pattern "${linkObj.pattern}" not found in source or target`;
+          }
         }
+      } catch {
+        check.detail = `Invalid regex pattern: ${linkObj.pattern}`;
       }
     } else {
       // No pattern: check if target path is referenced in source content
@@ -733,6 +744,64 @@ export const validateHealth: QueryHandler = async (args, projectDir) => {
       info,
       repairable_count: repairableCount,
       repairs_performed: repairActions.length > 0 ? repairActions : undefined,
+    },
+  };
+};
+
+// ─── validateAgents ────────────────────────────────────────────────────────
+
+/**
+ * Default agents directory — mirrors `getAgentsDir` in `get-shit-done/bin/lib/core.cjs`:
+ * `GSD_AGENTS_DIR`, else `../../../agents` relative to this module (`sdk/dist/query` → monorepo
+ * root), matching `core.cjs` (`get-shit-done/bin/lib` → same repo `agents/`).
+ */
+function getAgentsDirForValidateAgents(): string {
+  if (process.env.GSD_AGENTS_DIR) return process.env.GSD_AGENTS_DIR;
+  const here = dirname(fileURLToPath(import.meta.url));
+  return resolve(here, '..', '..', '..', 'agents');
+}
+
+/**
+ * Validate GSD agent file installation under the managed agents directory.
+ *
+ * Port of `cmdValidateAgents` from `verify.cjs` lines 997–1009 (uses `checkAgentsInstalled` from core).
+ */
+export const validateAgents: QueryHandler = async (_args, _projectDir) => {
+  const agentsDir = getAgentsDirForValidateAgents();
+  const expected = Object.keys(MODEL_PROFILES);
+  const installed: string[] = [];
+  const missing: string[] = [];
+
+  if (!existsSync(agentsDir)) {
+    return {
+      data: {
+        agents_dir: agentsDir,
+        agents_found: false,
+        installed: [] as string[],
+        missing: expected,
+        expected,
+      },
+    };
+  }
+
+  for (const agent of expected) {
+    const agentFile = join(agentsDir, `${agent}.md`);
+    const agentFileCopilot = join(agentsDir, `${agent}.agent.md`);
+    if (existsSync(agentFile) || existsSync(agentFileCopilot)) {
+      installed.push(agent);
+    } else {
+      missing.push(agent);
+    }
+  }
+
+  const agentsInstalled = installed.length > 0 && missing.length === 0;
+  return {
+    data: {
+      agents_dir: agentsDir,
+      agents_found: agentsInstalled,
+      installed,
+      missing,
+      expected,
     },
   };
 };

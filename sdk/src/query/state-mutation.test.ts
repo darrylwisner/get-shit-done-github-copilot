@@ -223,14 +223,14 @@ describe('stateUpdate', () => {
 
   it('updates a single field and round-trips through stateLoad', async () => {
     const { stateUpdate } = await import('./state-mutation.js');
-    const { stateLoad } = await import('./state.js');
+    const { stateJson } = await import('./state.js');
 
     const result = await stateUpdate(['Status', 'Phase complete'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.updated).toBe(true);
 
     // Verify round-trip
-    const loaded = await stateLoad([], tmpDir);
+    const loaded = await stateJson([], tmpDir);
     const loadedData = loaded.data as Record<string, unknown>;
     // Status gets normalized by buildStateFrontmatter
     expect(loadedData.status).toBeTruthy();
@@ -271,7 +271,7 @@ describe('statePatch', () => {
     const patches = JSON.stringify({ Status: 'done', Progress: '100%' });
     const result = await statePatch([patches], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(data.patched).toBe(true);
+    expect((data.updated as string[]).length).toBeGreaterThan(0);
 
     // Verify file was updated
     const content = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
@@ -319,7 +319,7 @@ describe('stateBeginPhase', () => {
     // Must return the actual values, not the flag names
     expect(data.phase).toBe('99');
     expect(data.name).toBe('probe-test');
-    expect(data.plan_count).toBe('1');
+    expect(data.plan_count).toBe(1);
 
     // STATE.md must contain clean output, not literal "--phase"
     const content = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
@@ -337,7 +337,7 @@ describe('stateBeginPhase', () => {
     const data = result.data as Record<string, unknown>;
     expect(data.phase).toBe('42');
     expect(data.name).toBe('Positional Test');
-    expect(data.plan_count).toBe('5');
+    expect(data.plan_count).toBe(5);
   });
 
   it('bug-2420: flag parser throws when a flag value is missing (next token is a flag)', async () => {
@@ -347,6 +347,19 @@ describe('stateBeginPhase', () => {
     await expect(
       stateBeginPhase(['--phase', '--name', 'Title', '--plans', '1'], tmpDir)
     ).rejects.toThrow('missing value for --phase');
+  });
+
+  it('does not treat argv after named flags as positional name/plans', async () => {
+    const { stateBeginPhase } = await import('./state-mutation.js');
+
+    const result = await stateBeginPhase(['--phase', '2', '--plans', '3'], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.phase).toBe('2');
+    expect(data.phase_name).toBeFalsy();
+    expect(data.plan_count).toBe(3);
+
+    const content = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    expect(content).toContain('Plan: 1 of 3');
   });
 });
 
@@ -391,7 +404,10 @@ describe('stateAddDecision', () => {
   it('appends decision and removes placeholder', async () => {
     const { stateAddDecision } = await import('./state-mutation.js');
 
-    const result = await stateAddDecision(['[Phase 10]: Use lockfile atomicity'], tmpDir);
+    const result = await stateAddDecision(
+      ['--phase', '10', '--summary', 'Use lockfile atomicity'],
+      tmpDir,
+    );
     const data = result.data as Record<string, unknown>;
     expect(data.added).toBe(true);
 
@@ -422,8 +438,8 @@ describe('stateRecordSession', () => {
     const { stateRecordSession } = await import('./state-mutation.js');
 
     const result = await stateRecordSession(
-      ['2026-04-08T12:00:00Z', 'Completed 11-01-PLAN.md'],
-      tmpDir
+      ['--stopped-at', 'Completed 11-01-PLAN.md', '--resume-file', 'None'],
+      tmpDir,
     );
     const data = result.data as Record<string, unknown>;
     expect(data.recorded).toBe(true);

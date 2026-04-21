@@ -53,9 +53,7 @@ COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
 
 **Otherwise:**
 
-**Text mode:** If TEXT_MODE is enabled (set in the banner step), replace AskUserQuestion calls with plain-text numbered lists — emit the options and ask the user to type the number of their choice.
-
-Before sketching anything, explore the design intent through conversation. Ask one question at a time — using AskUserQuestion in normal mode, or a plain-text numbered list if TEXT_MODE is active — with a paragraph of context and reasoning for each.
+Before sketching anything, explore the design intent through conversation. Ask one question at a time using AskUserQuestion, with a paragraph of context and reasoning for each.
 
 **Questions to cover (adapt to what the user has already shared):**
 

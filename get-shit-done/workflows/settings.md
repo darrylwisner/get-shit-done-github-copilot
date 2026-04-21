@@ -13,13 +13,21 @@ Ensure config exists and load current state:
 
 ```bash
 gsd-sdk query config-ensure-section
-GSD_CONFIG_PATH=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-path)
 INIT=$(gsd-sdk query state.load)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
+# `state.load` returns STATE frontmatter JSON from the SDK — it does not include `config_path`. Orchestrators may set `GSD_CONFIG_PATH` from init phase-op JSON; otherwise resolve the same path gsd-tools uses for flat vs active workstream (#2282).
+if [[ -z "${GSD_CONFIG_PATH:-}" ]]; then
+  if [[ -f .planning/active-workstream ]]; then
+    WS=$(tr -d '\n\r' < .planning/active-workstream)
+    GSD_CONFIG_PATH=".planning/workstreams/${WS}/config.json"
+  else
+    GSD_CONFIG_PATH=".planning/config.json"
+  fi
+fi
 ```
 
-Creates config.json (at the workstream-aware path) with defaults if missing and loads current config values.
-Store `$GSD_CONFIG_PATH` — all subsequent reads and writes use this path, not the hardcoded `.planning/config.json`, so active-workstream installs write to the correct location (#2282).
+Creates `config.json` (at the resolved path) with defaults if missing. `INIT` still holds `state.load` output for any step that needs STATE fields.
+Store `$GSD_CONFIG_PATH` — all subsequent reads and writes use this path, not a hardcoded `.planning/config.json`, so active-workstream installs target the correct file (#2282).
 </step>
 
 <step name="read_current">

@@ -1223,18 +1223,17 @@ Check for auto-advance trigger:
      gsd-sdk query config-set workflow._auto_chain_active false 2>/dev/null
    fi
    ```
-3. Read both the chain flag and user preference:
+3. Read consolidated auto-mode (`active` = chain flag OR user preference):
    ```bash
-   AUTO_CHAIN=$(gsd-sdk query config-get workflow._auto_chain_active 2>/dev/null || echo "false")
-   AUTO_CFG=$(gsd-sdk query config-get workflow.auto_advance 2>/dev/null || echo "false")
+   AUTO_MODE=$(gsd-sdk query check auto-mode --pick active 2>/dev/null || echo "false")
    ```
 
-**If `--auto` or `--chain` flag present AND `AUTO_CHAIN` is not true:** Persist chain flag to config (handles direct usage without new-project):
+**If `--auto` or `--chain` flag present AND `AUTO_MODE` is not true:** Persist chain flag to config (handles direct usage without new-project):
 ```bash
 gsd-sdk query config-set workflow._auto_chain_active true
 ```
 
-**If `--auto` flag present OR `--chain` flag present OR `AUTO_CHAIN` is true OR `AUTO_CFG` is true:**
+**If `--auto` flag present OR `--chain` flag present OR `AUTO_MODE` is true:**
 
 Display banner:
 ```
