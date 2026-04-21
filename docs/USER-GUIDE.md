@@ -165,12 +165,14 @@ By default, `/gsd-discuss-phase` asks open-ended questions about your implementa
 **Enable:** Set `workflow.discuss_mode` to `'assumptions'` via `/gsd-settings`.
 
 **How it works:**
+
 1. Reads PROJECT.md, codebase mapping, and existing conventions
 2. Generates a structured list of assumptions (tech choices, patterns, file locations)
 3. Presents assumptions for you to confirm, correct, or expand
 4. Writes CONTEXT.md from confirmed assumptions
 
 **When to use:**
+
 - Experienced developers who already know their codebase well
 - Rapid iteration where open-ended questions slow you down
 - Projects where patterns are well-established and predictable
@@ -189,16 +191,19 @@ AI-generated frontends are visually inconsistent not because Claude Code is bad 
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `/gsd-ui-phase [N]` | Generate UI-SPEC.md design contract for a frontend phase |
-| `/gsd-ui-review [N]` | Retroactive 6-pillar visual audit of implemented UI |
+
+| Command              | Description                                              |
+| -------------------- | -------------------------------------------------------- |
+| `/gsd-ui-phase [N]`  | Generate UI-SPEC.md design contract for a frontend phase |
+| `/gsd-ui-review [N]` | Retroactive 6-pillar visual audit of implemented UI      |
+
 
 ### Workflow: `/gsd-ui-phase`
 
 **When to run:** After `/gsd-discuss-phase`, before `/gsd-plan-phase` — for phases with frontend/UI work.
 
 **Flow:**
+
 1. Reads CONTEXT.md, RESEARCH.md, REQUIREMENTS.md for existing decisions
 2. Detects design system state (shadcn components.json, Tailwind config, existing tokens)
 3. shadcn initialization gate — offers to initialize if React/Next.js/Vite project has none
@@ -216,6 +221,7 @@ AI-generated frontends are visually inconsistent not because Claude Code is bad 
 **Standalone:** Works on any project, not just GSD-managed ones. If no UI-SPEC.md exists, audits against abstract 6-pillar standards.
 
 **6 Pillars (scored 1-4 each):**
+
 1. Copywriting — CTA labels, empty states, error states
 2. Visuals — focal points, visual hierarchy, icon accessibility
 3. Color — accent usage discipline, 60/30/10 compliance
@@ -227,10 +233,12 @@ AI-generated frontends are visually inconsistent not because Claude Code is bad 
 
 ### Configuration
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `workflow.ui_phase` | `true` | Generate UI design contracts for frontend phases |
-| `workflow.ui_safety_gate` | `true` | plan-phase prompts to run /gsd-ui-phase for frontend phases |
+
+| Setting                   | Default | Description                                                 |
+| ------------------------- | ------- | ----------------------------------------------------------- |
+| `workflow.ui_phase`       | `true`  | Generate UI design contracts for frontend phases            |
+| `workflow.ui_safety_gate` | `true`  | plan-phase prompts to run /gsd-ui-phase for frontend phases |
+
 
 Both follow the absent=enabled pattern. Disable via `/gsd-settings`.
 
@@ -248,6 +256,7 @@ The preset string becomes a first-class GSD planning artifact, reproducible acro
 ### Registry Safety Gate
 
 Third-party shadcn registries can inject arbitrary code. The safety gate requires:
+
 - `npx shadcn view {component}` — inspect before installing
 - `npx shadcn diff {component}` — compare against official
 
@@ -365,12 +374,14 @@ Workstreams let you work on multiple milestone areas concurrently without state 
 
 ### Commands
 
-| Command | Purpose |
-|---------|---------|
-| `/gsd-workstreams create <name>` | Create a new workstream with isolated planning state |
-| `/gsd-workstreams switch <name>` | Switch active context to a different workstream |
-| `/gsd-workstreams list` | Show all workstreams and which is active |
-| `/gsd-workstreams complete <name>` | Mark a workstream as done and archive its state |
+
+| Command                            | Purpose                                              |
+| ---------------------------------- | ---------------------------------------------------- |
+| `/gsd-workstreams create <name>`   | Create a new workstream with isolated planning state |
+| `/gsd-workstreams switch <name>`   | Switch active context to a different workstream      |
+| `/gsd-workstreams list`            | Show all workstreams and which is active             |
+| `/gsd-workstreams complete <name>` | Mark a workstream as done and archive its state      |
+
 
 ### How It Works
 
@@ -393,6 +404,7 @@ All user-supplied file paths (`--text-file`, `--prd`) are validated to resolve w
 The `security.cjs` module scans for known injection patterns (role overrides, instruction bypasses, system tag injections) in user-supplied text before it enters planning artifacts.
 
 **Runtime Hooks:**
+
 - `gsd-prompt-guard.js` — Scans Write/Edit calls to `.planning/` for injection patterns (always active, advisory-only)
 - `gsd-workflow-guard.js` — Warns on file edits outside GSD workflow context (opt-in via `hooks.workflow_guard`)
 
@@ -598,11 +610,13 @@ claude --dangerously-skip-permissions
 
 ### Speed vs Quality Presets
 
-| Scenario | Mode | Granularity | Profile | Research | Plan Check | Verifier |
-|----------|------|-------|---------|----------|------------|----------|
-| Prototyping | `yolo` | `coarse` | `budget` | off | off | off |
-| Normal dev | `interactive` | `standard` | `balanced` | on | on | on |
-| Production | `interactive` | `fine` | `quality` | on | on | on |
+
+| Scenario    | Mode          | Granularity | Profile    | Research | Plan Check | Verifier |
+| ----------- | ------------- | ----------- | ---------- | -------- | ---------- | -------- |
+| Prototyping | `yolo`        | `coarse`    | `budget`   | off      | off        | off      |
+| Normal dev  | `interactive` | `standard`  | `balanced` | on       | on         | on       |
+| Production  | `interactive` | `fine`      | `quality`  | on       | on         | on       |
+
 
 **Skipping discuss-phase in autonomous mode:** When running in `yolo` mode with well-established preferences already captured in PROJECT.md, set `workflow.skip_discuss: true` via `/gsd-settings`. This bypasses the discuss-phase entirely and writes a minimal CONTEXT.md derived from the ROADMAP phase goal. Useful when your PROJECT.md and conventions are comprehensive enough that discussion adds no new information.
 
@@ -637,6 +651,7 @@ cd ~/gsd-workspaces/feature-b
 ```
 
 Each workspace gets:
+
 - Its own `.planning/` directory (fully independent from source repos)
 - Git worktrees (default) or clones of specified repos
 - A `WORKSPACE.md` manifest tracking member repos
@@ -647,9 +662,9 @@ Each workspace gets:
 
 ### Programmatic CLI (`gsd-sdk query` vs `gsd-tools.cjs`)
 
-For automation and copy-paste from docs, prefer **`gsd-sdk query`** with a registered subcommand (see [CLI-TOOLS.md](CLI-TOOLS.md) and [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md)). The legacy **`node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs`** CLI remains supported for dual-mode operation.
+For automation and copy-paste from docs, prefer **`gsd-sdk query`** with a registered subcommand (see [CLI-TOOLS.md — SDK and programmatic access](CLI-TOOLS.md#sdk-and-programmatic-access) and [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md)). The legacy `node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs` CLI remains supported for dual-mode operation.
 
-**Not yet on `gsd-sdk query` (use CJS):** `state validate`, `state sync`, `audit-open`, `graphify`, `from-gsd2`, and any subcommand not listed in the registry.
+**CLI-only (not in the query registry):** **graphify**, **from-gsd2** / **gsd2-import** — call `gsd-tools.cjs` (see [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md)). **Two different `state` JSON shapes in the legacy CLI:** `state json` (frontmatter rebuild) vs `state load` (`config` + `state_raw` + flags). **`gsd-sdk query` today:** both `state.json` and `state.load` resolve to the frontmatter-rebuild handler — use `node …/gsd-tools.cjs state load` when you need the CJS `state load` shape. See [CLI-TOOLS.md](CLI-TOOLS.md#sdk-and-programmatic-access) and QUERY-HANDLERS.
 
 ### STATE.md Out of Sync
 
@@ -782,6 +797,7 @@ If `npx get-shit-done-cc` fails due to npm outages or network restrictions, see 
 When a workflow fails in a way that isn't obvious -- plans reference nonexistent files, execution produces unexpected results, or state seems corrupted -- run `/gsd-forensics` to generate a diagnostic report.
 
 **What it checks:**
+
 - Git history anomalies (orphaned commits, unexpected branch state, rebase artifacts)
 - Artifact integrity (missing or malformed planning files, broken cross-references)
 - State inconsistencies (ROADMAP status vs. actual file presence, config drift)
@@ -916,22 +932,24 @@ If the installer crashes with `EPERM: operation not permitted, scandir` on Windo
 
 ## Recovery Quick Reference
 
-| Problem | Solution |
-|---------|----------|
-| Lost context / new session | `/gsd-resume-work` or `/gsd-progress` |
-| Phase went wrong | `git revert` the phase commits, then re-plan |
-| Need to change scope | `/gsd-add-phase`, `/gsd-insert-phase`, or `/gsd-remove-phase` |
-| Milestone audit found gaps | `/gsd-plan-milestone-gaps` |
-| Something broke | `/gsd-debug "description"` (add `--diagnose` for analysis without fixes) |
-| STATE.md out of sync | `state validate` then `state sync` |
-| Workflow state seems corrupted | `/gsd-forensics` |
-| Quick targeted fix | `/gsd-quick` |
-| Plan doesn't match your vision | `/gsd-discuss-phase [N]` then re-plan |
-| Costs running high | `/gsd-set-profile budget` and `/gsd-settings` to toggle agents off |
-| Update broke local changes | `/gsd-reapply-patches` |
-| Want session summary for stakeholder | `/gsd-session-report` |
-| Don't know what step is next | `/gsd-next` |
-| Parallel execution build errors | Update GSD or set `parallelization.enabled: false` |
+
+| Problem                              | Solution                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| Lost context / new session           | `/gsd-resume-work` or `/gsd-progress`                                    |
+| Phase went wrong                     | `git revert` the phase commits, then re-plan                             |
+| Need to change scope                 | `/gsd-add-phase`, `/gsd-insert-phase`, or `/gsd-remove-phase`            |
+| Milestone audit found gaps           | `/gsd-plan-milestone-gaps`                                               |
+| Something broke                      | `/gsd-debug "description"` (add `--diagnose` for analysis without fixes) |
+| STATE.md out of sync                 | `state validate` then `state sync`                                       |
+| Workflow state seems corrupted       | `/gsd-forensics`                                                         |
+| Quick targeted fix                   | `/gsd-quick`                                                             |
+| Plan doesn't match your vision       | `/gsd-discuss-phase [N]` then re-plan                                    |
+| Costs running high                   | `/gsd-set-profile budget` and `/gsd-settings` to toggle agents off       |
+| Update broke local changes           | `/gsd-reapply-patches`                                                   |
+| Want session summary for stakeholder | `/gsd-session-report`                                                    |
+| Don't know what step is next         | `/gsd-next`                                                              |
+| Parallel execution build errors      | Update GSD or set `parallelization.enabled: false`                       |
+
 
 ---
 
@@ -975,3 +993,4 @@ For reference, here is what GSD creates in your project:
       XX-UI-REVIEW.md     # Visual audit scores (from /gsd-ui-review)
   ui-reviews/             # Screenshots from /gsd-ui-review (gitignored)
 ```
+

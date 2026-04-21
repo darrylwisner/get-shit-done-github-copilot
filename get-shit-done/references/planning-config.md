@@ -54,7 +54,7 @@ Configuration options for `.planning/` directory behavior.
 - User must add `.planning/` to `.gitignore`
 - Useful for: OSS contributions, client projects, keeping planning private
 
-**Using gsd-tools.cjs (preferred):**
+**Using `gsd-sdk query` (preferred):**
 
 ```bash
 # Commit with automatic commit_docs + gitignore checks:

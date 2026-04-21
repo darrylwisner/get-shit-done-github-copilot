@@ -120,7 +120,40 @@ describe('getMilestoneInfo', () => {
     expect(info.name).toBe('Belgium');
   });
 
-  it('falls back to v1.0 when ROADMAP.md missing', async () => {
+  it('extracts from yellow-circle in-flight marker (GSD ROADMAP template)', async () => {
+    const roadmap = '- 🟡 **v3.1 Upstream Landing** — Phase 15 (in flight)';
+    await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
+    const info = await getMilestoneInfo(tmpDir);
+    expect(info.version).toBe('v3.1');
+    expect(info.name).toBe('Upstream Landing');
+  });
+
+  it('uses last **vX.Y Title** in milestone list before ## Phases when no emoji match', async () => {
+    const roadmap = `## Milestones
+
+- ✅ **v1.0 A**
+- ✅ **v3.0 B**
+- ✅ **v3.1 Current Name**
+
+## Phases
+`;
+    await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
+    const info = await getMilestoneInfo(tmpDir);
+    expect(info.version).toBe('v3.1');
+    expect(info.name).toBe('Current Name');
+  });
+
+  it('falls back to STATE.md milestone when ROADMAP.md is missing', async () => {
+    await writeFile(
+      join(tmpDir, '.planning', 'STATE.md'),
+      '---\nmilestone: v4.2\nmilestone_name: From State\n---\n\n# State\n',
+    );
+    const info = await getMilestoneInfo(tmpDir);
+    expect(info.version).toBe('v4.2');
+    expect(info.name).toBe('From State');
+  });
+
+  it('falls back to v1.0 when ROADMAP.md and STATE.md lack milestone', async () => {
     const info = await getMilestoneInfo(tmpDir);
     expect(info.version).toBe('v1.0');
     expect(info.name).toBe('milestone');

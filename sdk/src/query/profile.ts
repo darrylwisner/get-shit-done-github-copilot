@@ -13,18 +13,26 @@
  * // { data: { projects: [...], project_count: 5, session_count: 42 } }
  *
  * await profileQuestionnaire([], '/project');
- * // { data: { questions: [...], total: 3 } }
+ * // { data: { mode: 'interactive', questions: [...] } } — same shape as gsd-tools.cjs
  * ```
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
-import { join, relative, basename, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { join, basename, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash, randomBytes } from 'node:crypto';
 
-import { planningPaths, toPosixPath } from './helpers.js';
+import { planningPaths } from './helpers.js';
+import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
+import { buildScanSessionsProjects, getScanSessionsRoot } from './profile-scan-sessions.js';
+import { runExtractMessages } from './profile-extract-messages.js';
+import { runProfileSample } from './profile-sample.js';
+import {
+  PROFILING_QUESTIONS,
+  generateClaudeInstruction,
+  isAmbiguousAnswer,
+} from './profile-questionnaire-data.js';
 
 // ─── Learnings — ~/.gsd/knowledge/ knowledge store ───────────────────────
 
@@ -61,6 +69,16 @@ function learningsList(): Array<Record<string, unknown>> {
   results.sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
   return results;
 }
+
+/**
+ * List all entries in the global learnings store (`~/.gsd/knowledge/`).
+ *
+ * Port of `cmdLearningsList` from learnings.cjs.
+ */
+export const learningsListHandler: QueryHandler = async () => {
+  const learnings = learningsList();
+  return { data: { learnings, count: learnings.length } };
+};
 
 /**
  * Query learnings from the global knowledge store, optionally filtered by tag.
@@ -109,259 +127,211 @@ export const learningsCopy: QueryHandler = async (_args, projectDir) => {
   return { data: { copied: true, total: created + skipped, created, skipped } };
 };
 
+/**
+ * Prune learnings older than duration (e.g. `90d`). Port of `learningsPrune` from learnings.cjs.
+ */
+function learningsPruneStore(olderThan: string): { removed: number; kept: number } {
+  const match = /^(\d+)d$/.exec(olderThan);
+  if (!match) {
+    throw new Error(`Invalid duration format: "${olderThan}" — expected format like "90d"`);
+  }
+  const days = parseInt(match[1], 10);
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  if (!existsSync(STORE_DIR)) return { removed: 0, kept: 0 };
+  const files = readdirSync(STORE_DIR).filter(f => f.endsWith('.json'));
+  let removed = 0;
+  let kept = 0;
+  for (const file of files) {
+    const filePath = join(STORE_DIR, file);
+    let record: Record<string, unknown> | null = null;
+    try {
+      record = JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (!record?.date) continue;
+    const recordDate = new Date(record.date as string);
+    if (recordDate < cutoff) {
+      unlinkSync(filePath);
+      removed++;
+    } else {
+      kept++;
+    }
+  }
+  return { removed, kept };
+}
+
+/** Port of `cmdLearningsPrune`. */
+export const learningsPrune: QueryHandler = async (args) => {
+  const olderIdx = args.indexOf('--older-than');
+  const olderThan = olderIdx !== -1 ? args[olderIdx + 1] : null;
+  if (!olderThan) {
+    throw new GSDError('Usage: learnings prune --older-than <duration>', ErrorClassification.Validation);
+  }
+  try {
+    return { data: learningsPruneStore(olderThan) };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new GSDError(msg, ErrorClassification.Validation);
+  }
+};
+
+/** Port of `cmdLearningsDelete`. */
+export const learningsDelete: QueryHandler = async (args) => {
+  const id = args[0];
+  if (!id) {
+    throw new GSDError('Usage: learnings delete <id>', ErrorClassification.Validation);
+  }
+  if (!/^[a-z0-9]+-[a-f0-9]+$/.test(id)) {
+    throw new GSDError(`Invalid learning ID: "${id}"`, ErrorClassification.Validation);
+  }
+  const filePath = join(STORE_DIR, `${id}.json`);
+  if (!existsSync(filePath)) {
+    return { data: { id, deleted: false } };
+  }
+  unlinkSync(filePath);
+  return { data: { id, deleted: true } };
+};
+
 // ─── extractMessages — session message extraction for profiling ───────────
 
 /**
  * Extract user messages from Claude Code session files for a given project.
  *
- * Port of `cmdExtractMessages` from profile-pipeline.cjs lines 252-391.
- * Simplified to use the SDK's existing session scanning infrastructure.
+ * Port of `cmdExtractMessages` from profile-pipeline.cjs — JSON matches `gsd-tools extract-messages`
+ * (`output_file` JSONL + metadata). Uses `--session` (CJS); `--session-id` is accepted as an alias.
  *
- * @param args - args[0]: project name/keyword (required), --limit N, --session-id ID
+ * @param args - args[0]: project name/keyword (required), `--session <id>`, `--limit N`, `--path <dir>`
  */
 export const extractMessages: QueryHandler = async (args) => {
-  const projectArg = args[0];
-  if (!projectArg) {
-    return { data: { error: 'project name required', messages: [], total: 0 } };
-  }
-
-  const sessionsBase = join(homedir(), '.claude', 'projects');
-  if (!existsSync(sessionsBase)) {
-    return { data: { error: 'No Claude Code sessions found', messages: [], total: 0 } };
-  }
-
+  const pathIdx = args.indexOf('--path');
+  const overridePath = pathIdx !== -1 ? args[pathIdx + 1] : null;
+  const sessionIdx =
+    args.indexOf('--session') !== -1 ? args.indexOf('--session') : args.indexOf('--session-id');
+  const sessionId = sessionIdx !== -1 ? args[sessionIdx + 1]! : null;
   const limitIdx = args.indexOf('--limit');
-  const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) || 300 : 300;
-  const sessionIdIdx = args.indexOf('--session-id');
-  const sessionIdFilter = sessionIdIdx !== -1 ? args[sessionIdIdx + 1] : null;
-
-  let projectDirs: string[];
-  try {
-    projectDirs = readdirSync(sessionsBase, { withFileTypes: true })
-      .filter((e: { isDirectory(): boolean }) => e.isDirectory())
-      .map((e: { name: string }) => e.name);
-  } catch {
-    return { data: { error: 'Cannot read sessions directory', messages: [], total: 0 } };
+  const limit = limitIdx !== -1 ? (parseInt(args[limitIdx + 1]!, 10) || null) : null;
+  const projectArg = args[0];
+  if (!projectArg || projectArg.startsWith('--')) {
+    throw new GSDError(
+      'Usage: gsd-tools extract-messages <project> [--session <id>] [--limit N] [--path <dir>]\nRun scan-sessions first to see available projects.',
+      ErrorClassification.Validation,
+    );
   }
-
-  const lowerArg = projectArg.toLowerCase();
-  const matchedDir = projectDirs.find(d => d === projectArg)
-    || projectDirs.find(d => d.toLowerCase().includes(lowerArg));
-
-  if (!matchedDir) {
-    return { data: { error: `No project matching "${projectArg}"`, available: projectDirs.slice(0, 10), messages: [], total: 0 } };
-  }
-
-  const projectPath = join(sessionsBase, matchedDir);
-  let sessionFiles = readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
-  if (sessionIdFilter) {
-    sessionFiles = sessionFiles.filter(f => f.includes(sessionIdFilter));
-  }
-
-  const messages: Array<{ role: string; content: string; session: string }> = [];
-  let sessionsProcessed = 0;
-  let sessionsSkipped = 0;
-
-  for (const sessionFile of sessionFiles) {
-    if (messages.length >= limit) break;
-    try {
-      const content = readFileSync(join(projectPath, sessionFile), 'utf-8');
-      for (const line of content.split('\n').filter(Boolean)) {
-        if (messages.length >= limit) break;
-        try {
-          const record = JSON.parse(line);
-          if (record.type === 'user' && typeof record.message?.content === 'string') {
-            const text = record.message.content;
-            if (text.length > 3 && !text.startsWith('/') && !/^\s*(y|n|yes|no|ok)\s*$/i.test(text)) {
-              messages.push({
-                role: 'user',
-                content: text.length > 2000 ? text.slice(0, 2000) + '... [truncated]' : text,
-                session: sessionFile.replace('.jsonl', ''),
-              });
-            }
-          }
-        } catch { /* skip malformed line */ }
-      }
-      sessionsProcessed++;
-    } catch {
-      sessionsSkipped++;
-    }
-  }
-
-  return {
-    data: {
-      project: matchedDir,
-      sessions_processed: sessionsProcessed,
-      sessions_skipped: sessionsSkipped,
-      messages_extracted: messages.length,
-      messages,
-    },
-  };
+  const data = await runExtractMessages(projectArg, { sessionId, limit }, overridePath ?? null);
+  return { data };
 };
 
 // ─── Profile — session scanning and profile generation ────────────────────
 
-const SESSIONS_DIR = join(homedir(), '.claude', 'projects');
+export const scanSessions: QueryHandler = async (args) => {
+  const pathIdx = args.indexOf('--path');
+  const overridePath = pathIdx !== -1 ? args[pathIdx + 1] : null;
+  const verboseFlag = args.includes('--verbose');
 
-export const scanSessions: QueryHandler = async (_args, _projectDir) => {
-  if (!existsSync(SESSIONS_DIR)) {
-    return { data: { projects: [], project_count: 0, session_count: 0 } };
+  if (getScanSessionsRoot(overridePath) === null) {
+    const searchedPath = overridePath || '~/.claude/projects';
+    throw new GSDError(
+      `No Claude Code sessions found at ${searchedPath}.${overridePath ? '' : ' Is Claude Code installed?'}`,
+      ErrorClassification.Validation,
+    );
   }
 
-  const projects: Record<string, unknown>[] = [];
-  let sessionCount = 0;
-
-  try {
-    const projectDirs = readdirSync(SESSIONS_DIR, { withFileTypes: true });
-    for (const pDir of projectDirs.filter(e => e.isDirectory())) {
-      const pPath = join(SESSIONS_DIR, pDir.name);
-      const sessions = readdirSync(pPath).filter(f => f.endsWith('.jsonl'));
-      sessionCount += sessions.length;
-      projects.push({ name: pDir.name, path: toPosixPath(pPath), session_count: sessions.length });
-    }
-  } catch { /* skip */ }
-
-  return { data: { projects, project_count: projects.length, session_count: sessionCount } };
+  const projects = buildScanSessionsProjects(overridePath, { verbose: verboseFlag });
+  return { data: projects };
 };
 
-export const profileSample: QueryHandler = async (_args, _projectDir) => {
-  if (!existsSync(SESSIONS_DIR)) {
-    return { data: { messages: [], total: 0, projects_sampled: 0 } };
-  }
-  const messages: string[] = [];
-  let projectsSampled = 0;
-
-  try {
-    const projectDirs = readdirSync(SESSIONS_DIR, { withFileTypes: true });
-    for (const pDir of projectDirs.filter(e => e.isDirectory()).slice(0, 5)) {
-      const pPath = join(SESSIONS_DIR, pDir.name);
-      const sessions = readdirSync(pPath).filter(f => f.endsWith('.jsonl')).slice(0, 3);
-      for (const session of sessions) {
-        try {
-          const content = readFileSync(join(pPath, session), 'utf-8');
-          for (const line of content.split('\n').filter(Boolean)) {
-            try {
-              const record = JSON.parse(line);
-              if (record.type === 'user' && typeof record.message?.content === 'string') {
-                messages.push(record.message.content.slice(0, 500));
-                if (messages.length >= 50) break;
-              }
-            } catch { /* skip malformed */ }
-          }
-        } catch { /* skip */ }
-        if (messages.length >= 50) break;
-      }
-      projectsSampled++;
-      if (messages.length >= 50) break;
-    }
-  } catch { /* skip */ }
-
-  return { data: { messages, total: messages.length, projects_sampled: projectsSampled } };
+/**
+ * Multi-project session sampling for profiling — port of `cmdProfileSample` (`profile-pipeline.cjs`).
+ * JSON matches `gsd-tools profile-sample` (`output_file` JSONL + metadata).
+ */
+export const profileSample: QueryHandler = async (args) => {
+  const pathIdx = args.indexOf('--path');
+  const overridePath = pathIdx !== -1 ? args[pathIdx + 1] : null;
+  const limitIdx = args.indexOf('--limit');
+  const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1]!, 10) : 150;
+  const maxPerIdx = args.indexOf('--max-per-project');
+  const maxPerProject = maxPerIdx !== -1 ? parseInt(args[maxPerIdx + 1]!, 10) : null;
+  const maxCharsIdx = args.indexOf('--max-chars');
+  const maxChars = maxCharsIdx !== -1 ? parseInt(args[maxCharsIdx + 1]!, 10) : 500;
+  const data = await runProfileSample(overridePath ?? null, {
+    limit,
+    maxPerProject,
+    maxChars,
+  });
+  return { data };
 };
 
-const PROFILING_QUESTIONS = [
-  { dimension: 'communication_style', header: 'Communication Style', question: 'When you ask Claude to build something, how much context do you typically provide?', options: [{ label: 'Minimal', value: 'a', rating: 'terse-direct' }, { label: 'Some context', value: 'b', rating: 'conversational' }, { label: 'Detailed specs', value: 'c', rating: 'detailed-structured' }, { label: 'It depends', value: 'd', rating: 'mixed' }] },
-  { dimension: 'decision_speed', header: 'Decision Making', question: 'When Claude presents you with options, how do you typically decide?', options: [{ label: 'Pick quickly', value: 'a', rating: 'fast-intuitive' }, { label: 'Ask for comparison', value: 'b', rating: 'deliberate-informed' }, { label: 'Research independently', value: 'c', rating: 'research-first' }, { label: 'Let Claude recommend', value: 'd', rating: 'delegator' }] },
-  { dimension: 'explanation_depth', header: 'Explanation Preferences', question: 'When Claude explains something, how much detail do you want?', options: [{ label: 'Just the code', value: 'a', rating: 'code-only' }, { label: 'Brief explanation', value: 'b', rating: 'concise' }, { label: 'Detailed walkthrough', value: 'c', rating: 'detailed' }, { label: 'Deep dive', value: 'd', rating: 'educational' }] },
-];
-
+/**
+ * Profile questionnaire — port of `cmdProfileQuestionnaire` from profile-output.cjs.
+ * Interactive: `{ mode: 'interactive', questions }` (options omit `rating`).
+ * With `--answers a,b,c,...` (8 comma-separated values, order matches questions): full analysis object (includes volatile `analyzed_at`).
+ */
 export const profileQuestionnaire: QueryHandler = async (args, _projectDir) => {
-  const answersFlag = args.indexOf('--answers');
-  if (answersFlag >= 0 && args[answersFlag + 1]) {
-    try {
-      const answers = JSON.parse(readFileSync(resolve(args[answersFlag + 1]), 'utf-8')) as Record<string, string>;
-      const analysis: Record<string, string> = {};
-      for (const q of PROFILING_QUESTIONS) {
-        const answer = answers[q.dimension];
-        const option = q.options.find(o => o.value === answer);
-        analysis[q.dimension] = option?.rating ?? 'unknown';
-      }
-      return { data: { analysis, answered: Object.keys(answers).length, questions_total: PROFILING_QUESTIONS.length } };
-    } catch {
-      return { data: { error: 'Failed to read answers file', path: args[answersFlag + 1] } };
-    }
-  }
-  return { data: { questions: PROFILING_QUESTIONS, total: PROFILING_QUESTIONS.length } };
-};
+  const answersIdx = args.indexOf('--answers');
+  const answersStr = answersIdx !== -1 ? args[answersIdx + 1] : null;
 
-export const writeProfile: QueryHandler = async (args, projectDir) => {
-  const inputFlag = args.indexOf('--input');
-  const inputPath = inputFlag >= 0 ? args[inputFlag + 1] : null;
-  if (!inputPath || !existsSync(resolve(inputPath))) {
-    return { data: { written: false, reason: 'No --input analysis file provided' } };
-  }
-  try {
-    const analysis = JSON.parse(readFileSync(resolve(inputPath), 'utf-8')) as Record<string, unknown>;
-    const profilePath = join(projectDir, '.planning', 'USER-PROFILE.md');
-    const lines = ['# User Developer Profile', '', `*Generated: ${new Date().toISOString()}*`, ''];
-    for (const [key, value] of Object.entries(analysis)) {
-      lines.push(`## ${key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}`);
-      lines.push('');
-      lines.push(String(value));
-      lines.push('');
-    }
-    await writeFile(profilePath, lines.join('\n'), 'utf-8');
-    return { data: { written: true, path: toPosixPath(relative(projectDir, profilePath)) } };
-  } catch (err) {
-    return { data: { written: false, reason: String(err) } };
-  }
-};
-
-export const generateClaudeProfile: QueryHandler = async (args, _projectDir) => {
-  const analysisFlag = args.indexOf('--analysis');
-  const analysisPath = analysisFlag >= 0 ? args[analysisFlag + 1] : null;
-  let profile = '> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.\n> This section is managed by `generate-claude-profile` -- do not edit manually.';
-
-  if (analysisPath && existsSync(resolve(analysisPath))) {
-    try {
-      const analysis = JSON.parse(readFileSync(resolve(analysisPath), 'utf-8')) as Record<string, unknown>;
-      const lines = ['## Developer Profile', ''];
-      for (const [key, value] of Object.entries(analysis)) {
-        lines.push(`- **${key.replace(/_/g, ' ')}**: ${value}`);
-      }
-      profile = lines.join('\n');
-    } catch { /* use fallback */ }
+  if (!answersStr) {
+    const questionsOutput = {
+      mode: 'interactive' as const,
+      questions: PROFILING_QUESTIONS.map((q) => ({
+        dimension: q.dimension,
+        header: q.header,
+        context: q.context,
+        question: q.question,
+        options: q.options.map((o) => ({ label: o.label, value: o.value })),
+      })),
+    };
+    return { data: questionsOutput };
   }
 
-  return { data: { profile, generated: true } };
-};
-
-export const generateDevPreferences: QueryHandler = async (args, projectDir) => {
-  const analysisFlag = args.indexOf('--analysis');
-  const analysisPath = analysisFlag >= 0 ? args[analysisFlag + 1] : null;
-  const prefs: Record<string, unknown> = {};
-
-  if (analysisPath && existsSync(resolve(analysisPath))) {
-    try {
-      const analysis = JSON.parse(readFileSync(resolve(analysisPath), 'utf-8')) as Record<string, unknown>;
-      Object.assign(prefs, analysis);
-    } catch { /* use empty */ }
+  const answerValues = answersStr.split(',').map((a) => a.trim());
+  if (answerValues.length !== PROFILING_QUESTIONS.length) {
+    throw new GSDError(
+      `Expected ${PROFILING_QUESTIONS.length} answers (comma-separated), got ${answerValues.length}`,
+      ErrorClassification.Validation,
+    );
   }
 
-  const prefsPath = join(projectDir, '.planning', 'dev-preferences.md');
-  const lines = ['# Developer Preferences', '', `*Generated: ${new Date().toISOString()}*`, ''];
-  for (const [key, value] of Object.entries(prefs)) {
-    lines.push(`- **${key}**: ${value}`);
-  }
-  await writeFile(prefsPath, lines.join('\n'), 'utf-8');
-  return { data: { written: true, path: toPosixPath(relative(projectDir, prefsPath)), preferences: prefs } };
-};
-
-export const generateClaudeMd: QueryHandler = async (_args, projectDir) => {
-  const safeRead = (path: string): string | null => {
-    try { return existsSync(path) ? readFileSync(path, 'utf-8') : null; } catch { return null; }
+  const dimensions: Record<string, unknown> = {};
+  const analysis: Record<string, unknown> = {
+    profile_version: '1.0',
+    analyzed_at: new Date().toISOString(),
+    data_source: 'questionnaire',
+    projects_analyzed: [] as unknown[],
+    messages_analyzed: 0,
+    message_threshold: 'questionnaire',
+    sensitive_excluded: [] as unknown[],
+    dimensions,
   };
 
-  const sections: string[] = [];
-
-  const projectContent = safeRead(join(projectDir, '.planning', 'PROJECT.md'));
-  if (projectContent) {
-    const h1 = projectContent.match(/^# (.+)$/m);
-    if (h1) sections.push(`## Project\n\n${h1[1]}\n`);
+  for (let i = 0; i < PROFILING_QUESTIONS.length; i++) {
+    const question = PROFILING_QUESTIONS[i]!;
+    const answerValue = answerValues[i]!;
+    const selectedOption = question.options.find((o) => o.value === answerValue);
+    if (!selectedOption) {
+      throw new GSDError(
+        `Invalid answer "${answerValue}" for ${question.dimension}. Valid values: ${question.options.map((o) => o.value).join(', ')}`,
+        ErrorClassification.Validation,
+      );
+    }
+    const ambiguous = isAmbiguousAnswer(question.dimension, answerValue);
+    dimensions[question.dimension] = {
+      rating: selectedOption.rating,
+      confidence: ambiguous ? 'LOW' : 'MEDIUM',
+      evidence_count: 1,
+      cross_project_consistent: null,
+      evidence: [
+        {
+          signal: 'Self-reported via questionnaire',
+          quote: selectedOption.label,
+          project: 'N/A (questionnaire)',
+        },
+      ],
+      summary: `Developer self-reported as ${selectedOption.rating} for ${question.header.toLowerCase()}.`,
+      claude_instruction: generateClaudeInstruction(question.dimension, selectedOption.rating),
+    };
   }
 
-  const stackContent = safeRead(join(projectDir, '.planning', 'codebase', 'STACK.md')) ?? safeRead(join(projectDir, '.planning', 'research', 'STACK.md'));
-  if (stackContent) sections.push(`## Technology Stack\n\n${stackContent.slice(0, 1000)}\n`);
-
-  return { data: { sections, generated: true, section_count: sections.length } };
+  return { data: analysis };
 };

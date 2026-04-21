@@ -1,8 +1,8 @@
 /**
- * Unit tests for handlers decomposed from the former stubs.ts.
+ * Cross-module handler tests for code decomposed from the legacy `stubs.ts` module.
  *
- * Tests are organized by domain module — each import references the
- * handler's new home after the stubs.ts → domain file decomposition.
+ * Each suite imports real handlers from their domain modules and exercises behavior
+ * against temp fixtures (no standalone stubs).
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { agentSkills } from './skills.js';
-import { roadmapUpdatePlanProgress, requirementsMarkComplete } from './roadmap.js';
+import { roadmapUpdatePlanProgress } from './roadmap-update-plan-progress.js';
+import { requirementsMarkComplete } from './roadmap.js';
 import { statePlannedPhase } from './state-mutation.js';
 import { verifySchemaDrift } from './verify.js';
 import { todoMatchPhase, statsJson, progressBar } from './progress.js';
@@ -22,7 +23,7 @@ import {
   workstreamList, workstreamCreate, workstreamSet,
   workstreamStatus, workstreamComplete,
 } from './workstream.js';
-import { docsInit } from './init.js';
+import { docsInit } from './docs-init.js';
 import { websearch } from './websearch.js';
 
 let tmpDir: string;
@@ -86,11 +87,8 @@ describe('roadmapUpdatePlanProgress', () => {
     expect(typeof data.updated).toBe('boolean');
   });
 
-  it('returns false when no phase arg', async () => {
-    const result = await roadmapUpdatePlanProgress([], tmpDir);
-    const data = result.data as Record<string, unknown>;
-    expect(data.updated).toBe(false);
-    expect(data.reason).toBeDefined();
+  it('throws when no phase arg', async () => {
+    await expect(roadmapUpdatePlanProgress([], tmpDir)).rejects.toThrow();
   });
 });
 
@@ -98,63 +96,67 @@ describe('requirementsMarkComplete', () => {
   it('returns QueryResult without error', async () => {
     const result = await requirementsMarkComplete(['REQ-01'], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(typeof data.marked).toBe('boolean');
+    expect(typeof data.updated).toBe('boolean');
   });
 
-  it('returns false when no IDs provided', async () => {
-    const result = await requirementsMarkComplete([], tmpDir);
-    const data = result.data as Record<string, unknown>;
-    expect(data.marked).toBe(false);
+  it('throws when no IDs provided', async () => {
+    await expect(requirementsMarkComplete([], tmpDir)).rejects.toThrow();
   });
 });
 
 // ─── state-mutation.ts ───────────────────────────────────────────────────
 
 describe('statePlannedPhase', () => {
-  it('updates STATE.md and returns success', async () => {
+  it('returns cmdStatePlannedPhase-shaped data', async () => {
     const result = await statePlannedPhase(['--phase', '10', '--name', 'queries', '--plans', '2'], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(typeof data.updated).toBe('boolean');
+    expect(Array.isArray(data.updated)).toBe(true);
+    expect(data.phase).toBe('10');
+    expect(data.plan_count).toBe(2);
   });
 
-  it('returns false without phase arg', async () => {
+  it('returns error when --phase is missing', async () => {
     const result = await statePlannedPhase([], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(data.updated).toBe(false);
+    expect(data.error).toMatch(/phase required/);
   });
 });
 
 // ─── verify.ts ───────────────────────────────────────────────────────────
 
 describe('verifySchemaDrift', () => {
-  it('returns valid/issues shape', async () => {
-    const result = await verifySchemaDrift([], tmpDir);
+  it('returns drift_detected shape (cmdVerifySchemaDrift parity)', async () => {
+    const result = await verifySchemaDrift(['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(typeof data.valid).toBe('boolean');
-    expect(Array.isArray(data.issues)).toBe(true);
-    expect(typeof data.checked).toBe('number');
+    expect(typeof data.drift_detected).toBe('boolean');
+    expect(typeof data.blocking).toBe('boolean');
+    expect(Array.isArray(data.schema_files)).toBe(true);
   });
 });
 
 // ─── progress.ts ─────────────────────────────────────────────────────────
 
 describe('todoMatchPhase', () => {
-  it('returns todos array (empty when no todos dir)', async () => {
+  it('returns matches and todo_count (cmdTodoMatchPhase parity)', async () => {
     const result = await todoMatchPhase(['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(Array.isArray(data.todos)).toBe(true);
+    expect(Array.isArray(data.matches)).toBe(true);
     expect(data.phase).toBe('9');
+    expect(typeof data.todo_count).toBe('number');
   });
 });
 
 describe('statsJson', () => {
-  it('returns stats with phases_total and progress', async () => {
+  it('returns cmdStats JSON shape with phases table and git fields', async () => {
     const result = await statsJson([], tmpDir);
     const data = result.data as Record<string, unknown>;
+    expect(typeof data.milestone_version).toBe('string');
+    expect(Array.isArray(data.phases)).toBe(true);
     expect(typeof data.phases_total).toBe('number');
-    expect(typeof data.plans_total).toBe('number');
-    expect(typeof data.progress_percent).toBe('number');
-    expect(data.phases_total).toBeGreaterThanOrEqual(2);
+    expect(typeof data.total_plans).toBe('number');
+    expect(typeof data.percent).toBe('number');
+    expect((data.phases_total as number)).toBeGreaterThanOrEqual(2);
+    expect(typeof data.git_commits).toBe('number');
   });
 });
 
@@ -177,12 +179,17 @@ describe('summaryExtract', () => {
     expect(data.error).toBeDefined();
   });
 
-  it('extracts sections from an existing summary file', async () => {
+  it('extracts frontmatter fields from an existing summary file', async () => {
     const summaryPath = join(tmpDir, '.planning', 'phases', '09-foundation', '09-01-SUMMARY.md');
-    await writeFile(summaryPath, '# Summary\n\n## What Was Done\nBuilt it.\n\n## Tests\nAll pass.\n');
+    await writeFile(
+      summaryPath,
+      ['---', 'phase: "09"', 'one-liner: Built it.', 'key-files:', '  - x.ts', '---', '', '# Summary', ''].join('\n'),
+      'utf-8',
+    );
     const result = await summaryExtract(['.planning/phases/09-foundation/09-01-SUMMARY.md'], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(data.sections).toBeDefined();
+    expect(data.one_liner).toBe('Built it.');
+    expect(data.key_files).toEqual(['x.ts']);
   });
 });
 
@@ -244,11 +251,18 @@ describe('workstream handlers', () => {
 // ─── init.ts ─────────────────────────────────────────────────────────────
 
 describe('docsInit', () => {
-  it('returns docs context', async () => {
+  it('returns docs context matching gsd-tools docs-init', async () => {
     const result = await docsInit([], tmpDir);
     const data = result.data as Record<string, unknown>;
-    expect(typeof data.project_exists).toBe('boolean');
-    expect(data.docs_dir).toBe('.planning/docs');
+    expect(typeof data.planning_exists).toBe('boolean');
+    expect(data.project_root).toBe(tmpDir);
+    expect(typeof data.doc_writer_model).toBe('string');
+    expect(Array.isArray(data.existing_docs)).toBe(true);
+    expect(data.project_type).toBeDefined();
+    expect(data.doc_tooling).toBeDefined();
+    expect(Array.isArray(data.monorepo_workspaces)).toBe(true);
+    expect(typeof data.agents_installed).toBe('boolean');
+    expect(Array.isArray(data.missing_agents)).toBe(true);
   });
 });
 

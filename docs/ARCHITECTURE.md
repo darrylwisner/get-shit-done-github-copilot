@@ -76,6 +76,7 @@ Every agent spawned by an orchestrator gets a clean context window (up to 200K t
 ### 2. Thin Orchestrators
 
 Workflow files (`get-shit-done/workflows/*.md`) never do heavy lifting. They:
+
 - Load context via `gsd-sdk query init.<workflow>` (or legacy `gsd-tools.cjs init <workflow>`)
 - Spawn specialized agents with focused prompts
 - Collect results and route to the next step
@@ -84,6 +85,7 @@ Workflow files (`get-shit-done/workflows/*.md`) never do heavy lifting. They:
 ### 3. File-Based State
 
 All state lives in `.planning/` as human-readable Markdown and JSON. No database, no server, no external dependencies. This means:
+
 - State survives context resets (`/clear`)
 - State is inspectable by both humans and agents
 - State can be committed to git for team visibility
@@ -95,6 +97,7 @@ Workflow feature flags follow the **absent = enabled** pattern. If a key is miss
 ### 5. Defense in Depth
 
 Multiple layers prevent common failure modes:
+
 - Plans are verified before execution (plan-checker agent)
 - Execution produces atomic commits per task
 - Post-execution verification checks against phase goals
@@ -107,6 +110,7 @@ Multiple layers prevent common failure modes:
 ### Commands (`commands/gsd/*.md`)
 
 User-facing entry points. Each file contains YAML frontmatter (name, description, allowed-tools) and a prompt body that bootstraps the workflow. Commands are installed as:
+
 - **Claude Code:** Custom slash commands (`/gsd-command-name`)
 - **OpenCode / Kilo:** Slash commands (`/gsd-command-name`)
 - **Codex:** Skills (`$gsd-command-name`)
@@ -118,6 +122,7 @@ User-facing entry points. Each file contains YAML frontmatter (name, description
 ### Workflows (`get-shit-done/workflows/*.md`)
 
 Orchestration logic that commands reference. Contains the step-by-step process including:
+
 - Context loading via `gsd-sdk query` init handlers (or legacy `gsd-tools.cjs init`)
 - Agent spawn instructions with model resolution
 - Gate/checkpoint definitions
@@ -129,6 +134,7 @@ Orchestration logic that commands reference. Contains the step-by-step process i
 ### Agents (`agents/*.md`)
 
 Specialized agent definitions with frontmatter specifying:
+
 - `name` — Agent identifier
 - `description` — Role and purpose
 - `tools` — Allowed tool access (Read, Write, Edit, Bash, Grep, Glob, WebSearch, etc.)
@@ -141,6 +147,7 @@ Specialized agent definitions with frontmatter specifying:
 Shared knowledge documents that workflows and agents `@-reference` (see [`docs/INVENTORY.md`](INVENTORY.md#references-41-shipped) for the authoritative count and full roster):
 
 **Core references:**
+
 - `checkpoints.md` — Checkpoint type definitions and interaction patterns
 - `gates.md` — 4 canonical gate types (Confirm, Quality, Safety, Transition) wired into plan-checker and verifier
 - `model-profiles.md` — Per-agent model tier assignments
@@ -156,6 +163,7 @@ Shared knowledge documents that workflows and agents `@-reference` (see [`docs/I
 - `common-bug-patterns.md` — Common bug patterns for code review and verification
 
 **Workflow references:**
+
 - `agent-contracts.md` — Formal interface between orchestrators and agents
 - `context-budget.md` — Context window budget allocation rules
 - `continuation-format.md` — Session continuation/resume format
@@ -190,7 +198,7 @@ The planner agent (`agents/gsd-planner.md`) was decomposed from a single monolit
 
 ### Templates (`get-shit-done/templates/`)
 
-Markdown templates for all planning artifacts. Used by `gsd-tools.cjs template fill` and `scaffold` commands to create pre-structured files:
+Markdown templates for all planning artifacts. Used by `gsd-sdk query template.fill` / `phase.scaffold` (and legacy `gsd-tools.cjs template fill` / top-level `scaffold`) to create pre-structured files:
 - `project.md`, `requirements.md`, `roadmap.md`, `state.md` — Core project files
 - `phase-prompt.md` — Phase execution prompt template
 - `summary.md` (+ `summary-minimal.md`, `summary-standard.md`, `summary-complex.md`) — Granularity-aware summary templates
@@ -224,27 +232,29 @@ See [`docs/INVENTORY.md`](INVENTORY.md#hooks-11-shipped) for the authoritative 1
 
 Node.js CLI utility (`gsd-tools.cjs`) with domain modules split across `get-shit-done/bin/lib/` (see [`docs/INVENTORY.md`](INVENTORY.md#cli-modules-24-shipped) for the authoritative roster):
 
-| Module | Responsibility |
-|--------|---------------|
-| `core.cjs` | Error handling, output formatting, shared utilities |
-| `state.cjs` | STATE.md parsing, updating, progression, metrics |
-| `phase.cjs` | Phase directory operations, decimal numbering, plan indexing |
-| `roadmap.cjs` | ROADMAP.md parsing, phase extraction, plan progress |
-| `config.cjs` | config.json read/write, section initialization |
-| `verify.cjs` | Plan structure, phase completeness, reference, commit validation |
-| `template.cjs` | Template selection and filling with variable substitution |
-| `frontmatter.cjs` | YAML frontmatter CRUD operations |
-| `init.cjs` | Compound context loading for each workflow type |
-| `milestone.cjs` | Milestone archival, requirements marking |
-| `commands.cjs` | Misc commands (slug, timestamp, todos, scaffolding, stats) |
-| `model-profiles.cjs` | Model profile resolution table |
-| `security.cjs` | Path traversal prevention, prompt injection detection, safe JSON parsing, shell argument validation |
-| `uat.cjs` | UAT file parsing, verification debt tracking, audit-uat support |
-| `docs.cjs` | Docs-update workflow init, Markdown scanning, monorepo detection |
-| `workstream.cjs` | Workstream CRUD, migration, session-scoped active pointer |
-| `schema-detect.cjs` | Schema-drift detection for ORM patterns (Prisma, Drizzle, etc.) |
-| `profile-pipeline.cjs` | User behavioral profiling data pipeline, session file scanning |
-| `profile-output.cjs` | Profile rendering, USER-PROFILE.md and dev-preferences.md generation |
+
+| Module                 | Responsibility                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `core.cjs`             | Error handling, output formatting, shared utilities                                                 |
+| `state.cjs`            | STATE.md parsing, updating, progression, metrics                                                    |
+| `phase.cjs`            | Phase directory operations, decimal numbering, plan indexing                                        |
+| `roadmap.cjs`          | ROADMAP.md parsing, phase extraction, plan progress                                                 |
+| `config.cjs`           | config.json read/write, section initialization                                                      |
+| `verify.cjs`           | Plan structure, phase completeness, reference, commit validation                                    |
+| `template.cjs`         | Template selection and filling with variable substitution                                           |
+| `frontmatter.cjs`      | YAML frontmatter CRUD operations                                                                    |
+| `init.cjs`             | Compound context loading for each workflow type                                                     |
+| `milestone.cjs`        | Milestone archival, requirements marking                                                            |
+| `commands.cjs`         | Misc commands (slug, timestamp, todos, scaffolding, stats)                                          |
+| `model-profiles.cjs`   | Model profile resolution table                                                                      |
+| `security.cjs`         | Path traversal prevention, prompt injection detection, safe JSON parsing, shell argument validation |
+| `uat.cjs`              | UAT file parsing, verification debt tracking, audit-uat support                                     |
+| `docs.cjs`             | Docs-update workflow init, Markdown scanning, monorepo detection                                    |
+| `workstream.cjs`       | Workstream CRUD, migration, session-scoped active pointer                                           |
+| `schema-detect.cjs`    | Schema-drift detection for ORM patterns (Prisma, Drizzle, etc.)                                     |
+| `profile-pipeline.cjs` | User behavioral profiling data pipeline, session file scanning                                      |
+| `profile-output.cjs`   | Profile rendering, USER-PROFILE.md and dev-preferences.md generation                                |
+
 
 ---
 
@@ -255,10 +265,10 @@ Node.js CLI utility (`gsd-tools.cjs`) with domain modules split across `get-shit
 ```
 Orchestrator (workflow .md)
     │
-    ├── Load context: gsd-tools.cjs init <workflow> <phase>
+    ├── Load context: gsd-sdk query init.<workflow> <phase> (or legacy gsd-tools.cjs init)
     │   Returns JSON with: project info, config, state, phase details
     │
-    ├── Resolve model: gsd-tools.cjs resolve-model <agent-name>
+    ├── Resolve model: gsd-sdk query resolve-model <agent-name>
     │   Returns: opus | sonnet | haiku | inherit
     │
     ├── Spawn Agent (Task/SubAgent call)
@@ -269,27 +279,29 @@ Orchestrator (workflow .md)
     │
     ├── Collect result
     │
-    └── Update state: gsd-tools.cjs state update/patch/advance-plan
+    └── Update state: gsd-sdk query state.update / state.patch / state.advance-plan (or legacy gsd-tools.cjs)
 ```
 
 ### Primary Agent Spawn Categories
 
 Conceptual spawn-pattern taxonomy for the 21 primary agents. For the authoritative 31-agent roster (including the 10 advanced/specialized agents such as `gsd-pattern-mapper`, `gsd-code-reviewer`, `gsd-code-fixer`, `gsd-ai-researcher`, `gsd-domain-researcher`, `gsd-eval-planner`, `gsd-eval-auditor`, `gsd-framework-selector`, `gsd-debug-session-manager`, `gsd-intel-updater`), see [`docs/INVENTORY.md`](INVENTORY.md#agents-31-shipped).
 
-| Category | Agents | Parallelism |
-|----------|--------|-------------|
-| **Researchers** | gsd-project-researcher, gsd-phase-researcher, gsd-ui-researcher, gsd-advisor-researcher | 4 parallel (stack, features, architecture, pitfalls); advisor spawns during discuss-phase |
-| **Synthesizers** | gsd-research-synthesizer | Sequential (after researchers complete) |
-| **Planners** | gsd-planner, gsd-roadmapper | Sequential |
-| **Checkers** | gsd-plan-checker, gsd-integration-checker, gsd-ui-checker, gsd-nyquist-auditor | Sequential (verification loop, max 3 iterations) |
-| **Executors** | gsd-executor | Parallel within waves, sequential across waves |
-| **Verifiers** | gsd-verifier | Sequential (after all executors complete) |
-| **Mappers** | gsd-codebase-mapper | 4 parallel (tech, arch, quality, concerns) |
-| **Debuggers** | gsd-debugger | Sequential (interactive) |
-| **Auditors** | gsd-ui-auditor, gsd-security-auditor | Sequential |
-| **Doc Writers** | gsd-doc-writer, gsd-doc-verifier | Sequential (writer then verifier) |
-| **Profilers** | gsd-user-profiler | Sequential |
-| **Analyzers** | gsd-assumptions-analyzer | Sequential (during discuss-phase) |
+
+| Category         | Agents                                                                                  | Parallelism                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Researchers**  | gsd-project-researcher, gsd-phase-researcher, gsd-ui-researcher, gsd-advisor-researcher | 4 parallel (stack, features, architecture, pitfalls); advisor spawns during discuss-phase |
+| **Synthesizers** | gsd-research-synthesizer                                                                | Sequential (after researchers complete)                                                   |
+| **Planners**     | gsd-planner, gsd-roadmapper                                                             | Sequential                                                                                |
+| **Checkers**     | gsd-plan-checker, gsd-integration-checker, gsd-ui-checker, gsd-nyquist-auditor          | Sequential (verification loop, max 3 iterations)                                          |
+| **Executors**    | gsd-executor                                                                            | Parallel within waves, sequential across waves                                            |
+| **Verifiers**    | gsd-verifier                                                                            | Sequential (after all executors complete)                                                 |
+| **Mappers**      | gsd-codebase-mapper                                                                     | 4 parallel (tech, arch, quality, concerns)                                                |
+| **Debuggers**    | gsd-debugger                                                                            | Sequential (interactive)                                                                  |
+| **Auditors**     | gsd-ui-auditor, gsd-security-auditor                                                    | Sequential                                                                                |
+| **Doc Writers**  | gsd-doc-writer, gsd-doc-verifier                                                        | Sequential (writer then verifier)                                                         |
+| **Profilers**    | gsd-user-profiler                                                                       | Sequential                                                                                |
+| **Analyzers**    | gsd-assumptions-analyzer                                                                | Sequential (during discuss-phase)                                                         |
+
 
 ### Wave Execution Model
 
@@ -305,6 +317,7 @@ Wave Analysis:
 ```
 
 Each executor gets:
+
 - Fresh 200K context window (or up to 1M for models that support it)
 - The specific PLAN.md to execute
 - Project context (PROJECT.md, STATE.md)
@@ -317,14 +330,13 @@ When the context window is 500K+ tokens (1M-class models like Opus 4.6, Sonnet 4
 - **Executor agents** receive prior wave SUMMARY.md files and the phase CONTEXT.md/RESEARCH.md, enabling cross-plan awareness within a phase
 - **Verifier agents** receive all PLAN.md, SUMMARY.md, CONTEXT.md files plus REQUIREMENTS.md, enabling history-aware verification
 
-The orchestrator reads `context_window` from config (`gsd-tools.cjs config-get context_window`) and conditionally includes richer context when the value is >= 500,000. For standard 200K windows, prompts use truncated versions with cache-friendly ordering to maximize context efficiency.
+The orchestrator reads `context_window` from config (`gsd-sdk query config-get context_window`, or legacy `gsd-tools.cjs config-get`) and conditionally includes richer context when the value is >= 500,000. For standard 200K windows, prompts use truncated versions with cache-friendly ordering to maximize context efficiency.
 
 #### Parallel Commit Safety
 
 When multiple executors run within the same wave, two mechanisms prevent conflicts:
 
-1. **`--no-verify` commits** — Parallel agents skip pre-commit hooks (which can cause build lock contention, e.g., cargo lock fights in Rust projects). The orchestrator runs `git hook run pre-commit` once after each wave completes.
-
+1. `--no-verify` commits — Parallel agents skip pre-commit hooks (which can cause build lock contention, e.g., cargo lock fights in Rust projects). The orchestrator runs `git hook run pre-commit` once after each wave completes.
 2. **STATE.md file locking** — All `writeStateMd()` calls use lockfile-based mutual exclusion (`STATE.md.lock` with `O_EXCL` atomic creation). This prevents the read-modify-write race condition where two agents read STATE.md, modify different fields, and the last writer overwrites the other's changes. Includes stale lock detection (10s timeout) and spin-wait with jitter.
 
 ---
@@ -430,6 +442,7 @@ UI-SPEC.md (per phase) ───────────────────
 ```
 
 Equivalent paths for other runtimes:
+
 - **OpenCode:** `~/.config/opencode/` or `~/.opencode/`
 - **Kilo:** `~/.config/kilo/` or `~/.kilo/`
 - **Gemini CLI:** `~/.gemini/`
@@ -499,16 +512,16 @@ The installer (`bin/install.js`, ~3,000 lines) handles:
 2. **Location selection** — Global (`--global`) or local (`--local`)
 3. **File deployment** — Copies commands, workflows, references, templates, agents, hooks
 4. **Runtime adaptation** — Transforms file content per runtime:
-   - Claude Code: Uses as-is
-   - OpenCode: Converts commands/agents to OpenCode-compatible flat command + subagent format
-   - Kilo: Reuses the OpenCode conversion pipeline with Kilo config paths
-   - Codex: Generates TOML config + skills from commands
-   - Copilot: Maps tool names (Read→read, Bash→execute, etc.)
-   - Gemini: Adjusts hook event names (`AfterTool` instead of `PostToolUse`)
-   - Antigravity: Skills-first with Google model equivalents
-   - Trae: Skills-first install to `~/.trae` / `./.trae` with no `settings.json` or hook integration
-   - Cline: Writes `.clinerules` for rule-based integration
-   - Augment Code: Skills-first with full skill conversion and config management
+  - Claude Code: Uses as-is
+  - OpenCode: Converts commands/agents to OpenCode-compatible flat command + subagent format
+  - Kilo: Reuses the OpenCode conversion pipeline with Kilo config paths
+  - Codex: Generates TOML config + skills from commands
+  - Copilot: Maps tool names (Read→read, Bash→execute, etc.)
+  - Gemini: Adjusts hook event names (`AfterTool` instead of `PostToolUse`)
+  - Antigravity: Skills-first with Google model equivalents
+  - Trae: Skills-first install to `~/.trae` / `./.trae` with no `settings.json` or hook integration
+  - Cline: Writes `.clinerules` for rule-based integration
+  - Augment Code: Skills-first with full skill conversion and config management
 5. **Path normalization** — Replaces `~/.claude/` paths with runtime-specific paths
 6. **Settings integration** — Registers hooks in runtime's `settings.json`
 7. **Patch backup** — Since v1.17, backs up locally modified files to `gsd-local-patches/` for `/gsd-reapply-patches`
@@ -545,11 +558,13 @@ Runtime Engine (Claude Code / Gemini CLI)
 
 ### Context Monitor Thresholds
 
-| Remaining Context | Level | Agent Behavior |
-|-------------------|-------|----------------|
-| > 35% | Normal | No warning injected |
-| ≤ 35% | WARNING | "Avoid starting new complex work" |
-| ≤ 25% | CRITICAL | "Context nearly exhausted, inform user" |
+
+| Remaining Context | Level    | Agent Behavior                          |
+| ----------------- | -------- | --------------------------------------- |
+| > 35%             | Normal   | No warning injected                     |
+| ≤ 35%             | WARNING  | "Avoid starting new complex work"       |
+| ≤ 25%             | CRITICAL | "Context nearly exhausted, inform user" |
+
 
 Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→CRITICAL) bypasses debounce.
 
@@ -564,12 +579,14 @@ Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→
 ### Security Hooks (v1.27)
 
 **Prompt Guard** (`gsd-prompt-guard.js`):
+
 - Triggers on Write/Edit to `.planning/` files
 - Scans content for prompt injection patterns (role override, instruction bypass, system tag injection)
 - Advisory-only — logs detection, does not block
 - Patterns are inlined (subset of `security.cjs`) for hook independence
 
 **Workflow Guard** (`gsd-workflow-guard.js`):
+
 - Triggers on Write/Edit to non-`.planning/` files
 - Detects edits outside GSD workflow context (no active `/gsd-` command or Task subagent)
 - Advises using `/gsd-quick` or `/gsd-fast` for state-tracked changes
@@ -581,18 +598,20 @@ Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→
 
 GSD supports multiple AI coding runtimes through a unified command/workflow architecture:
 
-| Runtime | Command Format | Agent System | Config Location |
-|---------|---------------|--------------|-----------------|
-| Claude Code | `/gsd-command` | Task spawning | `~/.claude/` |
-| OpenCode | `/gsd-command` | Subagent mode | `~/.config/opencode/` |
-| Kilo | `/gsd-command` | Subagent mode | `~/.config/kilo/` |
-| Gemini CLI | `/gsd-command` | Task spawning | `~/.gemini/` |
-| Codex | `$gsd-command` | Skills | `~/.codex/` |
-| Copilot | `/gsd-command` | Agent delegation | `~/.github/` |
-| Antigravity | Skills | Skills | `~/.gemini/antigravity/` |
-| Trae | Skills | Skills | `~/.trae/` |
-| Cline | Rules | Rules | `.clinerules` |
-| Augment Code | Skills | Skills | Augment config |
+
+| Runtime      | Command Format | Agent System     | Config Location          |
+| ------------ | -------------- | ---------------- | ------------------------ |
+| Claude Code  | `/gsd-command` | Task spawning    | `~/.claude/`             |
+| OpenCode     | `/gsd-command` | Subagent mode    | `~/.config/opencode/`    |
+| Kilo         | `/gsd-command` | Subagent mode    | `~/.config/kilo/`        |
+| Gemini CLI   | `/gsd-command` | Task spawning    | `~/.gemini/`             |
+| Codex        | `$gsd-command` | Skills           | `~/.codex/`              |
+| Copilot      | `/gsd-command` | Agent delegation | `~/.github/`             |
+| Antigravity  | Skills         | Skills           | `~/.gemini/antigravity/` |
+| Trae         | Skills         | Skills           | `~/.trae/`               |
+| Cline        | Rules          | Rules            | `.clinerules`            |
+| Augment Code | Skills         | Skills           | Augment config           |
+
 
 ### Abstraction Points
 

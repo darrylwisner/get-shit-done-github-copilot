@@ -812,10 +812,11 @@ if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 
 Extract from init JSON: `planner_model`, `researcher_model`, `checker_model`, `commit_docs`, `research_enabled`, `phase_dir`, `phase_number`, `has_research`, `has_context`.
 
-Also read STATE.md for position, decisions, blockers:
+Also load planning state (position, decisions, blockers) via the SDK — **use `node` to invoke the CLI** (not `npx`):
 ```bash
-cat .planning/STATE.md 2>/dev/null
+node ./node_modules/@gsd-build/sdk/dist/cli.js query state.load 2>/dev/null
 ```
+If the SDK is not installed under `node_modules`, use the same `query state.load` argv with your local `gsd-sdk` CLI on `PATH`.
 
 If STATE.md missing but .planning/ exists, offer to reconstruct or continue without.
 </step>

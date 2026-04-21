@@ -61,8 +61,8 @@ export function extractField(obj: unknown, fieldPath: string): unknown {
  * Flat command registry that routes query commands to native handlers.
  *
  * `dispatch()` throws `GSDError` for unknown command keys. The `gsd-sdk query`
- * CLI uses `resolveQueryArgv()` to map argv to a registered handler; there is
- * no passthrough to `gsd-tools.cjs` — CJS-only commands stay on the legacy CLI.
+ * CLI uses `resolveQueryArgv()` first; when no handler matches, it may shell out
+ * to `gsd-tools.cjs` (see `cli.ts` and `QUERY-HANDLERS.md` fallback policy).
  */
 export class QueryRegistry {
   private handlers = new Map<string, QueryHandler>();

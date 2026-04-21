@@ -163,6 +163,19 @@ describe('stateExtractField', () => {
     const content = '**phase:** 10';
     expect(stateExtractField(content, 'Phase')).toBe('10');
   });
+
+  it('does not treat YAML progress: block as body Progress field', () => {
+    const content = [
+      '---',
+      'progress:',
+      '  total: 5',
+      '  done: 2',
+      '---',
+      '',
+      '**Progress:** 40%',
+    ].join('\n');
+    expect(stateExtractField(content, 'Progress')).toBe('40%');
+  });
 });
 
 // ─── planningPaths ──────────────────────────────────────────────────────────

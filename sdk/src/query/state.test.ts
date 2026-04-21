@@ -1,7 +1,7 @@
 /**
  * Unit tests for state query handlers.
  *
- * Tests stateLoad, stateGet, and stateSnapshot handlers.
+ * Tests stateJson, stateGet, and stateSnapshot handlers.
  * Uses temp directories with real .planning/ structures.
  */
 
@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Will be imported once implemented
-import { stateLoad, stateGet, stateSnapshot } from './state.js';
+import { stateJson, stateGet, stateSnapshot } from './state.js';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -130,11 +130,11 @@ afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true });
 });
 
-// ─── stateLoad ─────────────────────────────────────────────────────────────
+// ─── stateJson (state json / state.json) ───────────────────────────────────
 
-describe('stateLoad', () => {
+describe('stateJson', () => {
   it('rebuilds frontmatter from body + disk', async () => {
-    const result = await stateLoad([], tmpDir);
+    const result = await stateJson([], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.gsd_state_version).toBe('1.0');
@@ -145,7 +145,7 @@ describe('stateLoad', () => {
   });
 
   it('returns progress with disk-scanned counts', async () => {
-    const result = await stateLoad([], tmpDir);
+    const result = await stateJson([], tmpDir);
     const data = result.data as Record<string, unknown>;
     const progress = data.progress as Record<string, unknown>;
 
@@ -160,7 +160,7 @@ describe('stateLoad', () => {
   });
 
   it('preserves stopped_at from existing frontmatter', async () => {
-    const result = await stateLoad([], tmpDir);
+    const result = await stateJson([], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.stopped_at).toBe('Completed 10-01-PLAN.md');
@@ -180,7 +180,7 @@ Plan: 2 of 3
 `;
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateLoad([], tmpDir);
+    const result = await stateJson([], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Body has no Status field -> derived is 'unknown', should preserve frontmatter 'paused'
@@ -191,7 +191,7 @@ Plan: 2 of 3
     const emptyDir = await mkdtemp(join(tmpdir(), 'gsd-state-empty-'));
     await mkdir(join(emptyDir, '.planning'), { recursive: true });
 
-    const result = await stateLoad([], emptyDir);
+    const result = await stateJson([], emptyDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.error).toBe('STATE.md not found');
@@ -209,7 +209,7 @@ Status: In Progress
 `;
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateLoad([], tmpDir);
+    const result = await stateJson([], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.status).toBe('executing');
@@ -228,7 +228,7 @@ Progress: [░░░░░░░░░░] 0%
 `;
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateLoad([], tmpDir);
+    const result = await stateJson([], tmpDir);
     const data = result.data as Record<string, unknown>;
     const progress = data.progress as Record<string, unknown>;
 

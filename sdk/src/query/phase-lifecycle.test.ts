@@ -1,7 +1,7 @@
 /**
  * Unit tests for phase lifecycle handlers.
  *
- * Tests phaseAdd, phaseInsert, phaseScaffold, replaceInCurrentMilestone,
+ * Tests phaseAdd, phaseAddBatch, phaseInsert, phaseScaffold, replaceInCurrentMilestone,
  * and readModifyWriteRoadmapMd.
  */
 
@@ -244,6 +244,53 @@ describe('phaseAdd', () => {
     const sepIdx = roadmap.lastIndexOf('\n---');
     expect(phaseIdx).toBeLessThan(sepIdx);
     expect(phaseIdx).toBeGreaterThan(0);
+  });
+});
+
+// ─── phaseAddBatch ─────────────────────────────────────────────────────
+
+describe('phaseAddBatch', () => {
+  it('adds multiple sequential phases in one pass', async () => {
+    const { phaseAddBatch } = await import('./phase-lifecycle.js');
+    await setupTestProject(tmpDir, {
+      phases: ['09-foundation', '10-read-only-queries'],
+    });
+
+    const result = await phaseAddBatch(['Alpha', 'Beta'], tmpDir);
+    const data = result.data as { phases: Array<Record<string, unknown>>; count: number };
+
+    expect(data.count).toBe(2);
+    expect(data.phases[0].phase_number).toBe(11);
+    expect(data.phases[0].name).toBe('Alpha');
+    expect(data.phases[1].phase_number).toBe(12);
+    expect(data.phases[1].name).toBe('Beta');
+
+    const roadmap = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+    expect(roadmap).toContain('### Phase 11: Alpha');
+    expect(roadmap).toContain('### Phase 12: Beta');
+
+    const phasesDir = join(tmpDir, '.planning', 'phases');
+    expect(existsSync(join(phasesDir, '11-alpha', '.gitkeep'))).toBe(true);
+    expect(existsSync(join(phasesDir, '12-beta', '.gitkeep'))).toBe(true);
+  });
+
+  it('accepts --descriptions JSON array', async () => {
+    const { phaseAddBatch } = await import('./phase-lifecycle.js');
+    await setupTestProject(tmpDir, { phases: ['09-foundation', '10-read-only-queries'] });
+
+    const result = await phaseAddBatch(
+      ['--descriptions', JSON.stringify(['One', 'Two'])],
+      tmpDir,
+    );
+    const data = result.data as { count: number };
+    expect(data.count).toBe(2);
+  });
+
+  it('throws when no descriptions', async () => {
+    const { phaseAddBatch } = await import('./phase-lifecycle.js');
+    await setupTestProject(tmpDir);
+
+    await expect(phaseAddBatch([], tmpDir)).rejects.toThrow('descriptions array required');
   });
 });
 
