@@ -1,7 +1,7 @@
 ---
 name: gsd:spike
-description: Rapidly spike an idea with throwaway experiments to validate feasibility before planning
-argument-hint: "<idea to validate> [--quick] [--text]"
+description: Spike an idea through experiential exploration, or propose what to spike next (frontier mode)
+argument-hint: "[idea to validate] [--quick] [--text] or [frontier]"
 allowed-tools:
   - Read
   - Write
@@ -16,9 +16,14 @@ allowed-tools:
   - mcp__context7__query-docs
 ---
 <objective>
-Rapid feasibility validation through focused, throwaway experiments. Each spike answers one
-specific question with observable evidence. Spikes live in `.planning/spikes/` and integrate
-with GSD commit patterns, state tracking, and handoff workflows.
+Spike an idea through experiential exploration — build focused experiments to feel the pieces
+of a future app, validate feasibility, and produce verified knowledge for the real build.
+Spikes live in `.planning/spikes/` and integrate with GSD commit patterns, state tracking,
+and handoff workflows.
+
+Two modes:
+- **Idea mode** (default) — describe an idea to spike
+- **Frontier mode** (no argument or "frontier") — analyzes existing spike landscape and proposes integration and frontier spikes
 
 Does not require `/gsd-new-project` — auto-creates `.planning/spikes/` if needed.
 </objective>
