@@ -1,12 +1,12 @@
 ---
 name: gsd.spike
 description: "Rapidly spike an idea with throwaway experiments to validate feasibility before planning"
-argument-hint: "<idea to validate> [--quick]"
-tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+argument-hint: "<idea to validate> [--quick] [--text]"
+tools: ['edit', 'execute', 'mcp__context7__query-docs', 'mcp__context7__resolve-library-id', 'read', 'search', 'vscode/askQuestions', 'web']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Bash","Grep","Glob","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Grep","Glob","AskUserQuestion","WebSearch","WebFetch","mcp__context7__resolve-library-id","mcp__context7__query-docs"] -->
 
 ## Path Resolution 
 
@@ -56,9 +56,10 @@ Idea: $ARGUMENTS
 
 **Available flags:**
 - `--quick` — Skip decomposition/alignment, jump straight to building. Use when you already know what to spike.
+- `--text` — Use plain-text numbered lists instead of AskUserQuestion (for non-Claude runtimes).
 </context>
 
 <process>
 Execute the spike workflow from @./.claude/get-shit-done/workflows/spike.md end-to-end.
-Preserve all workflow gates (decomposition, risk ordering, verification, MANIFEST updates, commit patterns).
+Preserve all workflow gates (prior spike check, decomposition, research, risk ordering, observability assessment, verification, MANIFEST updates, commit patterns).
 </process>

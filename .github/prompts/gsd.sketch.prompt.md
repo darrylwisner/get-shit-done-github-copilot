@@ -1,12 +1,12 @@
 ---
 name: gsd.sketch
 description: "Rapidly sketch UI/design ideas using throwaway HTML mockups with multi-variant exploration"
-argument-hint: "<design idea to explore> [--quick]"
-tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+argument-hint: "<design idea to explore> [--quick] [--text]"
+tools: ['edit', 'execute', 'mcp__context7__query-docs', 'mcp__context7__resolve-library-id', 'read', 'search', 'vscode/askQuestions', 'web']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Bash","Grep","Glob","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Grep","Glob","AskUserQuestion","WebSearch","WebFetch","mcp__context7__resolve-library-id","mcp__context7__query-docs"] -->
 
 ## Path Resolution 
 
@@ -64,5 +64,5 @@ Design idea: $ARGUMENTS
 
 <process>
 Execute the sketch workflow from @./.claude/get-shit-done/workflows/sketch.md end-to-end.
-Preserve all workflow gates (intake, decomposition, variant evaluation, MANIFEST updates, commit patterns).
+Preserve all workflow gates (intake, decomposition, target stack research, variant evaluation, MANIFEST updates, commit patterns).
 </process>
