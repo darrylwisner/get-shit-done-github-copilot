@@ -36,7 +36,7 @@ async function readFileSafe(filePath: string): Promise<string | null> {
   }
 }
 
-export const checkGates: QueryHandler = async (args, projectDir) => {
+export const checkGates: QueryHandler = async (args, projectDir, workstream) => {
   const workflow = args[0];
   if (!workflow) {
     throw new GSDError('workflow name required for check gates', ErrorClassification.Validation);
@@ -51,7 +51,7 @@ export const checkGates: QueryHandler = async (args, projectDir) => {
 
   const blockers: Blocker[] = [];
   const warnings: Warning[] = [];
-  const paths = planningPaths(projectDir);
+  const paths = planningPaths(projectDir, workstream);
 
   // Gate 1: .continue-here.md in project root
   const continueHerePath = join(projectDir, '.continue-here.md');
@@ -82,7 +82,7 @@ export const checkGates: QueryHandler = async (args, projectDir) => {
 
   // Gate 3: Verification debt — check VERIFICATION.md in phase dir if phase provided
   if (phaseNum) {
-    const phaseRes = await findPhase([phaseNum], projectDir);
+    const phaseRes = await findPhase([phaseNum], projectDir, workstream);
     const pdata = phaseRes.data as Record<string, unknown>;
     if (pdata.found && pdata.directory) {
       const phaseDirFull = join(projectDir, pdata.directory as string);

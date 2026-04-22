@@ -19,7 +19,12 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter, parseMustHavesBlock } from './frontmatter.js';
-import { normalizePhaseName, phaseTokenMatches, planningPaths } from './helpers.js';
+import {
+  comparePhaseNum,
+  normalizePhaseName,
+  phaseTokenMatches,
+  planningPaths,
+} from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── verifyPlanStructure ───────────────────────────────────────────────────
@@ -128,13 +133,13 @@ export const verifyPlanStructure: QueryHandler = async (args, projectDir) => {
  * @returns QueryResult with { complete, phase, plan_count, summary_count, incomplete_plans, orphan_summaries, errors, warnings }
  * @throws GSDError with Validation classification if phase number missing
  */
-export const verifyPhaseCompleteness: QueryHandler = async (args, projectDir) => {
+export const verifyPhaseCompleteness: QueryHandler = async (args, projectDir, workstream) => {
   const phase = args[0];
   if (!phase) {
     throw new GSDError('phase required', ErrorClassification.Validation);
   }
 
-  const phasesDir = planningPaths(projectDir).phases;
+  const phasesDir = planningPaths(projectDir, workstream).phases;
   const normalized = normalizePhaseName(phase);
 
   // Find phase directory (mirror findPhase pattern from phase.ts)
@@ -405,6 +410,7 @@ export const verifyReferences: QueryHandler = async (args, projectDir) => {
       valid: missing.length === 0,
       found: found.length,
       missing,
+      total: found.length + missing.length,
     },
   };
 };
@@ -545,44 +551,95 @@ export const verifyPathExists: QueryHandler = async (args, projectDir) => {
 
 // ─── verifySchemaDrift ────────────────────────────────────────────────────
 
-export const verifySchemaDrift: QueryHandler = async (args, projectDir) => {
+/**
+ * Detect schema drift for a phase — port of `cmdVerifySchemaDrift` from verify.cjs lines 1013–1086.
+ */
+export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstream) => {
   const phaseArg = args[0];
-  const paths = planningPaths(projectDir);
+  const skipFlag = args.includes('--skip');
 
-  const issues: string[] = [];
-  const REQUIRED_FRONTMATTER = ['phase', 'plan', 'type', 'must_haves'];
-
-  try {
-    const phasesDir = paths.phases;
-    if (!existsSync(phasesDir)) {
-      return { data: { valid: true, issues: [], checked: 0 } };
-    }
-
-    const entries = readdirSync(phasesDir, { withFileTypes: true });
-    let checked = 0;
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (phaseArg && !entry.name.startsWith(normalizePhaseName(phaseArg))) continue;
-
-      const phaseDir = join(phasesDir, entry.name);
-      const files = readdirSync(phaseDir).filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
-
-      for (const planFile of files) {
-        checked++;
-        try {
-          const content = await readFile(join(phaseDir, planFile), 'utf-8');
-          for (const field of REQUIRED_FRONTMATTER) {
-            if (!new RegExp(`^${field}:`, 'm').test(content)) {
-              issues.push(`${planFile}: missing '${field}' in frontmatter`);
-            }
-          }
-        } catch { /* skip */ }
-      }
-    }
-
-    return { data: { valid: issues.length === 0, issues, checked } };
-  } catch {
-    return { data: { valid: true, issues: [], checked: 0 } };
+  if (!phaseArg) {
+    throw new GSDError('Usage: verify schema-drift <phase> [--skip]', ErrorClassification.Validation);
   }
+
+  const { checkSchemaDrift } = await import('./schema-detect.js');
+  const { execGit } = await import('./commit.js');
+
+  const phasesDir = planningPaths(projectDir, workstream).phases;
+  if (!existsSync(phasesDir)) {
+    return {
+      data: {
+        drift_detected: false,
+        blocking: false,
+        message: 'No phases directory',
+      },
+    };
+  }
+
+  const normalized = normalizePhaseName(phaseArg);
+  const dirNames = readdirSync(phasesDir, { withFileTypes: true })
+    .filter(e => e.isDirectory())
+    .map(e => e.name)
+    .sort((a, b) => comparePhaseNum(a, b));
+
+  let phaseDirName = dirNames.find(d => phaseTokenMatches(d, normalized)) ?? null;
+  if (!phaseDirName && /^[\d.]+/.test(phaseArg)) {
+    const exact = join(phasesDir, phaseArg);
+    if (existsSync(exact)) phaseDirName = phaseArg;
+  }
+
+  if (!phaseDirName) {
+    return {
+      data: {
+        drift_detected: false,
+        blocking: false,
+        message: `Phase directory not found: ${phaseArg}`,
+      },
+    };
+  }
+
+  const phaseDir = join(phasesDir, phaseDirName);
+
+  function filesModifiedFromFrontmatter(fm: Record<string, unknown>): string[] {
+    const v = fm.files_modified;
+    if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
+    if (typeof v === 'string') {
+      const t = v.trim();
+      return t ? [t] : [];
+    }
+    return [];
+  }
+
+  const allFiles: string[] = [];
+  const planFiles = readdirSync(phaseDir).filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
+  for (const pf of planFiles) {
+    const content = readFileSync(join(phaseDir, pf), 'utf-8');
+    const fm = extractFrontmatter(content) as Record<string, unknown>;
+    allFiles.push(...filesModifiedFromFrontmatter(fm));
+  }
+
+  let executionLog = '';
+  const summaryFiles = readdirSync(phaseDir).filter(f => f.endsWith('-SUMMARY.md'));
+  for (const sf of summaryFiles) {
+    executionLog += readFileSync(join(phaseDir, sf), 'utf-8') + '\n';
+  }
+
+  const gitLog = execGit(projectDir, ['log', '--oneline', '--all', '-50']);
+  if (gitLog.exitCode === 0) {
+    executionLog += '\n' + gitLog.stdout;
+  }
+
+  const result = checkSchemaDrift(allFiles, executionLog, { skipCheck: !!skipFlag });
+
+  return {
+    data: {
+      drift_detected: result.driftDetected,
+      blocking: result.blocking,
+      schema_files: result.schemaFiles,
+      orms: result.orms,
+      unpushed_orms: result.unpushedOrms,
+      message: result.message,
+      skipped: result.skipped || false,
+    },
+  };
 };
