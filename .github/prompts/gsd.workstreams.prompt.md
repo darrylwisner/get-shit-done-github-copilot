@@ -14,13 +14,13 @@ agent: agent
   ** When executing or interpreting any bash snippet from a workflow file, mentally substitute `$HOME/.claude/` → `.claude/` (workspace-relative).
   ---
 
-# /gsd-workstreams
+# /gsd:workstreams
 
 Manage parallel workstreams for concurrent milestone work.
 
 ## Usage
 
-`/gsd-workstreams [subcommand] [args]`
+`/gsd:workstreams [subcommand] [args]`
 
 ### Subcommands
 
@@ -48,7 +48,7 @@ Display the workstreams in a table format showing name, status, current phase, a
 ### create
 Run: `gsd-sdk query workstream.create <name> --raw --cwd "$CWD"`
 After creation, display the new workstream path and suggest next steps:
-- `/gsd-new-milestone --ws <name>` to set up the milestone
+- `/gsd:new-milestone --ws <name>` to set up the milestone
 
 ### status
 Run: `gsd-sdk query workstream.status <name> --raw --cwd "$CWD"`
@@ -69,7 +69,7 @@ Run: `gsd-sdk query workstream.complete <name> --raw --cwd "$CWD"`
 Archive the workstream to milestones/.
 
 ### resume
-Set the workstream as active and suggest `/gsd-resume-work --ws <name>`.
+Set the workstream as active and suggest `/gsd:resume-work --ws <name>`.
 
 ## Step 3: Display Results
 

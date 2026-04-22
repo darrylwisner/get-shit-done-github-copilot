@@ -34,11 +34,11 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 ---
 
 <objective>
-Create all phases necessary to close gaps identified by `/gsd-audit-milestone`.
+Create all phases necessary to close gaps identified by `/gsd:audit-milestone`.
 
 Reads MILESTONE-AUDIT.md, groups gaps into logical phases, creates phase entries in ROADMAP.md, and offers to plan each phase.
 
-One command creates all fix phases — no manual `/gsd-add-phase` per gap.
+One command creates all fix phases — no manual `/gsd:add-phase` per gap.
 </objective>
 
 <execution_context>
