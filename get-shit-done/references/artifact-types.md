@@ -48,7 +48,9 @@ reads is inert — the consumption mechanism is what gives an artifact meaning.
 - **Shape**: Structured pause state (JSON machine-readable + Markdown human-readable)
 - **Lifecycle**: Created on pause → Consumed on resume → Replaced by next pause
 - **Location**: `.planning/HANDOFF.json` + `.planning/phases/XX-name/.continue-here.md` (or spike/deliberation path)
-- **Consumed by**: `resume-project` workflow
+- **Consumed by**: `resume-project` workflow; `ship` workflow (preflight refuses to open a PR when `remaining_tasks[]` holds non-terminal entries)
+
+**`remaining_tasks[].status` terminal contract:** an entry is "terminal" — i.e. not blocking further work on this branch — when `status` is one of `done`, `cancelled`, `deferred_to_backend`, or `wont_fix`. Any other value (`not_started`, `in_progress`, `paused`, `blocked`, etc.) signals work-in-progress. `/gsd-ship` consumes this contract in preflight; `/gsd-pause-work` writes the entries; `/gsd-resume-work` reads them as the authoritative source of truth over `.continue-here.md`.
 
 ---
 
@@ -72,21 +74,21 @@ reads is inert — the consumption mechanism is what gives an artifact meaning.
 - **Location**: `.planning/spikes/SPIKE-NNN/`
 - **Consumed by**: Planner when spike is referenced; `pause-work` for spike context handoff
 
-### Spike README.md / MANIFEST.md (per-spike, via /gsd-spike)
+### Spike README.md / MANIFEST.md (per-spike, via /gsd:spike)
 - **Shape**: YAML frontmatter (spike, name, validates, verdict, related, tags) + run instructions + results
-- **Lifecycle**: Created by `/gsd-spike` → Verified → Wrapped up by `/gsd-spike-wrap-up`
+- **Lifecycle**: Created by `/gsd:spike` → Verified → Wrapped up by `/gsd:spike-wrap-up`
 - **Location**: `.planning/spikes/NNN-name/README.md`, `.planning/spikes/MANIFEST.md`
-- **Consumed by**: `/gsd-spike-wrap-up` for curation; `pause-work` for spike context handoff
+- **Consumed by**: `/gsd:spike-wrap-up` for curation; `pause-work` for spike context handoff
 
 ### Sketch README.md / MANIFEST.md / index.html (per-sketch)
 - **Shape**: YAML frontmatter (sketch, name, question, winner, tags) + variants as tabbed HTML
-- **Lifecycle**: Created by `/gsd-sketch` → Evaluated → Wrapped up by `/gsd-sketch-wrap-up`
+- **Lifecycle**: Created by `/gsd:sketch` → Evaluated → Wrapped up by `/gsd:sketch-wrap-up`
 - **Location**: `.planning/sketches/NNN-name/README.md`, `.planning/sketches/NNN-name/index.html`, `.planning/sketches/MANIFEST.md`
-- **Consumed by**: `/gsd-sketch-wrap-up` for curation; `pause-work` for sketch context handoff
+- **Consumed by**: `/gsd:sketch-wrap-up` for curation; `pause-work` for sketch context handoff
 
 ### WRAP-UP-SUMMARY.md (per wrap-up session)
 - **Shape**: Curation results, included/excluded items, feature/design area groupings
-- **Lifecycle**: Created by `/gsd-spike-wrap-up` or `/gsd-sketch-wrap-up`
+- **Lifecycle**: Created by `/gsd:spike-wrap-up` or `/gsd:sketch-wrap-up`
 - **Location**: `.planning/spikes/WRAP-UP-SUMMARY.md` or `.planning/sketches/WRAP-UP-SUMMARY.md`
 - **Consumed by**: Project history; not read by automated workflows
 
