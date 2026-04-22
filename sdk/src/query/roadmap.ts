@@ -17,6 +17,7 @@
  * ```
  */
 
+import { existsSync } from 'node:fs';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
@@ -49,41 +50,95 @@ interface PhaseSection {
  * Port of stripShippedMilestones from core.cjs line 1082-1084.
  */
 export function stripShippedMilestones(content: string): string {
-  return content.replace(/<details>[\s\S]*?<\/details>/gi, '');
+  // Pattern 1: <details>...</details> blocks (explicit collapse)
+  let result = content.replace(/<details>[\s\S]*?<\/details>/gi, '');
+  // Pattern 2: inline milestone headings marked as shipped.
+  // Keep aligned with heading levels accepted by extractCurrentMilestone() (## and ###).
+  const sections = result.split(/(?=^#{2,3}\s)/m);
+  result = sections.filter(s => !/^#{2,3}\s[^\n]*✅\s*SHIPPED\b/im.test(s)).join('');
+  return result;
 }
 
 /**
- * Get milestone version and name from ROADMAP.md.
+ * Read milestone + name from STATE.md frontmatter when ROADMAP does not encode them.
+ */
+async function parseMilestoneFromState(projectDir: string, workstream?: string): Promise<{ version: string; name: string } | null> {
+  try {
+    const stateRaw = await readFile(planningPaths(projectDir, workstream).state, 'utf-8');
+    const vm = stateRaw.match(/^milestone:\s*(.+)$/m);
+    if (!vm) return null;
+    const version = vm[1].trim().replace(/^["']|["']$/g, '');
+    const nm = stateRaw.match(/^milestone_name:\s*(.+)$/m);
+    const name = nm ? nm[1].trim().replace(/^["']|["']$/g, '') : 'milestone';
+    return { version, name };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get milestone version and name from ROADMAP.md (and optionally STATE.md).
  *
- * Port of getMilestoneInfo from core.cjs lines 1367-1402.
+ * Port of getMilestoneInfo from core.cjs lines 1367-1402, extended for:
+ * - 🟡 in-flight marker (same list shape as 🚧)
+ * - milestone bullets `**vX.Y Title**` before `## Phases` (last = current when listed in semver order)
+ * - STATE.md frontmatter when ROADMAP has no parseable milestone
+ * - **last** bare `vX.Y` fallback (first match was often v1.0 from the shipped list)
  *
  * @param projectDir - Project root directory
  * @returns Object with version and name
  */
-export async function getMilestoneInfo(projectDir: string): Promise<{ version: string; name: string }> {
+export async function getMilestoneInfo(projectDir: string, workstream?: string): Promise<{ version: string; name: string }> {
   try {
-    const roadmap = await readFile(planningPaths(projectDir).roadmap, 'utf-8');
+    // Priority 1: STATE.md frontmatter (authoritative for version; name only when real)
+    const fromState = await parseMilestoneFromState(projectDir, workstream);
+    const stateVersion = fromState?.version ?? null;
+    const stateName = fromState && fromState.name !== 'milestone' ? fromState.name : null;
+    if (stateVersion && stateName) {
+      return { version: stateVersion, name: stateName };
+    }
+    // STATE.md has a version but no real name — fall through to ROADMAP for the name,
+    // then override the version with the authoritative STATE.md value.
 
-    // First: check for list-format using in-progress marker
-    const inProgressMatch = roadmap.match(/🚧\s*\*\*v(\d+(?:\.\d+)+)\s+([^*]+)\*\*/);
-    if (inProgressMatch) {
-      return { version: 'v' + inProgressMatch[1], name: inProgressMatch[2].trim() };
+    const roadmap = await readFile(planningPaths(projectDir, workstream).roadmap, 'utf-8');
+
+    // List-format: construction / blocked (legacy emoji)
+    const barricadeMatch = roadmap.match(/🚧\s*\*\*v(\d+(?:\.\d+)+)\s+([^*]+)\*\*/);
+    if (barricadeMatch) {
+      return { version: stateVersion ?? 'v' + barricadeMatch[1], name: barricadeMatch[2].trim() };
     }
 
-    // Second: heading-format — strip shipped milestones
+    // List-format: in flight / active (GSD ROADMAP template uses 🟡 for current milestone)
+    const inFlightMatch = roadmap.match(/🟡\s*\*\*v(\d+(?:\.\d+)+)\s+([^*]+)\*\*/);
+    if (inFlightMatch) {
+      return { version: stateVersion ?? 'v' + inFlightMatch[1], name: inFlightMatch[2].trim() };
+    }
+
+    // Heading-format — strip shipped <details> blocks first
     const cleaned = stripShippedMilestones(roadmap);
-    const headingMatch = cleaned.match(/## .*v(\d+(?:\.\d+)+)[:\s]+([^\n(]+)/);
+    const headingMatch = cleaned.match(/##\s+.*v(\d+(?:\.\d+)+)[:\s]+([^\n(]+)/);
     if (headingMatch) {
-      return { version: 'v' + headingMatch[1], name: headingMatch[2].trim() };
+      return { version: stateVersion ?? 'v' + headingMatch[1], name: headingMatch[2].trim() };
     }
 
-    // Fallback: bare version match
-    const versionMatch = cleaned.match(/v(\d+(?:\.\d+)+)/);
-    return {
-      version: versionMatch ? versionMatch[0] : 'v1.0',
-      name: 'milestone',
-    };
+    // Milestone bullet list (## Milestones … ## Phases): use last **vX.Y Title** — typically the current row
+    const beforePhases = roadmap.split(/^##\s+Phases\b/m)[0] ?? roadmap;
+    const boldMatches = [...beforePhases.matchAll(/\*\*v(\d+(?:\.\d+)+)\s+([^*]+)\*\*/g)];
+    if (boldMatches.length > 0) {
+      const last = boldMatches[boldMatches.length - 1];
+      return { version: stateVersion ?? 'v' + last[1], name: last[2].trim() };
+    }
+
+    const allBare = [...cleaned.matchAll(/\bv(\d+(?:\.\d+)+)\b/g)];
+    if (allBare.length > 0) {
+      const lastBare = allBare[allBare.length - 1];
+      return { version: stateVersion ?? lastBare[0], name: 'milestone' };
+    }
+
+    return { version: stateVersion ?? 'v1.0', name: 'milestone' };
   } catch {
+    const fromState = await parseMilestoneFromState(projectDir, workstream);
+    if (fromState) return fromState;
     return { version: 'v1.0', name: 'milestone' };
   }
 }
@@ -97,11 +152,11 @@ export async function getMilestoneInfo(projectDir: string): Promise<{ version: s
  * @param projectDir - Working directory for reading STATE.md
  * @returns Content scoped to current milestone
  */
-export async function extractCurrentMilestone(content: string, projectDir: string): Promise<string> {
+export async function extractCurrentMilestone(content: string, projectDir: string, workstream?: string): Promise<string> {
   // Get version from STATE.md frontmatter
   let version: string | null = null;
   try {
-    const stateRaw = await readFile(planningPaths(projectDir).state, 'utf-8');
+    const stateRaw = await readFile(planningPaths(projectDir, workstream).state, 'utf-8');
     const milestoneMatch = stateRaw.match(/^milestone:\s*(.+)/m);
     if (milestoneMatch) {
       version = milestoneMatch[1].trim();
@@ -110,7 +165,7 @@ export async function extractCurrentMilestone(content: string, projectDir: strin
 
   // Fallback: derive from ROADMAP in-progress marker
   if (!version) {
-    const inProgressMatch = content.match(/🚧\s*\*\*v(\d+\.\d+)\s/);
+    const inProgressMatch = content.match(/(?:🚧|🟡)\s*\*\*v(\d+(?:\.\d+)+)\s/);
     if (inProgressMatch) {
       version = 'v' + inProgressMatch[1];
     }
@@ -130,30 +185,34 @@ export async function extractCurrentMilestone(content: string, projectDir: strin
 
   const sectionStart = sectionMatch.index;
 
-  // Find end: next milestone heading at same or higher level, or EOF
+  // Find end: next milestone heading at same or higher level, or EOF.
+  // Skip headings that belong to the SAME version (e.g. "## v2.0 Phase Details").
   const headingLevelMatch = sectionMatch[1].match(/^(#{1,3})\s/);
   const headingLevel = headingLevelMatch ? headingLevelMatch[1].length : 2;
   const restContent = content.slice(sectionStart + sectionMatch[0].length);
-  const nextMilestonePattern = new RegExp(
-    `^#{1,${headingLevel}}\\s+(?:.*v\\d+\\.\\d+|✅|📋|🚧)`,
-    'mi'
-  );
-  const nextMatch = restContent.match(nextMilestonePattern);
+  // Extract current version so same-version sub-headings are not treated as boundaries.
+  // Capture full semver (major.minor.patch) so v2.0.1 is not collapsed to "2.0".
+  const currentVersionMatch = version ? version.match(/v(\d+(?:\.\d+)+)/i) : null;
+  const currentVersionStr = currentVersionMatch ? currentVersionMatch[1] : '';
 
-  let sectionEnd: number;
-  if (nextMatch && nextMatch.index !== undefined) {
-    sectionEnd = sectionStart + sectionMatch[0].length + nextMatch.index;
-  } else {
-    sectionEnd = content.length;
+  const nextMilestoneRegex = new RegExp(
+    `^#{1,${headingLevel}}\\s+(?:.*v(\\d+(?:\\.\\d+)+)[^\\n]*|.*(?:✅|📋|🚧|🟡))`,
+    'gm'
+  );
+
+  let sectionEnd = content.length;
+  let m: RegExpExecArray | null;
+  while ((m = nextMilestoneRegex.exec(restContent)) !== null) {
+    const matchedVersion = m[1];
+    // Skip headings that reference the same version (e.g. "## v2.0 Phase Details").
+    if (matchedVersion && currentVersionStr && matchedVersion === currentVersionStr) continue;
+    sectionEnd = sectionStart + sectionMatch[0].length + m.index;
+    break;
   }
 
-  const beforeMilestones = content.slice(0, sectionStart);
-  const currentSection = content.slice(sectionStart, sectionEnd);
-
-  // Strip <details> from preamble
-  const preamble = beforeMilestones.replace(/<details>[\s\S]*?<\/details>/gi, '');
-
-  return preamble + currentSection;
+  // Return only the current milestone section — never include the preamble, which
+  // may contain ## Backlog and other non-current-milestone phases.
+  return content.slice(sectionStart, sectionEnd);
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────
@@ -235,7 +294,7 @@ function searchPhaseInContent(content: string, escapedPhase: string, phaseNum: s
  * @param projectDir - Project root directory
  * @returns QueryResult with phase section info or { found: false }
  */
-export const roadmapGetPhase: QueryHandler = async (args, projectDir) => {
+export const roadmapGetPhase: QueryHandler = async (args, projectDir, workstream) => {
   const phaseNum = args[0];
   if (!phaseNum) {
     throw new GSDError(
@@ -244,7 +303,7 @@ export const roadmapGetPhase: QueryHandler = async (args, projectDir) => {
     );
   }
 
-  const roadmapPath = planningPaths(projectDir).roadmap;
+  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
 
   let rawContent: string;
   try {
@@ -253,7 +312,7 @@ export const roadmapGetPhase: QueryHandler = async (args, projectDir) => {
     return { data: { found: false, error: 'ROADMAP.md not found' } };
   }
 
-  const milestoneContent = await extractCurrentMilestone(rawContent, projectDir);
+  const milestoneContent = await extractCurrentMilestone(rawContent, projectDir, workstream);
   const escapedPhase = escapeRegex(phaseNum);
 
   // Search the current milestone slice first, then fall back to full roadmap.
@@ -280,8 +339,8 @@ export const roadmapGetPhase: QueryHandler = async (args, projectDir) => {
  * @param projectDir - Project root directory
  * @returns QueryResult with full roadmap analysis
  */
-export const roadmapAnalyze: QueryHandler = async (_args, projectDir) => {
-  const roadmapPath = planningPaths(projectDir).roadmap;
+export const roadmapAnalyze: QueryHandler = async (_args, projectDir, workstream) => {
+  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
 
   let rawContent: string;
   try {
@@ -290,8 +349,8 @@ export const roadmapAnalyze: QueryHandler = async (_args, projectDir) => {
     return { data: { error: 'ROADMAP.md not found', milestones: [], phases: [], current_phase: null } };
   }
 
-  const content = await extractCurrentMilestone(rawContent, projectDir);
-  const phasesDir = planningPaths(projectDir).phases;
+  const content = await extractCurrentMilestone(rawContent, projectDir, workstream);
+  const phasesDir = planningPaths(projectDir, workstream).phases;
 
   // IMPORTANT: Create regex INSIDE the function to avoid /g lastIndex persistence
   const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
@@ -414,57 +473,130 @@ export const roadmapAnalyze: QueryHandler = async (_args, projectDir) => {
   return { data: result };
 };
 
-// ─── roadmapUpdatePlanProgress ────────────────────────────────────────────
 
-export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir) => {
+// ─── roadmapAnnotateDependencies ─────────────────────────────────────────
+
+/**
+ * Annotate the ROADMAP.md plan list with wave dependency notes and
+ * cross-cutting constraints derived from PLAN frontmatter.
+ *
+ * Delegates to gsd-tools.cjs which holds the full annotation logic.
+ * Returns { updated, phase, waves, cross_cutting_constraints }.
+ */
+export const roadmapAnnotateDependencies: QueryHandler = async (args, projectDir) => {
   const phase = args[0];
-  const paths = planningPaths(projectDir);
-
   if (!phase) {
     return { data: { updated: false, reason: 'phase argument required' } };
   }
 
+  const { spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+
+  const toolsPath = fileURLToPath(
+    new URL('../../../get-shit-done/bin/gsd-tools.cjs', import.meta.url),
+  );
+
+  const result = spawnSync(process.execPath, [toolsPath, 'roadmap', 'annotate-dependencies', phase], {
+    cwd: projectDir,
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 15000,
+    maxBuffer: 1024 * 1024,
+  });
+
+  if (result.error) {
+    return { data: { updated: false, reason: result.error.message || 'gsd-tools invocation failed' } };
+  }
+
+  if (result.status !== 0) {
+    return { data: { updated: false, reason: result.stderr?.trim() || 'gsd-tools error' } };
+  }
+
   try {
-    let content = await readFile(paths.roadmap, 'utf-8');
-    const phaseNum = normalizePhaseName(phase);
-    const updated = content.replace(
-      /(-\s*\[\s*\]\s*(?:Plan\s+\d+|plan\s+\d+|\*\*Plan))/gi,
-      (match) => match.replace('[ ]', '[x]'),
-    );
-    if (updated !== content) {
-      await writeFile(paths.roadmap, updated, 'utf-8');
-      return { data: { updated: true, phase: phaseNum } };
-    }
-    return { data: { updated: false, phase: phaseNum, reason: 'no matching checkbox found' } };
+    return { data: JSON.parse(result.stdout.trim()) };
   } catch {
-    return { data: { updated: false, reason: 'ROADMAP.md not found or unreadable' } };
+    return { data: { updated: false, reason: 'failed to parse gsd-tools output' } };
   }
 };
 
+
 // ─── requirementsMarkComplete ─────────────────────────────────────────────
 
-export const requirementsMarkComplete: QueryHandler = async (args, projectDir) => {
-  const reqIds = args;
-  const paths = planningPaths(projectDir);
+/**
+ * Mark requirement IDs complete in REQUIREMENTS.md (checkbox + traceability table).
+ * Port of `cmdRequirementsMarkComplete` from milestone.cjs lines 11–87.
+ */
+export const requirementsMarkComplete: QueryHandler = async (args, projectDir, workstream) => {
+  if (args.length === 0) {
+    throw new GSDError(
+      'requirement IDs required. Usage: requirements mark-complete REQ-01,REQ-02 or REQ-01 REQ-02',
+      ErrorClassification.Validation,
+    );
+  }
+
+  const reqIds = args
+    .join(' ')
+    .replace(/[\[\]]/g, '')
+    .split(/[,\s]+/)
+    .map(r => r.trim())
+    .filter(Boolean);
 
   if (reqIds.length === 0) {
-    return { data: { marked: false, reason: 'requirement IDs required' } };
+    throw new GSDError('no valid requirement IDs found', ErrorClassification.Validation);
   }
 
-  try {
-    let content = await readFile(paths.requirements, 'utf-8');
-    let changeCount = 0;
+  const paths = planningPaths(projectDir, workstream);
+  if (!existsSync(paths.requirements)) {
+    return { data: { updated: false, reason: 'REQUIREMENTS.md not found', ids: reqIds } };
+  }
 
-    for (const id of reqIds) {
-      const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const pattern = new RegExp(`(-\\s*\\[\\s*\\]\\s*)([^\\n]*${escaped})`, 'gi');
-      content = content.replace(pattern, (_m, _bracket, rest) => `- [x] ${rest}`.trim() + '\n' || `- [x] ${rest}`);
-      if (content.includes(`[x]`) && content.includes(id)) changeCount++;
+  let reqContent = (await readFile(paths.requirements, 'utf-8')).replace(/\r\n/g, '\n');
+  const updated: string[] = [];
+  const alreadyComplete: string[] = [];
+  const notFound: string[] = [];
+
+  for (const reqId of reqIds) {
+    let found = false;
+    const reqEscaped = escapeRegex(reqId);
+
+    const checkboxPattern = new RegExp(`(-\\s*\\[)[ ](\\]\\s*\\*\\*${reqEscaped}\\*\\*)`, 'gi');
+    const afterCheckbox = reqContent.replace(checkboxPattern, '$1x$2');
+    if (afterCheckbox !== reqContent) {
+      reqContent = afterCheckbox;
+      found = true;
     }
 
-    await writeFile(paths.requirements, content, 'utf-8');
-    return { data: { marked: true, ids: reqIds, changed: changeCount } };
-  } catch {
-    return { data: { marked: false, reason: 'REQUIREMENTS.md not found or unreadable' } };
+    const tablePattern = new RegExp(`(\\|\\s*${reqEscaped}\\s*\\|[^|]+\\|)\\s*Pending\\s*(\\|)`, 'gi');
+    const afterTable = reqContent.replace(tablePattern, '$1 Complete $2');
+    if (afterTable !== reqContent) {
+      reqContent = afterTable;
+      found = true;
+    }
+
+    if (found) {
+      updated.push(reqId);
+    } else {
+      const doneCheckbox = new RegExp(`-\\s*\\[x\\]\\s*\\*\\*${reqEscaped}\\*\\*`, 'i');
+      const doneTable = new RegExp(`\\|\\s*${reqEscaped}\\s*\\|[^|]+\\|\\s*Complete\\s*\\|`, 'i');
+      if (doneCheckbox.test(reqContent) || doneTable.test(reqContent)) {
+        alreadyComplete.push(reqId);
+      } else {
+        notFound.push(reqId);
+      }
+    }
   }
+
+  if (updated.length > 0) {
+    await writeFile(paths.requirements, reqContent, 'utf-8');
+  }
+
+  return {
+    data: {
+      updated: updated.length > 0,
+      marked_complete: updated,
+      already_complete: alreadyComplete,
+      not_found: notFound,
+      total: reqIds.length,
+    },
+  };
 };

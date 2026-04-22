@@ -18,10 +18,10 @@
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-import { planningPaths } from './helpers.js';
+import { planningPaths, resolvePathUnderProject } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────
@@ -116,9 +116,11 @@ function searchArchMd(filePath: string, term: string): string[] {
 
 // ─── Handlers ────────────────────────────────────────────────────────────
 
-export const intelStatus: QueryHandler = async (_args, projectDir) => {
+const INTEL_DISABLED_MSG = 'Intel system disabled. Set intel.enabled=true in config.json to activate.';
+
+export const intelStatus: QueryHandler = async (_args, projectDir, _workstream) => {
   if (!isIntelEnabled(projectDir)) {
-    return { data: { disabled: true, message: 'Intel system disabled. Set intel.enabled=true in config.json to activate.' } };
+    return { data: { disabled: true, message: INTEL_DISABLED_MSG } };
   }
   const now = Date.now();
   const files: Record<string, unknown> = {};
@@ -147,9 +149,9 @@ export const intelStatus: QueryHandler = async (_args, projectDir) => {
   return { data: { files, overall_stale: overallStale } };
 };
 
-export const intelDiff: QueryHandler = async (_args, projectDir) => {
+export const intelDiff: QueryHandler = async (_args, projectDir, _workstream) => {
   if (!isIntelEnabled(projectDir)) {
-    return { data: { disabled: true, message: 'Intel system disabled.' } };
+    return { data: { disabled: true, message: INTEL_DISABLED_MSG } };
   }
   const snapshotPath = intelFilePath(projectDir, '.last-refresh.json');
   const snapshot = safeReadJson(snapshotPath) as Record<string, unknown> | null;
@@ -170,9 +172,9 @@ export const intelDiff: QueryHandler = async (_args, projectDir) => {
   return { data: { changed, added, removed } };
 };
 
-export const intelSnapshot: QueryHandler = async (_args, projectDir) => {
+export const intelSnapshot: QueryHandler = async (_args, projectDir, _workstream) => {
   if (!isIntelEnabled(projectDir)) {
-    return { data: { disabled: true, message: 'Intel system disabled.' } };
+    return { data: { disabled: true, message: INTEL_DISABLED_MSG } };
   }
   const dir = intelDir(projectDir);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -190,9 +192,9 @@ export const intelSnapshot: QueryHandler = async (_args, projectDir) => {
   return { data: { saved: true, timestamp, files: fileCount } };
 };
 
-export const intelValidate: QueryHandler = async (_args, projectDir) => {
+export const intelValidate: QueryHandler = async (_args, projectDir, _workstream) => {
   if (!isIntelEnabled(projectDir)) {
-    return { data: { disabled: true, message: 'Intel system disabled.' } };
+    return { data: { disabled: true, message: INTEL_DISABLED_MSG } };
   }
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -217,10 +219,10 @@ export const intelValidate: QueryHandler = async (_args, projectDir) => {
   return { data: { valid: errors.length === 0, errors, warnings } };
 };
 
-export const intelQuery: QueryHandler = async (args, projectDir) => {
+export const intelQuery: QueryHandler = async (args, projectDir, _workstream) => {
   const term = args[0] || '';
   if (!isIntelEnabled(projectDir)) {
-    return { data: { disabled: true, message: 'Intel system disabled.' } };
+    return { data: { disabled: true, message: INTEL_DISABLED_MSG } };
   }
   const matches: unknown[] = [];
   let total = 0;
@@ -241,9 +243,22 @@ export const intelQuery: QueryHandler = async (args, projectDir) => {
   return { data: { matches, term, total } };
 };
 
-export const intelExtractExports: QueryHandler = async (args, projectDir) => {
-  const filePath = args[0] ? resolve(projectDir, args[0]) : '';
-  if (!filePath || !existsSync(filePath)) {
+/**
+ * Extract exports from a JS/CJS/ESM file — port of `intelExtractExports` in `intel.cjs` (lines 502–614).
+ * Returns `{ file, exports, method }` with `file` as a resolved absolute path (matches `gsd-tools.cjs`).
+ */
+export const intelExtractExports: QueryHandler = async (args, projectDir, _workstream) => {
+  const raw = args[0];
+  if (!raw) {
+    return { data: { file: '', exports: [], method: 'none' } };
+  }
+  let filePath: string;
+  try {
+    filePath = await resolvePathUnderProject(projectDir, raw);
+  } catch {
+    return { data: { file: raw, exports: [], method: 'none' } };
+  }
+  if (!existsSync(filePath)) {
     return { data: { file: filePath, exports: [], method: 'none' } };
   }
 
@@ -253,9 +268,10 @@ export const intelExtractExports: QueryHandler = async (args, projectDir) => {
 
   const allMatches = [...content.matchAll(/module\.exports\s*=\s*\{/g)];
   if (allMatches.length > 0) {
-    const lastMatch = allMatches[allMatches.length - 1];
+    const lastMatch = allMatches[allMatches.length - 1]!;
     const startIdx = lastMatch.index! + lastMatch[0].length;
-    let depth = 1; let endIdx = startIdx;
+    let depth = 1;
+    let endIdx = startIdx;
     while (endIdx < content.length && depth > 0) {
       if (content[endIdx] === '{') depth++;
       else if (content[endIdx] === '}') depth--;
@@ -264,40 +280,90 @@ export const intelExtractExports: QueryHandler = async (args, projectDir) => {
     const block = content.substring(startIdx, endIdx);
     method = 'module.exports';
     for (const line of block.split('\n')) {
-      const t = line.trim();
-      if (!t || t.startsWith('//') || t.startsWith('*')) continue;
-      const k = t.match(/^(\w+)\s*[,}:]/) || t.match(/^(\w+)$/);
-      if (k) exports.push(k[1]);
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+      const keyMatch = trimmed.match(/^(\w+)\s*[,}:]/) || trimmed.match(/^(\w+)$/);
+      if (keyMatch) exports.push(keyMatch[1]!);
     }
   }
-  for (const m of content.matchAll(/^exports\.(\w+)\s*=/gm)) {
-    if (!exports.includes(m[1])) { exports.push(m[1]); if (method === 'none') method = 'exports.X'; }
+
+  const individualPattern = /^exports\.(\w+)\s*=/gm;
+  let im: RegExpExecArray | null;
+  while ((im = individualPattern.exec(content)) !== null) {
+    if (!exports.includes(im[1]!)) {
+      exports.push(im[1]!);
+      if (method === 'none') method = 'exports.X';
+    }
   }
+
+  const hadCjs = exports.length > 0;
+
   const esmExports: string[] = [];
-  for (const m of content.matchAll(/^export\s+(?:default\s+)?(?:async\s+)?(?:function|class)\s+(\w+)/gm)) {
-    if (!esmExports.includes(m[1])) esmExports.push(m[1]);
+
+  const defaultNamedPattern = /^export\s+default\s+(?:function|class)\s+(\w+)/gm;
+  let em: RegExpExecArray | null;
+  while ((em = defaultNamedPattern.exec(content)) !== null) {
+    if (!esmExports.includes(em[1]!)) esmExports.push(em[1]!);
   }
-  for (const m of content.matchAll(/^export\s+(?:const|let|var)\s+(\w+)\s*=/gm)) {
-    if (!esmExports.includes(m[1])) esmExports.push(m[1]);
+
+  const defaultAnonPattern = /^export\s+default\s+(?!function\s|class\s)/gm;
+  if (defaultAnonPattern.test(content) && esmExports.length === 0) {
+    if (!esmExports.includes('default')) esmExports.push('default');
   }
-  for (const m of content.matchAll(/^export\s*\{([^}]+)\}/gm)) {
-    for (const item of m[1].split(',')) {
-      const name = item.trim().split(/\s+as\s+/)[0].trim();
+
+  const exportFnPattern = /^export\s+(?:async\s+)?function\s+(\w+)\s*\(/gm;
+  while ((em = exportFnPattern.exec(content)) !== null) {
+    if (!esmExports.includes(em[1]!)) esmExports.push(em[1]!);
+  }
+
+  const exportVarPattern = /^export\s+(?:const|let|var)\s+(\w+)\s*=/gm;
+  while ((em = exportVarPattern.exec(content)) !== null) {
+    if (!esmExports.includes(em[1]!)) esmExports.push(em[1]!);
+  }
+
+  const exportClassPattern = /^export\s+class\s+(\w+)/gm;
+  while ((em = exportClassPattern.exec(content)) !== null) {
+    if (!esmExports.includes(em[1]!)) esmExports.push(em[1]!);
+  }
+
+  const exportBlockPattern = /^export\s*\{([^}]+)\}/gm;
+  while ((em = exportBlockPattern.exec(content)) !== null) {
+    const items = em[1]!.split(',');
+    for (const item of items) {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      const name = trimmed.split(/\s+as\s+/)[0]!.trim();
       if (name && !esmExports.includes(name)) esmExports.push(name);
     }
   }
+
   for (const e of esmExports) {
     if (!exports.includes(e)) exports.push(e);
   }
-  if (esmExports.length > 0 && exports.length > esmExports.length) method = 'mixed';
-  else if (esmExports.length > 0 && method === 'none') method = 'esm';
 
-  return { data: { file: args[0], exports, method } };
+  const hadEsm = esmExports.length > 0;
+  if (hadCjs && hadEsm) {
+    method = 'mixed';
+  } else if (hadEsm && !hadCjs) {
+    method = 'esm';
+  }
+
+  return { data: { file: filePath, exports, method } };
 };
 
-export const intelPatchMeta: QueryHandler = async (args, projectDir) => {
-  const filePath = args[0] ? resolve(projectDir, args[0]) : '';
-  if (!filePath || !existsSync(filePath)) {
+export const intelPatchMeta: QueryHandler = async (args, projectDir, _workstream) => {
+  const raw = args[0];
+  if (!raw) {
+    return { data: { patched: false, error: 'File not found' } };
+  }
+  let filePath: string;
+  try {
+    filePath = await resolvePathUnderProject(projectDir, raw);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { data: { patched: false, error: msg } };
+  }
+  if (!existsSync(filePath)) {
     return { data: { patched: false, error: `File not found: ${filePath}` } };
   }
   try {
@@ -309,8 +375,30 @@ export const intelPatchMeta: QueryHandler = async (args, projectDir) => {
     meta.updated_at = timestamp;
     meta.version = ((meta.version as number) || 0) + 1;
     writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
-    return { data: { patched: true, file: args[0], timestamp } };
+    return { data: { patched: true, file: filePath, timestamp } };
   } catch (err) {
     return { data: { patched: false, error: String(err) } };
   }
+};
+
+// ─── intelUpdate ───────────────────────────────────────────────────────────
+
+/**
+ * `gsd-tools intel update` entry point: returns the same JSON as `intel.cjs` `intelUpdate`.
+ * Does not run the full graph refresh in-process — that work is done by the
+ * **gsd-intel-updater** agent after spawn. When `.planning/intel/` is disabled in config,
+ * returns `{ disabled: true, message }` so SDK output matches the CJS CLI.
+ *
+ * Port of `intelUpdate` from `intel.cjs` lines 314–321.
+ */
+export const intelUpdate: QueryHandler = async (_args, projectDir, _workstream) => {
+  if (!isIntelEnabled(projectDir)) {
+    return { data: { disabled: true, message: INTEL_DISABLED_MSG } };
+  }
+  return {
+    data: {
+      action: 'spawn_agent',
+      message: 'Run gsd-tools intel update or spawn gsd-intel-updater agent for full refresh',
+    },
+  };
 };

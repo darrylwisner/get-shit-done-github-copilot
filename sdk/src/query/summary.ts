@@ -2,177 +2,295 @@
  * Summary query handlers — extract sections and history from SUMMARY.md files.
  *
  * Ported from get-shit-done/bin/lib/commands.cjs (cmdSummaryExtract, cmdHistoryDigest).
- * Provides summary section parsing and condensed phase history generation.
+ * Uses `extractFrontmatterLeading` for parity with `frontmatter.cjs` (first `---` block only).
  *
  * @example
  * ```typescript
  * import { summaryExtract, historyDigest } from './summary.js';
  *
- * await summaryExtract(['.planning/phases/09-foundation/09-01-SUMMARY.md'], '/project');
- * // { data: { sections: { what_was_done: '...', tests: '...' }, file: '...' } }
- *
+ * await summaryExtract(['path/to/SUMMARY.md'], '/project');
  * await historyDigest([], '/project');
- * // { data: { phases: [...], count: 5 } }
  * ```
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
-import { planningPaths, toPosixPath } from './helpers.js';
+import { extractFrontmatterLeading } from './frontmatter.js';
+import { comparePhaseNum, planningPaths, resolvePathUnderProject } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
-export const summaryExtract: QueryHandler = async (args, projectDir) => {
-  const filePath = args[0] ? join(projectDir, args[0]) : null;
+// ─── extractOneLinerFromBody ────────────────────────────────────────────────
 
-  if (!filePath || !existsSync(filePath)) {
-    return { data: { sections: {}, error: 'file not found' } };
+/**
+ * Extract a one-liner from the summary body when it is not in frontmatter.
+ * Port of `extractOneLinerFromBody` from `get-shit-done/bin/lib/core.cjs`.
+ */
+function extractOneLinerFromBody(content: string): string | null {
+  if (!content) return null;
+  const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/, '');
+  const match = body.match(/^#[^\n]*\n+\*\*([^*]+)\*\*/m);
+  return match ? match[1].trim() : null;
+}
+
+/** Normalize frontmatter list fields — scalars become single-element arrays. */
+function coerceFmArray(v: unknown): unknown[] {
+  if (v === undefined || v === null) return [];
+  if (Array.isArray(v)) return v;
+  return [v];
+}
+
+function parseDecisions(decisionsList: unknown): Array<{ summary: string; rationale: string | null }> {
+  if (!decisionsList || !Array.isArray(decisionsList)) return [];
+  return decisionsList.map((d: unknown) => {
+    const s = String(d);
+    const colonIdx = s.indexOf(':');
+    if (colonIdx > 0) {
+      return {
+        summary: s.substring(0, colonIdx).trim(),
+        rationale: s.substring(colonIdx + 1).trim(),
+      };
+    }
+    return { summary: s, rationale: null };
+  });
+}
+
+function readSubdirectories(dirPath: string, sort: boolean): string[] {
+  try {
+    const entries = readdirSync(dirPath, { withFileTypes: true });
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+    return sort ? dirs.sort((a, b) => comparePhaseNum(a, b)) : dirs;
+  } catch {
+    return [];
   }
+}
+
+/** Match `getArchivedPhaseDirs` from core.cjs (newest milestone archive first). */
+function getArchivedPhaseDirs(cwd: string): Array<{ name: string; fullPath: string; milestone: string }> {
+  const milestonesDir = join(cwd, '.planning', 'milestones');
+  const results: Array<{ name: string; fullPath: string; milestone: string }> = [];
+
+  if (!existsSync(milestonesDir)) return results;
 
   try {
-    const content = await readFile(filePath, 'utf-8');
-    const sections: Record<string, string> = {};
-    const headingPattern = /^#{1,3}\s+(.+?)[\r\n]+([\s\S]*?)(?=^#{1,3}\s|\Z)/gm;
-    let m: RegExpExecArray | null;
-    while ((m = headingPattern.exec(content)) !== null) {
-      const key = m[1].trim().toLowerCase().replace(/\s+/g, '_');
-      sections[key] = m[2].trim();
+    const milestoneEntries = readdirSync(milestonesDir, { withFileTypes: true });
+    const phaseDirs = milestoneEntries
+      .filter(e => e.isDirectory() && /^v[\d.]+-phases$/.test(e.name))
+      .map(e => e.name)
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+
+    for (const archiveName of phaseDirs) {
+      const versionMatch = archiveName.match(/^(v[\d.]+)-phases$/);
+      const version = versionMatch ? versionMatch[1] : archiveName;
+      const archivePath = join(milestonesDir, archiveName);
+      const dirs = readSubdirectories(archivePath, true);
+
+      for (const dir of dirs) {
+        results.push({
+          name: dir,
+          milestone: version,
+          fullPath: join(archivePath, dir),
+        });
+      }
     }
-    return { data: { sections, file: args[0] } };
   } catch {
-    return { data: { sections: {}, error: 'unreadable file' } };
+    /* intentionally empty */
   }
+
+  return results;
+}
+
+export const summaryExtract: QueryHandler = async (args, projectDir) => {
+  const fieldsIdx = args.indexOf('--fields');
+  const pathArgs = fieldsIdx === -1 ? args : args.slice(0, fieldsIdx);
+  const summaryPath = pathArgs[0] ?? '';
+
+  if (!summaryPath) {
+    return { data: { error: 'summary-path required for summary-extract' } };
+  }
+
+  if (summaryPath.includes('\0')) {
+    return { data: { error: 'Invalid path', path: summaryPath } };
+  }
+
+  const fields =
+    fieldsIdx !== -1 && args[fieldsIdx + 1] ? args[fieldsIdx + 1].split(',').map(f => f.trim()) : null;
+
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, summaryPath);
+  } catch {
+    return { data: { error: 'File not found', path: summaryPath } };
+  }
+
+  if (!existsSync(fullPath)) {
+    return { data: { error: 'File not found', path: summaryPath } };
+  }
+
+  let content: string;
+  try {
+    content = await readFile(fullPath, 'utf-8');
+  } catch {
+    return { data: { error: 'File not found', path: summaryPath } };
+  }
+
+  const fm = extractFrontmatterLeading(content) as Record<string, unknown>;
+
+  const techStackRaw = fm['tech-stack'] as { added?: unknown[] } | undefined;
+  const techAdded = (techStackRaw && Array.isArray(techStackRaw.added) ? techStackRaw.added : []) as unknown[];
+
+  const fullResult: Record<string, unknown> = {
+    path: summaryPath,
+    one_liner: (fm['one-liner'] as string | undefined) || extractOneLinerFromBody(content) || null,
+    key_files: coerceFmArray(fm['key-files']),
+    tech_added: techAdded,
+    patterns: coerceFmArray(fm['patterns-established']),
+    decisions: parseDecisions(fm['key-decisions']),
+    requirements_completed: coerceFmArray(fm['requirements-completed']),
+  };
+
+  if (fields && fields.length > 0) {
+    const filtered: Record<string, unknown> = { path: summaryPath };
+    for (const field of fields) {
+      if (fullResult[field] !== undefined) {
+        filtered[field] = fullResult[field];
+      }
+    }
+    return { data: filtered };
+  }
+
+  return { data: fullResult };
 };
 
-export const historyDigest: QueryHandler = async (_args, projectDir) => {
-  const paths = planningPaths(projectDir);
+export const historyDigest: QueryHandler = async (_args, projectDir, workstream) => {
+  const phasesDir = planningPaths(projectDir, workstream).phases;
   const digest: {
-    phases: Record<string, { name: string; provides: string[]; affects: string[]; patterns: string[] }>;
+    phases: Record<
+      string,
+      {
+        name: string;
+        provides: Set<string>;
+        affects: Set<string>;
+        patterns: Set<string>;
+      }
+    >;
     decisions: Array<{ phase: string; decision: string }>;
-    tech_stack: string[];
-  } = { phases: {}, decisions: [], tech_stack: [] };
+    tech_stack: Set<string>;
+  } = { phases: {}, decisions: [], tech_stack: new Set() };
 
-  const techStackSet = new Set<string>();
-
-  // Collect all phase directories: archived milestones + current
   const allPhaseDirs: Array<{ name: string; fullPath: string }> = [];
 
-  // Archived phases from milestones/
-  const milestonesDir = join(projectDir, '.planning', 'milestones');
-  if (existsSync(milestonesDir)) {
-    try {
-      const milestoneEntries = readdirSync(milestonesDir, { withFileTypes: true });
-      const archivedPhaseDirs = milestoneEntries
-        .filter(e => e.isDirectory() && /^v[\d.]+-phases$/.test(e.name))
-        .map(e => e.name)
-        .sort();
-      for (const archiveName of archivedPhaseDirs) {
-        const archivePath = join(milestonesDir, archiveName);
-        try {
-          const dirs = readdirSync(archivePath, { withFileTypes: true });
-          for (const d of dirs.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-            allPhaseDirs.push({ name: d.name, fullPath: join(archivePath, d.name) });
-          }
-        } catch { /* skip */ }
-      }
-    } catch { /* skip */ }
+  const archived = getArchivedPhaseDirs(projectDir);
+  for (const a of archived) {
+    allPhaseDirs.push({ name: a.name, fullPath: a.fullPath });
   }
 
-  // Current phases
-  if (existsSync(paths.phases)) {
+  if (existsSync(phasesDir)) {
     try {
-      const currentDirs = readdirSync(paths.phases, { withFileTypes: true });
-      for (const d of currentDirs.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-        allPhaseDirs.push({ name: d.name, fullPath: join(paths.phases, d.name) });
+      const currentDirs = readdirSync(phasesDir, { withFileTypes: true })
+        .filter(e => e.isDirectory())
+        .map(e => e.name)
+        .sort((a, b) => comparePhaseNum(a, b));
+      for (const dir of currentDirs) {
+        allPhaseDirs.push({ name: dir, fullPath: join(phasesDir, dir) });
       }
-    } catch { /* skip */ }
+    } catch {
+      /* intentionally empty */
+    }
   }
 
   if (allPhaseDirs.length === 0) {
-    return { data: digest };
+    return { data: { phases: {}, decisions: [], tech_stack: [] } };
   }
 
-  for (const { name: dir, fullPath: dirPath } of allPhaseDirs) {
-    const summaries = readdirSync(dirPath).filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+  try {
+    for (const { name: dir, fullPath: dirPath } of allPhaseDirs) {
+      const summaries = readdirSync(dirPath)
+        .filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md')
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-    for (const summary of summaries) {
-      try {
-        const content = readFileSync(join(dirPath, summary), 'utf-8');
-        const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-        if (!fmMatch) continue;
+      for (const summary of summaries) {
+        try {
+          const content = readFileSync(join(dirPath, summary), 'utf-8');
+          const fm = extractFrontmatterLeading(content) as Record<string, unknown>;
 
-        const fmBlock = fmMatch[1];
-        const phaseMatch = fmBlock.match(/^phase:\s*(.+)$/m);
-        const nameMatch = fmBlock.match(/^name:\s*(.+)$/m);
-        const phaseNum = phaseMatch ? phaseMatch[1].trim() : dir.split('-')[0];
+          const phaseRaw = fm.phase;
+          const phaseNum =
+            typeof phaseRaw === 'string' || typeof phaseRaw === 'number'
+              ? String(phaseRaw)
+              : dir.split('-')[0];
 
-        if (!digest.phases[phaseNum]) {
-          const phaseName = nameMatch
-            ? nameMatch[1].trim()
-            : dir.split('-').slice(1).join(' ') || 'Unknown';
-          digest.phases[phaseNum] = { name: phaseName, provides: [], affects: [], patterns: [] };
-        }
-
-        const providesSet = new Set(digest.phases[phaseNum].provides);
-        const affectsSet = new Set(digest.phases[phaseNum].affects);
-        const patternsSet = new Set(digest.phases[phaseNum].patterns);
-
-        // Parse provides from dependency-graph or top-level
-        for (const m of fmBlock.matchAll(/^\s+-\s+(.+)$/gm)) {
-          const line = m[1].trim();
-          if (fmBlock.indexOf(m[0]) > fmBlock.indexOf('provides:') &&
-              (fmBlock.indexOf('affects:') === -1 || fmBlock.indexOf(m[0]) < fmBlock.indexOf('affects:'))) {
-            providesSet.add(line);
+          if (!digest.phases[phaseNum]) {
+            digest.phases[phaseNum] = {
+              name:
+                (typeof fm.name === 'string' ? fm.name : null) ||
+                dir.split('-').slice(1).join(' ') ||
+                'Unknown',
+              provides: new Set(),
+              affects: new Set(),
+              patterns: new Set(),
+            };
           }
-        }
 
-        // Parse key-decisions
-        const decisionsStart = fmBlock.indexOf('key-decisions:');
-        if (decisionsStart !== -1) {
-          const rest = fmBlock.slice(decisionsStart + 'key-decisions:'.length);
-          for (const line of rest.split('\n')) {
-            const item = line.match(/^\s+-\s+(.+)$/);
-            if (item) {
-              digest.decisions.push({ phase: phaseNum, decision: item[1].trim() });
-            } else if (/^\S/.test(line) && line.trim()) {
-              break;
-            }
+          const depGraph = fm['dependency-graph'] as
+            | { provides?: string[]; affects?: string[] }
+            | undefined;
+          if (depGraph && Array.isArray(depGraph.provides)) {
+            depGraph.provides.forEach(p => digest.phases[phaseNum].provides.add(p));
+          } else if (Array.isArray(fm.provides)) {
+            (fm.provides as string[]).forEach(p => digest.phases[phaseNum].provides.add(p));
           }
-        }
 
-        // Parse patterns-established
-        const patternsStart = fmBlock.indexOf('patterns-established:');
-        if (patternsStart !== -1) {
-          const rest = fmBlock.slice(patternsStart + 'patterns-established:'.length);
-          for (const line of rest.split('\n')) {
-            const item = line.match(/^\s+-\s+(.+)$/);
-            if (item) patternsSet.add(item[1].trim());
-            else if (/^\S/.test(line) && line.trim()) break;
+          if (depGraph && Array.isArray(depGraph.affects)) {
+            depGraph.affects.forEach(a => digest.phases[phaseNum].affects.add(a));
           }
-        }
 
-        // Parse tech-stack.added
-        const techStart = fmBlock.indexOf('tech-stack:');
-        if (techStart !== -1) {
-          const addedStart = fmBlock.indexOf('added:', techStart);
-          if (addedStart !== -1) {
-            const rest = fmBlock.slice(addedStart + 'added:'.length);
-            for (const line of rest.split('\n')) {
-              const item = line.match(/^\s+-\s+(?:name:\s*)?(.+)$/);
-              if (item) techStackSet.add(item[1].trim());
-              else if (/^\S/.test(line) && line.trim()) break;
-            }
+          if (Array.isArray(fm['patterns-established'])) {
+            (fm['patterns-established'] as string[]).forEach(p => digest.phases[phaseNum].patterns.add(p));
           }
-        }
 
-        digest.phases[phaseNum].provides = [...providesSet];
-        digest.phases[phaseNum].affects = [...affectsSet];
-        digest.phases[phaseNum].patterns = [...patternsSet];
-      } catch { /* skip malformed summaries */ }
+          if (Array.isArray(fm['key-decisions'])) {
+            (fm['key-decisions'] as string[]).forEach(d => {
+              digest.decisions.push({ phase: phaseNum, decision: d });
+            });
+          }
+
+          const techStack = fm['tech-stack'] as { added?: unknown[] } | undefined;
+          if (techStack && Array.isArray(techStack.added)) {
+            techStack.added.forEach(t => {
+              const s = typeof t === 'string' ? t : (t as { name?: string }).name;
+              if (s) digest.tech_stack.add(s);
+            });
+          }
+        } catch {
+          /* Skip malformed summaries */
+        }
+      }
     }
-  }
 
-  digest.tech_stack = [...techStackSet];
-  return { data: digest };
+    const phasesOut: Record<
+      string,
+      { name: string; provides: string[]; affects: string[]; patterns: string[] }
+    > = {};
+    for (const p of Object.keys(digest.phases)) {
+      phasesOut[p] = {
+        name: digest.phases[p].name,
+        provides: [...digest.phases[p].provides],
+        affects: [...digest.phases[p].affects],
+        patterns: [...digest.phases[p].patterns],
+      };
+    }
+
+    return {
+      data: {
+        phases: phasesOut,
+        decisions: digest.decisions,
+        tech_stack: [...digest.tech_stack],
+      },
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { data: { error: `Failed to generate history digest: ${msg}` } };
+  }
 };

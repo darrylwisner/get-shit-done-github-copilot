@@ -20,6 +20,7 @@
 import { join, relative, resolve, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { GSDError, ErrorClassification } from '../errors.js';
+import { relPlanningPath } from '../workstream-utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -306,14 +307,16 @@ export function normalizeMd(content: string): string {
 /**
  * Get common .planning file paths for a project directory.
  *
- * Simplified version (no workstream/project env vars).
+ * When `workstream` is provided, all paths are rooted under
+ * `.planning/workstreams/<workstream>` instead of `.planning`.
  * All paths returned in POSIX format.
  *
  * @param projectDir - Root project directory
+ * @param workstream - Optional workstream name (see relPlanningPath)
  * @returns Object with paths to common .planning files
  */
-export function planningPaths(projectDir: string): PlanningPaths {
-  const base = join(projectDir, '.planning');
+export function planningPaths(projectDir: string, workstream?: string): PlanningPaths {
+  const base = join(projectDir, relPlanningPath(workstream));
   return {
     planning: toPosixPath(base),
     state: toPosixPath(join(base, 'STATE.md')),

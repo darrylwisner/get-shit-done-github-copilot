@@ -28,6 +28,7 @@ import {
   toPosixPath,
   planningPaths,
 } from './helpers.js';
+import { relPlanningPath } from '../workstream-utils.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -154,13 +155,13 @@ function extractObjective(content: string): string | null {
  * @returns QueryResult with PhaseInfo
  * @throws GSDError with Validation classification if phase identifier missing
  */
-export const findPhase: QueryHandler = async (args, projectDir) => {
+export const findPhase: QueryHandler = async (args, projectDir, workstream) => {
   const phase = args[0];
   if (!phase) {
     throw new GSDError('phase identifier required', ErrorClassification.Validation);
   }
 
-  const phasesDir = planningPaths(projectDir).phases;
+  const phasesDir = planningPaths(projectDir, workstream).phases;
   const normalized = normalizePhaseName(phase);
 
   const notFound: PhaseInfo = {
@@ -179,7 +180,7 @@ export const findPhase: QueryHandler = async (args, projectDir) => {
   };
 
   // Search current phases first
-  const relPhasesDir = '.planning/phases';
+  const relPhasesDir = relPlanningPath(workstream) + '/phases';
   const current = await searchPhaseInDir(phasesDir, relPhasesDir, normalized);
   if (current) return { data: current };
 
@@ -221,13 +222,13 @@ export const findPhase: QueryHandler = async (args, projectDir) => {
  * @returns QueryResult with { phase, plans[], waves{}, incomplete[], has_checkpoints }
  * @throws GSDError with Validation classification if phase identifier missing
  */
-export const phasePlanIndex: QueryHandler = async (args, projectDir) => {
+export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream) => {
   const phase = args[0];
   if (!phase) {
     throw new GSDError('phase required for phase-plan-index', ErrorClassification.Validation);
   }
 
-  const phasesDir = planningPaths(projectDir).phases;
+  const phasesDir = planningPaths(projectDir, workstream).phases;
   const normalized = normalizePhaseName(phase);
 
   // Find phase directory
