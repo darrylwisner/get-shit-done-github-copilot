@@ -266,6 +266,7 @@ const CONFIG_DEFAULTS = {
   security_enforcement: true, // workflow.security_enforcement — threat-model-anchored security verification via /gsd:secure-phase
   security_asvs_level: 1, // workflow.security_asvs_level — OWASP ASVS verification level (1=opportunistic, 2=standard, 3=comprehensive)
   security_block_on: 'high', // workflow.security_block_on — minimum severity that blocks phase advancement ('high' | 'medium' | 'low')
+  post_planning_gaps: true, // workflow.post_planning_gaps — unified post-planning gap report (#2493): scan REQUIREMENTS.md + CONTEXT.md decisions vs all PLAN.md files
 };
 
 function loadConfig(cwd) {
@@ -339,6 +340,13 @@ function loadConfig(cwd) {
       );
     }
 
+    // #2517 — Validate runtime/tier values for keys that loadConfig handles but
+    // can be edited directly into config.json (bypassing config-set's enum check).
+    // This catches typos like `runtime: "codx"` and `model_profile_overrides.codex.banana`
+    // at read time without rejecting back-compat values from new runtimes
+    // (review findings #10, #13).
+    _warnUnknownProfileOverrides(parsed, '.planning/config.json');
+
     const get = (key, nested) => {
       if (parsed[key] !== undefined) return parsed[key];
       if (nested && parsed[nested.section] && parsed[nested.section][nested.field] !== undefined) {
@@ -374,6 +382,7 @@ function loadConfig(cwd) {
       plan_checker: get('plan_checker', { section: 'workflow', field: 'plan_check' }) ?? defaults.plan_checker,
       verifier: get('verifier', { section: 'workflow', field: 'verifier' }) ?? defaults.verifier,
       nyquist_validation: get('nyquist_validation', { section: 'workflow', field: 'nyquist_validation' }) ?? defaults.nyquist_validation,
+      post_planning_gaps: get('post_planning_gaps', { section: 'workflow', field: 'post_planning_gaps' }) ?? defaults.post_planning_gaps,
       parallelization,
       brave_search: get('brave_search') ?? defaults.brave_search,
       firecrawl: get('firecrawl') ?? defaults.firecrawl,
@@ -390,6 +399,18 @@ function loadConfig(cwd) {
       project_code: get('project_code') ?? defaults.project_code,
       subagent_timeout: get('subagent_timeout', { section: 'workflow', field: 'subagent_timeout' }) ?? defaults.subagent_timeout,
       model_overrides: parsed.model_overrides || null,
+      // #2517 — runtime-aware profiles. `runtime` defaults to null (back-compat).
+      // When null, resolveModelInternal preserves today's Claude-native behavior.
+      // NOTE: `runtime` and `model_profile_overrides` are intentionally read
+      // flat-only (not via `get()` with a workflow.X fallback) — they are
+      // top-level keys per docs/CONFIGURATION.md. The lighter-touch decision
+      // here was to document the constraint rather than introduce nested
+      // resolution edge cases for two new keys (review finding #9). The
+      // schema validation in `_warnUnknownProfileOverrides` runs against the
+      // raw `parsed` blob, so direct `.planning/config.json` edits surface
+      // unknown runtime/tier names at load time, not silently (review finding #10).
+      runtime: parsed.runtime || null,
+      model_profile_overrides: parsed.model_profile_overrides || null,
       agent_skills: parsed.agent_skills || {},
       manager: parsed.manager || {},
       response_language: get('response_language') || null,
@@ -415,6 +436,9 @@ function loadConfig(cwd) {
         plan_checker: globalDefaults.plan_checker ?? defaults.plan_checker,
         verifier: globalDefaults.verifier ?? defaults.verifier,
         nyquist_validation: globalDefaults.nyquist_validation ?? defaults.nyquist_validation,
+        post_planning_gaps: globalDefaults.post_planning_gaps
+          ?? globalDefaults.workflow?.post_planning_gaps
+          ?? defaults.post_planning_gaps,
         parallelization: globalDefaults.parallelization ?? defaults.parallelization,
         text_mode: globalDefaults.text_mode ?? defaults.text_mode,
         resolve_model_ids: globalDefaults.resolve_model_ids ?? defaults.resolve_model_ids,
@@ -1449,37 +1473,260 @@ const MODEL_ALIAS_MAP = {
   'haiku': 'claude-haiku-4-5',
 };
 
+/**
+ * #2517 — runtime-aware tier resolution.
+ * Maps `model_profile` tiers (opus/sonnet/haiku) to runtime-native model IDs and
+ * (where supported) reasoning_effort settings.
+ *
+ * Each entry: { model: <id>, reasoning_effort?: <level> }
+ *
+ * `claude` mirrors MODEL_ALIAS_MAP — present for symmetry so `runtime: "claude"`
+ * resolves through the same code path. `codex` defaults are taken from the spec
+ * in #2517. Unknown runtimes fall back to the Claude alias to avoid emitting
+ * provider-specific IDs the runtime cannot accept.
+ */
+const RUNTIME_PROFILE_MAP = {
+  claude: {
+    opus:   { model: 'claude-opus-4-6' },
+    sonnet: { model: 'claude-sonnet-4-6' },
+    haiku:  { model: 'claude-haiku-4-5' },
+  },
+  codex: {
+    opus:   { model: 'gpt-5.4',        reasoning_effort: 'xhigh' },
+    sonnet: { model: 'gpt-5.3-codex',  reasoning_effort: 'medium' },
+    haiku:  { model: 'gpt-5.4-mini',   reasoning_effort: 'medium' },
+  },
+};
+
+const RUNTIMES_WITH_REASONING_EFFORT = new Set(['codex']);
+
+/**
+ * Tier enum allowed under `model_profile_overrides[runtime][tier]`. Mirrors the
+ * regex in `config-schema.cjs` (DYNAMIC_KEY_PATTERNS) so loadConfig surfaces the
+ * same constraint at read time, not only at config-set time (review finding #10).
+ */
+const RUNTIME_OVERRIDE_TIERS = new Set(['opus', 'sonnet', 'haiku']);
+
+/**
+ * Allowlist of runtime names the install pipeline currently knows how to emit
+ * native model IDs for. Synced with `getDirName` in `bin/install.js` and the
+ * runtime list in `docs/CONFIGURATION.md`. Free-string runtimes outside this
+ * set are still accepted (#2517 deliberately leaves the runtime field open) —
+ * a warning fires once at loadConfig so a typo like `runtime: "codx"` does not
+ * silently fall back to Claude defaults (review findings #10, #13).
+ */
+const KNOWN_RUNTIMES = new Set([
+  'claude', 'codex', 'opencode', 'kilo', 'gemini', 'qwen',
+  'copilot', 'cursor', 'windsurf', 'augment', 'trae', 'codebuddy',
+  'antigravity', 'cline',
+]);
+
+const _warnedConfigKeys = new Set();
+/**
+ * Emit a one-time stderr warning for unknown runtime/tier keys in a parsed
+ * config blob. Idempotent across calls — the same (file, key) pair only warns
+ * once per process so loadConfig can be called repeatedly without spamming.
+ *
+ * Does NOT reject — preserves back-compat for users on a runtime not yet in the
+ * allowlist (the new-runtime case must always be possible without code changes).
+ */
+function _warnUnknownProfileOverrides(parsed, configLabel) {
+  if (!parsed || typeof parsed !== 'object') return;
+
+  const runtime = parsed.runtime;
+  if (runtime && typeof runtime === 'string' && !KNOWN_RUNTIMES.has(runtime)) {
+    const key = `${configLabel}::runtime::${runtime}`;
+    if (!_warnedConfigKeys.has(key)) {
+      _warnedConfigKeys.add(key);
+      try {
+        process.stderr.write(
+          `gsd: warning — config key "runtime" has unknown value "${runtime}". ` +
+          `Known runtimes: ${[...KNOWN_RUNTIMES].sort().join(', ')}. ` +
+          `Resolution will fall back to safe defaults. (#2517)\n`
+        );
+      } catch { /* stderr might be closed in some test harnesses */ }
+    }
+  }
+
+  const overrides = parsed.model_profile_overrides;
+  if (!overrides || typeof overrides !== 'object') return;
+  for (const [overrideRuntime, tierMap] of Object.entries(overrides)) {
+    if (!KNOWN_RUNTIMES.has(overrideRuntime)) {
+      const key = `${configLabel}::override-runtime::${overrideRuntime}`;
+      if (!_warnedConfigKeys.has(key)) {
+        _warnedConfigKeys.add(key);
+        try {
+          process.stderr.write(
+            `gsd: warning — model_profile_overrides.${overrideRuntime}.* uses ` +
+            `unknown runtime "${overrideRuntime}". Known runtimes: ` +
+            `${[...KNOWN_RUNTIMES].sort().join(', ')}. (#2517)\n`
+          );
+        } catch { /* ok */ }
+      }
+    }
+    if (!tierMap || typeof tierMap !== 'object') continue;
+    for (const tierName of Object.keys(tierMap)) {
+      if (!RUNTIME_OVERRIDE_TIERS.has(tierName)) {
+        const key = `${configLabel}::override-tier::${overrideRuntime}.${tierName}`;
+        if (!_warnedConfigKeys.has(key)) {
+          _warnedConfigKeys.add(key);
+          try {
+            process.stderr.write(
+              `gsd: warning — model_profile_overrides.${overrideRuntime}.${tierName} ` +
+              `uses unknown tier "${tierName}". Allowed tiers: opus, sonnet, haiku. (#2517)\n`
+            );
+          } catch { /* ok */ }
+        }
+      }
+    }
+  }
+}
+
+// Internal helper exposed for tests so per-process warning state can be reset
+// between cases that intentionally exercise the warning path repeatedly.
+function _resetRuntimeWarningCacheForTests() {
+  _warnedConfigKeys.clear();
+}
+
+/**
+ * #2517 — Resolve the runtime-aware tier entry for (runtime, tier).
+ *
+ * Single source of truth shared by core.cjs (resolveModelInternal /
+ * resolveReasoningEffortInternal) and bin/install.js (Codex/OpenCode TOML emit
+ * paths). Always merges built-in defaults with user overrides at the field
+ * level so partial overrides keep the unspecified fields:
+ *
+ *   `{ codex: { opus: "gpt-5-pro" } }`           keeps reasoning_effort: 'xhigh'
+ *   `{ codex: { opus: { reasoning_effort: 'low' } } }` keeps model: 'gpt-5.4'
+ *
+ * Without this field-merge, the documented string-shorthand example silently
+ * dropped reasoning_effort and a partial-object override silently dropped the
+ * model — both reported as critical findings in the #2609 review.
+ *
+ * Inputs:
+ *   - runtime: string (e.g. 'codex', 'claude', 'opencode')
+ *   - tier:    'opus' | 'sonnet' | 'haiku'
+ *   - overrides: optional `model_profile_overrides` blob (may be null/undefined)
+ *
+ * Returns `{ model: string, reasoning_effort?: string } | null`.
+ */
+function resolveTierEntry({ runtime, tier, overrides }) {
+  if (!runtime || !tier) return null;
+
+  const builtin = RUNTIME_PROFILE_MAP[runtime]?.[tier] || null;
+  const userRaw = overrides?.[runtime]?.[tier];
+
+  // String shorthand from CONFIGURATION.md examples — `{ codex: { opus: "gpt-5-pro" } }`.
+  // Treat as `{ model: "gpt-5-pro" }` so the field-merge below still preserves
+  // reasoning_effort from the built-in defaults.
+  let userEntry = null;
+  if (userRaw) {
+    userEntry = typeof userRaw === 'string' ? { model: userRaw } : userRaw;
+  }
+
+  if (!builtin && !userEntry) return null;
+  // Field-merge: user fields win, built-in fills the gaps.
+  return { ...(builtin || {}), ...(userEntry || {}) };
+}
+
+/**
+ * Convenience wrapper used by resolveModelInternal / resolveReasoningEffortInternal.
+ * Pulls runtime + overrides out of a loaded config and delegates to resolveTierEntry.
+ */
+function _resolveRuntimeTier(config, tier) {
+  return resolveTierEntry({
+    runtime: config.runtime,
+    tier,
+    overrides: config.model_profile_overrides,
+  });
+}
+
 function resolveModelInternal(cwd, agentType) {
   const config = loadConfig(cwd);
 
-  // Check per-agent override first — always respected regardless of resolve_model_ids.
+  // 1. Per-agent override — always respected; highest precedence.
   // Users who set fully-qualified model IDs (e.g., "openai/gpt-5.4") get exactly that.
   const override = config.model_overrides?.[agentType];
   if (override) {
     return override;
   }
 
-  // resolve_model_ids: "omit" — return empty string so the runtime uses its configured
-  // default model. For non-Claude runtimes (OpenCode, Codex, etc.) that don't recognize
-  // Claude aliases (opus/sonnet/haiku/inherit). Set automatically during install. See #1156.
+  // 2. Compute the tier (opus/sonnet/haiku) for this agent under the active profile.
+  const profile = String(config.model_profile || 'balanced').toLowerCase();
+  const agentModels = MODEL_PROFILES[agentType];
+  const tier = agentModels ? (agentModels[profile] || agentModels['balanced']) : null;
+
+  // 3. Runtime-aware resolution (#2517) — only when `runtime` is explicitly set
+  // to a non-Claude runtime. `runtime: "claude"` is the implicit default and is
+  // treated as a no-op here so it does not silently override `resolve_model_ids:
+  // "omit"` (review finding #4). Deliberate ordering for non-Claude runtimes:
+  // explicit opt-in beats `resolve_model_ids: "omit"` so users on Codex installs
+  // that auto-set "omit" can still flip on tiered behavior by setting runtime
+  // alone. inherit profile is preserved verbatim.
+  if (config.runtime && config.runtime !== 'claude' && profile !== 'inherit' && tier) {
+    const entry = _resolveRuntimeTier(config, tier);
+    if (entry?.model) return entry.model;
+    // Unknown runtime with no user-supplied overrides — fall through to Claude-safe
+    // default rather than emit an ID the runtime can't accept.
+  }
+
+  // 4. resolve_model_ids: "omit" — return empty string so the runtime uses its
+  // configured default model. For non-Claude runtimes (OpenCode, Codex, etc.) that
+  // don't recognize Claude aliases. Set automatically during install. See #1156.
   if (config.resolve_model_ids === 'omit') {
     return '';
   }
 
-  // Fall back to profile lookup
-  const profile = String(config.model_profile || 'balanced').toLowerCase();
-  const agentModels = MODEL_PROFILES[agentType];
+  // 5. Profile lookup (Claude-native default).
   if (!agentModels) return 'sonnet';
   if (profile === 'inherit') return 'inherit';
-  const alias = agentModels[profile] || agentModels['balanced'] || 'sonnet';
+  // `tier` is guaranteed truthy here: agentModels exists, and MODEL_PROFILES
+  // entries always define `balanced`, so `agentModels[profile] || agentModels.balanced`
+  // resolves to a string. Keep the local for readability — no defensive fallback.
+  const alias = tier;
 
-  // resolve_model_ids: true — map alias to full Claude model ID
-  // Prevents 404s when the Task tool passes aliases directly to the API
+  // resolve_model_ids: true — map alias to full Claude model ID.
+  // Prevents 404s when the Task tool passes aliases directly to the API.
   if (config.resolve_model_ids) {
     return MODEL_ALIAS_MAP[alias] || alias;
   }
 
   return alias;
+}
+
+/**
+ * #2517 — Resolve runtime-specific reasoning_effort for an agent.
+ * Returns null unless:
+ *   - `runtime` is explicitly set in config,
+ *   - the runtime supports reasoning_effort (currently: codex),
+ *   - profile is not 'inherit',
+ *   - the resolved tier entry has a `reasoning_effort` value.
+ *
+ * Never returns a value for Claude — keeps reasoning_effort out of Claude spawn paths.
+ */
+function resolveReasoningEffortInternal(cwd, agentType) {
+  const config = loadConfig(cwd);
+  if (!config.runtime) return null;
+  // Strict allowlist: reasoning_effort only propagates for runtimes whose
+  // install path actually accepts it. Adding a new runtime here is the only
+  // way to enable effort propagation — overrides cannot bypass the gate.
+  // Without this, a typo in `runtime` (e.g. `"codx"`) plus a user override
+  // for that typo would leak `xhigh` into a Claude or unknown install
+  // (review finding #3).
+  if (!RUNTIMES_WITH_REASONING_EFFORT.has(config.runtime)) return null;
+  // Per-agent override means user supplied a fully-qualified ID; reasoning_effort
+  // for that case must be set via per-agent mechanism, not tier inference.
+  if (config.model_overrides?.[agentType]) return null;
+
+  const profile = String(config.model_profile || 'balanced').toLowerCase();
+  if (profile === 'inherit') return null;
+  const agentModels = MODEL_PROFILES[agentType];
+  if (!agentModels) return null;
+  const tier = agentModels[profile] || agentModels['balanced'];
+  if (!tier) return null;
+
+  const entry = _resolveRuntimeTier(config, tier);
+  return entry?.reasoning_effort || null;
 }
 
 // ─── Summary body helpers ─────────────────────────────────────────────────
@@ -1760,6 +2007,13 @@ module.exports = {
   getArchivedPhaseDirs,
   getRoadmapPhaseInternal,
   resolveModelInternal,
+  resolveReasoningEffortInternal,
+  RUNTIME_PROFILE_MAP,
+  RUNTIMES_WITH_REASONING_EFFORT,
+  KNOWN_RUNTIMES,
+  RUNTIME_OVERRIDE_TIERS,
+  resolveTierEntry,
+  _resetRuntimeWarningCacheForTests,
   pathExistsInternal,
   generateSlugInternal,
   getMilestoneInfo,

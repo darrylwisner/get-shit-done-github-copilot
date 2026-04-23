@@ -107,6 +107,7 @@
  *   verify artifacts <plan-file>       Check must_haves.artifacts
  *   verify key-links <plan-file>       Check must_haves.key_links
  *   verify schema-drift <phase> [--skip]  Detect schema file changes without push
+ *   verify codebase-drift                Detect structural drift since last codebase map (#2003)
  *
  * Template Fill:
  *   template fill summary --phase N    Create pre-filled SUMMARY.md
@@ -182,6 +183,7 @@ const profileOutput = require('./lib/profile-output.cjs');
 const workstream = require('./lib/workstream.cjs');
 const docs = require('./lib/docs.cjs');
 const learnings = require('./lib/learnings.cjs');
+const gapChecker = require('./lib/gap-checker.cjs');
 
 // ─── Arg parsing helpers ──────────────────────────────────────────────────────
 
@@ -588,8 +590,10 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
       } else if (subcommand === 'schema-drift') {
         const skipFlag = args.includes('--skip');
         verify.cmdVerifySchemaDrift(cwd, args[2], skipFlag, raw);
+      } else if (subcommand === 'codebase-drift') {
+        verify.cmdVerifyCodebaseDrift(cwd, raw);
       } else {
-        error('Unknown verify subcommand. Available: plan-structure, phase-completeness, references, commits, artifacts, key-links, schema-drift');
+        error('Unknown verify subcommand. Available: plan-structure, phase-completeness, references, commits, artifacts, key-links, schema-drift, codebase-drift');
       }
       break;
     }
@@ -699,6 +703,13 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
       } else {
         error('Unknown requirements subcommand. Available: mark-complete');
       }
+      break;
+    }
+
+    case 'gap-analysis': {
+      // Post-planning gap checker (#2493) — unified REQUIREMENTS.md +
+      // CONTEXT.md <decisions> coverage report against PLAN.md files.
+      gapChecker.cmdGapAnalysis(cwd, args.slice(1), raw);
       break;
     }
 
