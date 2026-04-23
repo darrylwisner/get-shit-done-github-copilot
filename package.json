@@ -3,7 +3,8 @@
   "version": "1.38.3",
   "description": "A meta-prompting, context engineering and spec-driven development system for Claude Code, OpenCode, Gemini and Codex by TÂCHES.",
   "bin": {
-    "get-shit-done-cc": "bin/install.js"
+    "get-shit-done-cc": "bin/install.js",
+    "gsd-sdk": "bin/gsd-sdk.js"
   },
   "files": [
     "bin",
@@ -14,6 +15,7 @@
     "scripts",
     "sdk/src",
     "sdk/prompts",
+    "sdk/dist",
     "sdk/package.json",
     "sdk/package-lock.json",
     "sdk/tsconfig.json"
@@ -43,14 +45,19 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.84",
+    "ws": "^8.20.0"
+  },
   "devDependencies": {
-    "c8": "^11.0.0",
-    "esbuild": "^0.24.0",
-    "vitest": "^4.1.2"
+    "c8": "^11.0.0"
   },
   "scripts": {
     "build:hooks": "node scripts/build-hooks.js",
-    "prepublishOnly": "npm run build:hooks",
+    "build:sdk": "cd sdk && npm ci && npm run build",
+    "prepublishOnly": "npm run build:hooks && npm run build:sdk",
+    "pretest": "npm run build:sdk",
+    "pretest:coverage": "npm run build:sdk",
     "test": "node scripts/run-tests.cjs",
     "test:coverage": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs"
   }
