@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { GSDError } from '../errors.js';
@@ -18,7 +18,14 @@ import {
   planningPaths,
   normalizeMd,
   resolvePathUnderProject,
+  resolveAgentsDir,
+  getRuntimeConfigDir,
+  detectRuntime,
+  findProjectRoot,
+  SUPPORTED_RUNTIMES,
+  type Runtime,
 } from './helpers.js';
+import { homedir } from 'node:os';
 
 // ─── escapeRegex ────────────────────────────────────────────────────────────
 
@@ -163,6 +170,19 @@ describe('stateExtractField', () => {
     const content = '**phase:** 10';
     expect(stateExtractField(content, 'Phase')).toBe('10');
   });
+
+  it('does not treat YAML progress: block as body Progress field', () => {
+    const content = [
+      '---',
+      'progress:',
+      '  total: 5',
+      '  done: 2',
+      '---',
+      '',
+      '**Progress:** 40%',
+    ].join('\n');
+    expect(stateExtractField(content, 'Progress')).toBe('40%');
+  });
 });
 
 // ─── planningPaths ──────────────────────────────────────────────────────────
@@ -250,5 +270,272 @@ describe('resolvePathUnderProject', () => {
 
   it('rejects paths that escape the project root', async () => {
     await expect(resolvePathUnderProject(tmpDir, '../../etc/passwd')).rejects.toThrow(GSDError);
+  });
+});
+
+// ─── Runtime-aware agents dir resolution (#2402) ───────────────────────────
+
+const RUNTIME_ENV_VARS = [
+  'GSD_AGENTS_DIR', 'GSD_RUNTIME', 'CLAUDE_CONFIG_DIR', 'OPENCODE_CONFIG_DIR',
+  'OPENCODE_CONFIG', 'KILO_CONFIG_DIR', 'KILO_CONFIG', 'XDG_CONFIG_HOME',
+  'GEMINI_CONFIG_DIR', 'CODEX_HOME', 'COPILOT_CONFIG_DIR', 'ANTIGRAVITY_CONFIG_DIR',
+  'CURSOR_CONFIG_DIR', 'WINDSURF_CONFIG_DIR', 'AUGMENT_CONFIG_DIR', 'TRAE_CONFIG_DIR',
+  'QWEN_CONFIG_DIR', 'CODEBUDDY_CONFIG_DIR', 'CLINE_CONFIG_DIR',
+] as const;
+
+describe('getRuntimeConfigDir', () => {
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of RUNTIME_ENV_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
+  });
+  afterEach(() => {
+    for (const k of RUNTIME_ENV_VARS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  const defaults: Record<Runtime, string> = {
+    claude: join(homedir(), '.claude'),
+    opencode: join(homedir(), '.config', 'opencode'),
+    kilo: join(homedir(), '.config', 'kilo'),
+    gemini: join(homedir(), '.gemini'),
+    codex: join(homedir(), '.codex'),
+    copilot: join(homedir(), '.copilot'),
+    antigravity: join(homedir(), '.gemini', 'antigravity'),
+    cursor: join(homedir(), '.cursor'),
+    windsurf: join(homedir(), '.codeium', 'windsurf'),
+    augment: join(homedir(), '.augment'),
+    trae: join(homedir(), '.trae'),
+    qwen: join(homedir(), '.qwen'),
+    codebuddy: join(homedir(), '.codebuddy'),
+    cline: join(homedir(), '.cline'),
+  };
+
+  for (const runtime of SUPPORTED_RUNTIMES) {
+    it(`resolves default path for ${runtime}`, () => {
+      expect(getRuntimeConfigDir(runtime)).toBe(defaults[runtime]);
+    });
+  }
+
+  const envOverrides: Array<[Runtime, string, string]> = [
+    ['claude', 'CLAUDE_CONFIG_DIR', '/x/claude'],
+    ['gemini', 'GEMINI_CONFIG_DIR', '/x/gemini'],
+    ['codex', 'CODEX_HOME', '/x/codex'],
+    ['copilot', 'COPILOT_CONFIG_DIR', '/x/copilot'],
+    ['antigravity', 'ANTIGRAVITY_CONFIG_DIR', '/x/antigravity'],
+    ['cursor', 'CURSOR_CONFIG_DIR', '/x/cursor'],
+    ['windsurf', 'WINDSURF_CONFIG_DIR', '/x/windsurf'],
+    ['augment', 'AUGMENT_CONFIG_DIR', '/x/augment'],
+    ['trae', 'TRAE_CONFIG_DIR', '/x/trae'],
+    ['qwen', 'QWEN_CONFIG_DIR', '/x/qwen'],
+    ['codebuddy', 'CODEBUDDY_CONFIG_DIR', '/x/codebuddy'],
+    ['cline', 'CLINE_CONFIG_DIR', '/x/cline'],
+    ['opencode', 'OPENCODE_CONFIG_DIR', '/x/opencode'],
+    ['kilo', 'KILO_CONFIG_DIR', '/x/kilo'],
+  ];
+  for (const [runtime, envVar, value] of envOverrides) {
+    it(`${runtime} honors ${envVar}`, () => {
+      process.env[envVar] = value;
+      expect(getRuntimeConfigDir(runtime)).toBe(value);
+    });
+  }
+
+  it('opencode uses XDG_CONFIG_HOME when direct vars unset', () => {
+    process.env.XDG_CONFIG_HOME = '/xdg';
+    expect(getRuntimeConfigDir('opencode')).toBe(join('/xdg', 'opencode'));
+  });
+
+  it('opencode OPENCODE_CONFIG uses dirname', () => {
+    process.env.OPENCODE_CONFIG = '/cfg/opencode.json';
+    expect(getRuntimeConfigDir('opencode')).toBe('/cfg');
+  });
+
+  it('kilo uses XDG_CONFIG_HOME when direct vars unset', () => {
+    process.env.XDG_CONFIG_HOME = '/xdg';
+    expect(getRuntimeConfigDir('kilo')).toBe(join('/xdg', 'kilo'));
+  });
+});
+
+describe('detectRuntime', () => {
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of RUNTIME_ENV_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
+  });
+  afterEach(() => {
+    for (const k of RUNTIME_ENV_VARS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('defaults to claude with no signals', () => {
+    expect(detectRuntime()).toBe('claude');
+  });
+
+  it('uses GSD_RUNTIME when set to a known runtime', () => {
+    process.env.GSD_RUNTIME = 'codex';
+    expect(detectRuntime()).toBe('codex');
+  });
+
+  it('falls back to config.runtime when GSD_RUNTIME unset', () => {
+    expect(detectRuntime({ runtime: 'gemini' })).toBe('gemini');
+  });
+
+  it('GSD_RUNTIME wins over config.runtime', () => {
+    process.env.GSD_RUNTIME = 'codex';
+    expect(detectRuntime({ runtime: 'gemini' })).toBe('codex');
+  });
+
+  it('unknown GSD_RUNTIME falls through to config then claude', () => {
+    process.env.GSD_RUNTIME = 'bogus';
+    expect(detectRuntime({ runtime: 'gemini' })).toBe('gemini');
+    expect(detectRuntime()).toBe('claude');
+  });
+
+  it('unknown config.runtime falls through to claude', () => {
+    expect(detectRuntime({ runtime: 'bogus' })).toBe('claude');
+  });
+});
+
+describe('resolveAgentsDir (runtime-aware)', () => {
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of RUNTIME_ENV_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
+  });
+  afterEach(() => {
+    for (const k of RUNTIME_ENV_VARS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('defaults to Claude agents dir with no args', () => {
+    expect(resolveAgentsDir()).toBe(join(homedir(), '.claude', 'agents'));
+  });
+
+  it('GSD_AGENTS_DIR short-circuits regardless of runtime', () => {
+    process.env.GSD_AGENTS_DIR = '/explicit/agents';
+    expect(resolveAgentsDir('codex')).toBe('/explicit/agents');
+    expect(resolveAgentsDir('claude')).toBe('/explicit/agents');
+  });
+
+  it('appends /agents to the per-runtime config dir', () => {
+    process.env.CODEX_HOME = '/codex';
+    expect(resolveAgentsDir('codex')).toBe(join('/codex', 'agents'));
+  });
+});
+
+// ─── findProjectRoot (issue #2623) ─────────────────────────────────────────
+
+describe('findProjectRoot (multi-repo .planning resolution)', () => {
+  let workspace: string;
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), 'gsd-find-root-'));
+  });
+
+  afterEach(async () => {
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it('returns startDir unchanged when startDir has its own .planning/', async () => {
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    expect(findProjectRoot(workspace)).toBe(workspace);
+  });
+
+  it('returns startDir unchanged when no ancestor has .planning/', () => {
+    expect(findProjectRoot(workspace)).toBe(workspace);
+  });
+
+  it('walks up to parent .planning/ when config lists the child in sub_repos (#2623)', async () => {
+    // workspace/.planning/{config.json, PROJECT.md}
+    // workspace/app/.git/
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    await writeFile(
+      join(workspace, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['app'] }),
+      'utf-8',
+    );
+    const app = join(workspace, 'app');
+    await mkdir(join(app, '.git'), { recursive: true });
+
+    expect(findProjectRoot(app)).toBe(workspace);
+  });
+
+  it('resolves parent root from deeply nested dir inside a sub_repo', async () => {
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    await writeFile(
+      join(workspace, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['app'] }),
+      'utf-8',
+    );
+    const nested = join(workspace, 'app', 'src', 'modules');
+    await mkdir(join(workspace, 'app', '.git'), { recursive: true });
+    await mkdir(nested, { recursive: true });
+
+    expect(findProjectRoot(nested)).toBe(workspace);
+  });
+
+  it('supports planning.sub_repos nested config shape', async () => {
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    await writeFile(
+      join(workspace, '.planning', 'config.json'),
+      JSON.stringify({ planning: { sub_repos: ['app'] } }),
+      'utf-8',
+    );
+    const app = join(workspace, 'app');
+    await mkdir(join(app, '.git'), { recursive: true });
+
+    expect(findProjectRoot(app)).toBe(workspace);
+  });
+
+  it('falls back to .git heuristic when parent has .planning/ but no matching sub_repos', async () => {
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    // Config doesn't list the child, but child has .git and parent has .planning/.
+    await writeFile(
+      join(workspace, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: [] }),
+      'utf-8',
+    );
+    const app = join(workspace, 'app');
+    await mkdir(join(app, '.git'), { recursive: true });
+
+    expect(findProjectRoot(app)).toBe(workspace);
+  });
+
+  it('swallows unparseable config.json and falls back to .git heuristic', async () => {
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    await writeFile(join(workspace, '.planning', 'config.json'), '{ not json', 'utf-8');
+    const app = join(workspace, 'app');
+    await mkdir(join(app, '.git'), { recursive: true });
+
+    expect(findProjectRoot(app)).toBe(workspace);
+  });
+
+  it('supports legacy multiRepo: true when child is inside a git repo', async () => {
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    await writeFile(
+      join(workspace, '.planning', 'config.json'),
+      JSON.stringify({ multiRepo: true }),
+      'utf-8',
+    );
+    const app = join(workspace, 'app');
+    await mkdir(join(app, '.git'), { recursive: true });
+
+    expect(findProjectRoot(app)).toBe(workspace);
+  });
+
+  it('does not walk up when child has its own .planning/ (#1362 guard)', async () => {
+    await mkdir(join(workspace, '.planning'), { recursive: true });
+    await writeFile(
+      join(workspace, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['app'] }),
+      'utf-8',
+    );
+    const app = join(workspace, 'app');
+    await mkdir(join(app, '.planning'), { recursive: true });
+
+    expect(findProjectRoot(app)).toBe(app);
   });
 });

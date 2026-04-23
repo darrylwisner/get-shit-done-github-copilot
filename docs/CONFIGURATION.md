@@ -227,6 +227,17 @@ All workflow toggles follow the **absent = enabled** pattern. If a key is missin
 | `planning.search_gitignored` | boolean | `false` | Add `--no-ignore` to broad searches to include `.planning/` |
 | `planning.sub_repos` | array of strings | `[]` | Paths of nested sub-repos relative to the project root. When set, GSD-aware tooling scopes phase-lookup, path-resolution, and commit operations per sub-repo instead of treating the outer repo as a monorepo |
 
+### Project-Root Resolution in Multi-Repo Workspaces
+
+When `sub_repos` is set and `gsd-tools.cjs` or `gsd-sdk query` is invoked from inside a listed child repo, both CLIs walk up to the parent workspace that owns `.planning/` before dispatching handlers. Resolution order (checked at each ancestor up to 10 levels, never above `$HOME`):
+
+1. If the starting directory already has its own `.planning/`, it is the project root (no walk-up).
+2. Parent has `.planning/config.json` listing the starting directory's top-level segment in `sub_repos` (or the legacy `planning.sub_repos` shape).
+3. Parent has `.planning/config.json` with legacy `multiRepo: true` and the starting directory is inside a git repo.
+4. Parent has `.planning/` and an ancestor up to the candidate parent contains `.git` (heuristic fallback).
+
+If none match, the starting directory is returned unchanged. Explicit `--project-dir /path/to/workspace` is idempotent under this resolution.
+
 ### Auto-Detection
 
 If `.planning/` is in `.gitignore`, `commit_docs` is automatically `false` regardless of config.json. This prevents git errors.
@@ -608,6 +619,17 @@ Override specific agents without changing the entire profile:
 ```
 
 Valid override values: `opus`, `sonnet`, `haiku`, `inherit`, or any fully-qualified model ID (e.g., `"openai/o3"`, `"google/gemini-2.5-pro"`).
+
+`model_overrides` can be set in either `.planning/config.json` (per-project)
+or `~/.gsd/defaults.json` (global). Per-project entries win on conflict and
+non-conflicting global entries are preserved, so you can tune a single
+agent's model in one repo without re-setting global defaults. This applies
+uniformly across Claude Code, Codex, OpenCode, Kilo, and the other
+supported runtimes. On Codex and OpenCode, the resolved model is embedded
+into each agent's static config at install time — `spawn_agent` and
+OpenCode's `task` interface do not accept an inline `model` parameter, so
+running `gsd install <runtime>` after editing `model_overrides` is required
+for the change to take effect. See issue #2256.
 
 ### Non-Claude Runtimes (Codex, OpenCode, Gemini CLI, Kilo)
 
