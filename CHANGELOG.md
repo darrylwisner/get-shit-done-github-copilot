@@ -4,7 +4,32 @@ All notable changes to GSD will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.37.1...HEAD)
+## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.38.4...HEAD)
+
+## [1.38.4] - 2026-04-25
+
+### Fixed
+- **SDK uses full installed agent/workflow prompts** — The SDK was bundling stripped-down copies of agent definitions (~17% of the real content), missing critical instructions like plan file naming conventions, scope reduction rules, and discovery protocols. The SDK now loads the complete installed agents at runtime and resolves `@`-file references instead of stripping them.
+- **SDK executor receives actual plan content** — `executeSinglePlan` was passing `null` to the prompt builder instead of the parsed plan file. The executor now loads, parses, and passes the full plan (tasks, objectives, verification criteria) to the prompt.
+- **SDK verification checks VERIFICATION.md, not just session exit code** — A verify session that wrote `status: gaps_found` to VERIFICATION.md was treated as "passed" because the session itself didn't crash. The gap-closure retry loop now reads the actual verification status from disk.
+- **SDK plan ID derivation for bare PLAN.md files** — Plans named `PLAN.md` (instead of `01-01-PLAN.md`) produced an empty-string ID, causing downstream execution issues.
+- **SDK headless discuss mode prevents interactive tool calls** — The self-discuss step loaded the full interactive workflow prompt, causing the agent to invoke `AskUserQuestion` and `Skill()` in headless mode. A mandatory headless override is now prepended to prevent interactive tool usage.
+
+### Removed
+- Deleted 13 bundled SDK prompt files (`sdk/prompts/agents/`, `sdk/prompts/workflows/`) that were maintained as stripped-down copies and had drifted from the real agents.
+
+### Enhancement: richer architecture docs from `/gsd-map-codebase` (#2500)
+
+`/gsd-map-codebase` (arch focus) now produces a `.planning/codebase/ARCHITECTURE.md` with the same richness as the research version created at project creation:
+
+- **ASCII system overview diagram** — component boxes and request-flow arrows, generated from actual codebase analysis
+- **Component responsibility table** — Component / Responsibility / File columns for at-a-glance orientation
+- **Data flow traces** — Primary request path and secondary flows with numbered steps and code references (`file:line`)
+- **Architectural constraints** — Threading model, global state inventory, circular import chains
+- **Anti-patterns** — Codebase-specific patterns to avoid, with the correct alternative
+- **`<!-- refreshed: {date} -->`** marker at the top so users can see when the doc was last generated
+
+Running `/gsd-map-codebase` or `/gsd-scan --focus arch` after a major refactor now produces an up-to-date architectural reference that includes the visual diagrams previously only available in the (non-refreshable) research version.
 
 ### SDK query layer — Phase 3 (what you get)
 
@@ -2377,7 +2402,8 @@ Technical implementation details for Phase 2 appear in the **Changed** section b
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.38.2...HEAD
+[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.38.4...HEAD
+[1.38.4]: https://github.com/gsd-build/get-shit-done/compare/v1.38.2...v1.38.4
 [1.38.2]: https://github.com/gsd-build/get-shit-done/compare/v1.37.1...v1.38.2
 [1.37.1]: https://github.com/gsd-build/get-shit-done/compare/v1.37.0...v1.37.1
 [1.37.0]: https://github.com/gsd-build/get-shit-done/compare/v1.36.0...v1.37.0
