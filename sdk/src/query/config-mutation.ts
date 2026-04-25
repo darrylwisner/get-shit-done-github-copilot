@@ -10,7 +10,7 @@
  * import { configSet, configNewProject } from './config-mutation.js';
  *
  * await configSet(['model_profile', 'quality'], '/project');
- * // { data: { set: true, key: 'model_profile', value: 'quality' } }
+ * // { data: { updated: true, key: 'model_profile', value: 'quality', previousValue: 'balanced' } }
  *
  * await configNewProject([], '/project');
  * // { data: { created: true, path: '.planning/config.json' } }
@@ -22,7 +22,8 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { MODEL_PROFILES, VALID_PROFILES } from './config-query.js';
+import { VALID_PROFILES, getAgentToModelMapForProfile } from './config-query.js';
+import { VALID_CONFIG_KEYS, DYNAMIC_KEY_PATTERNS } from './config-schema.js';
 import { planningPaths } from './helpers.js';
 import { acquireStateLock, releaseStateLock } from './state-mutation.js';
 import type { QueryHandler } from './utils.js';
@@ -45,44 +46,8 @@ async function atomicWriteConfig(configPath: string, config: Record<string, unkn
 }
 
 // ─── VALID_CONFIG_KEYS ────────────────────────────────────────────────────
-
-/**
- * Allowlist of valid config key paths.
- *
- * Ported from config.cjs lines 14-37.
- * Dynamic patterns (agent_skills.*, features.*) are handled
- * separately in isValidConfigKey.
- */
-const VALID_CONFIG_KEYS = new Set([
-  'mode', 'granularity', 'parallelization', 'commit_docs', 'model_profile',
-  'search_gitignored', 'brave_search', 'firecrawl', 'exa_search',
-  'workflow.research', 'workflow.plan_check', 'workflow.verifier',
-  'workflow.nyquist_validation', 'workflow.ui_phase', 'workflow.ui_safety_gate',
-  'workflow.auto_advance', 'workflow.node_repair', 'workflow.node_repair_budget',
-  'workflow.text_mode',
-  'workflow.research_before_questions',
-  'workflow.discuss_mode',
-  'workflow.skip_discuss',
-  'workflow.ui_review',
-  'workflow.max_discuss_passes',
-  'workflow.use_worktrees',
-  'workflow.code_review',
-  'workflow.code_review_depth',
-  'git.branching_strategy', 'git.base_branch', 'git.phase_branch_template',
-  'git.milestone_branch_template', 'git.quick_branch_template',
-  'planning.commit_docs', 'planning.search_gitignored',
-  'workflow.subagent_timeout',
-  'workflow.context_coverage_gate',
-  'hooks.context_warnings',
-  'hooks.workflow_guard',
-  'features.thinking_partner',
-  'features.global_learnings',
-  'learnings.max_inject',
-  'context',
-  'project_code', 'phase_naming',
-  'manager.flags.discuss', 'manager.flags.plan', 'manager.flags.execute',
-  'response_language',
-]);
+// Imported from ./config-schema.js — single source of truth, kept in sync
+// with get-shit-done/bin/lib/config-schema.cjs by a CI parity test (#2653).
 
 // ─── CONFIG_KEY_SUGGESTIONS (D9 — match CJS config.cjs:57-67) ────────────
 
@@ -97,9 +62,13 @@ const CONFIG_KEY_SUGGESTIONS: Record<string, string> = {
   'hooks.research_questions': 'workflow.research_before_questions',
   'workflow.research_questions': 'workflow.research_before_questions',
   'workflow.codereview': 'workflow.code_review',
+  'workflow.review_command': 'workflow.code_review_command',
   'workflow.review': 'workflow.code_review',
   'workflow.code_review_level': 'workflow.code_review_depth',
   'workflow.review_depth': 'workflow.code_review_depth',
+  'review.model': 'review.models.<cli-name>',
+  'sub_repos': 'planning.sub_repos',
+  'plan_checker': 'workflow.plan_check',
 };
 
 // ─── isValidConfigKey ─────────────────────────────────────────────────────
@@ -117,11 +86,10 @@ const CONFIG_KEY_SUGGESTIONS: Record<string, string> = {
 export function isValidConfigKey(keyPath: string): { valid: boolean; suggestion?: string } {
   if (VALID_CONFIG_KEYS.has(keyPath)) return { valid: true };
 
-  // Dynamic patterns: agent_skills.<agent-type>
-  if (/^agent_skills\.[a-zA-Z0-9_-]+$/.test(keyPath)) return { valid: true };
-
-  // Dynamic patterns: features.<feature_name>
-  if (/^features\.[a-zA-Z0-9_]+$/.test(keyPath)) return { valid: true };
+  // Dynamic patterns — all sourced from shared config-schema (#2653).
+  // Covers agent_skills.*, review.models.*, features.*,
+  // claude_md_assembly.blocks.*, and model_profile_overrides.*.<tier>.
+  if (DYNAMIC_KEY_PATTERNS.some((p) => p.test(keyPath))) return { valid: true };
 
   // D9: Check curated suggestions before LCP fallback
   if (CONFIG_KEY_SUGGESTIONS[keyPath]) {
@@ -180,6 +148,18 @@ export function parseConfigValue(value: string): unknown {
  * @param dotPath - Dot-notation key path (e.g., 'workflow.auto_advance')
  * @param value - Value to set
  */
+function getValueAtPath(obj: Record<string, unknown>, dotPath: string): unknown {
+  const keys = dotPath.split('.');
+  let current: unknown = obj;
+  for (const key of keys) {
+    if (current === undefined || current === null || typeof current !== 'object') {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
 function setConfigValue(obj: Record<string, unknown>, dotPath: string, value: unknown): void {
   const keys = dotPath.split('.');
   let current: Record<string, unknown> = obj;
@@ -203,7 +183,7 @@ function setConfigValue(obj: Record<string, unknown>, dotPath: string, value: un
  *
  * @param args - args[0]=key, args[1]=value
  * @param projectDir - Project root directory
- * @returns QueryResult with { set: true, key, value }
+ * @returns QueryResult matching gsd-tools `config-set` JSON: `{ updated, key, value, previousValue }`
  * @throws GSDError with Validation if key is invalid or args missing
  */
 export const configSet: QueryHandler = async (args, projectDir, _workstream) => {
@@ -236,6 +216,7 @@ export const configSet: QueryHandler = async (args, projectDir, _workstream) => 
   // D6: Lock protection for read-modify-write (match CJS config.cjs:296)
   const paths = planningPaths(projectDir);
   const lockPath = await acquireStateLock(paths.config);
+  let previousValue: unknown;
   try {
     let config: Record<string, unknown> = {};
     try {
@@ -245,13 +226,23 @@ export const configSet: QueryHandler = async (args, projectDir, _workstream) => 
       // Start with empty config if file doesn't exist or is malformed
     }
 
+    previousValue = getValueAtPath(config, keyPath);
     setConfigValue(config, keyPath, parsedValue);
     await atomicWriteConfig(paths.config, config);
   } finally {
     await releaseStateLock(lockPath);
   }
 
-  return { data: { set: true, key: keyPath, value: parsedValue } };
+  // Match CJS JSON: `JSON.stringify` omits keys whose value is `undefined`
+  const data: Record<string, unknown> = {
+    updated: true,
+    key: keyPath,
+    value: parsedValue,
+  };
+  if (previousValue !== undefined) {
+    data.previousValue = previousValue;
+  }
+  return { data };
 };
 
 // ─── configSetModelProfile ────────────────────────────────────────────────
@@ -284,6 +275,7 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, _wor
   // D6: Lock protection for read-modify-write
   const paths = planningPaths(projectDir);
   const lockPath = await acquireStateLock(paths.config);
+  let previousProfile = 'balanced';
   try {
     let config: Record<string, unknown> = {};
     try {
@@ -293,13 +285,24 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, _wor
       // Start with empty config
     }
 
+    const prev =
+      typeof config.model_profile === 'string' ? config.model_profile.toLowerCase().trim() : '';
+    previousProfile = VALID_PROFILES.includes(prev) ? prev : 'balanced';
     config.model_profile = normalized;
     await atomicWriteConfig(paths.config, config);
   } finally {
     await releaseStateLock(lockPath);
   }
 
-  return { data: { set: true, profile: normalized, agents: MODEL_PROFILES } };
+  const agentToModelMap = getAgentToModelMapForProfile(normalized);
+  return {
+    data: {
+      updated: true,
+      profile: normalized,
+      previousProfile,
+      agentToModelMap,
+    },
+  };
 };
 
 // ─── configNewProject ─────────────────────────────────────────────────────
