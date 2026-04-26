@@ -4,7 +4,12 @@ All notable changes to GSD will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.38.4...HEAD)
+## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.38.5...HEAD)
+
+## [1.38.5] - 2026-04-25
+
+### Fixed
+- SDK executor agents now write SUMMARY.md to `.planning/phases/{phase}/` instead of the project root — `phaseDir` is threaded from PhaseRunner through to the executor prompt's completion instructions
 
 ## [1.38.4] - 2026-04-25
 
