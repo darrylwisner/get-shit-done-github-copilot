@@ -790,7 +790,7 @@ export class PhaseRunner {
 
       const phaseType = PhaseType.Execute;
       const contextFiles = await this.contextEngine.resolveContextFiles(phaseType);
-      const prompt = await this.promptFactory.buildPrompt(phaseType, parsedPlan, contextFiles);
+      const prompt = await this.promptFactory.buildPrompt(phaseType, parsedPlan, contextFiles, phaseOp.phase_dir);
 
       return await runPhaseStepSession(
         prompt,

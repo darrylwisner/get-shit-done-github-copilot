@@ -110,11 +110,12 @@ export class PromptFactory {
     phaseType: PhaseType,
     plan: ParsedPlan | null,
     contextFiles: ContextFiles,
+    phaseDir?: string,
   ): Promise<string> {
     // Execute phase with a plan: delegate to existing buildExecutorPrompt
     if (phaseType === PhaseType.Execute && plan) {
       const agentDef = await this.loadAgentDef(phaseType);
-      return sanitizePrompt(buildExecutorPrompt(plan, agentDef), this.projectDir);
+      return sanitizePrompt(buildExecutorPrompt(plan, { agentDef, phaseDir }), this.projectDir);
     }
 
     // Prompt assembly order is cache-optimized (#1614):
