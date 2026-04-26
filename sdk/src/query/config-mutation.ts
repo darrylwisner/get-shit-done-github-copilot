@@ -186,7 +186,7 @@ function setConfigValue(obj: Record<string, unknown>, dotPath: string, value: un
  * @returns QueryResult matching gsd-tools `config-set` JSON: `{ updated, key, value, previousValue }`
  * @throws GSDError with Validation if key is invalid or args missing
  */
-export const configSet: QueryHandler = async (args, projectDir, _workstream) => {
+export const configSet: QueryHandler = async (args, projectDir, workstream) => {
   const keyPath = args[0];
   const rawValue = args[1];
   if (!keyPath) {
@@ -214,7 +214,7 @@ export const configSet: QueryHandler = async (args, projectDir, _workstream) => 
   }
 
   // D6: Lock protection for read-modify-write (match CJS config.cjs:296)
-  const paths = planningPaths(projectDir);
+  const paths = planningPaths(projectDir, workstream);
   const lockPath = await acquireStateLock(paths.config);
   let previousValue: unknown;
   try {
@@ -255,7 +255,7 @@ export const configSet: QueryHandler = async (args, projectDir, _workstream) => 
  * @returns QueryResult with { set: true, profile, agents }
  * @throws GSDError with Validation if profile is invalid
  */
-export const configSetModelProfile: QueryHandler = async (args, projectDir, _workstream) => {
+export const configSetModelProfile: QueryHandler = async (args, projectDir, workstream) => {
   const profileName = args[0];
   if (!profileName) {
     throw new GSDError(
@@ -273,7 +273,7 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, _wor
   }
 
   // D6: Lock protection for read-modify-write
-  const paths = planningPaths(projectDir);
+  const paths = planningPaths(projectDir, workstream);
   const lockPath = await acquireStateLock(paths.config);
   let previousProfile = 'balanced';
   try {
@@ -317,8 +317,8 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, _wor
  * @param projectDir - Project root directory
  * @returns QueryResult with { created: true, path } or { created: false, reason }
  */
-export const configNewProject: QueryHandler = async (args, projectDir, _workstream) => {
-  const paths = planningPaths(projectDir);
+export const configNewProject: QueryHandler = async (args, projectDir, workstream) => {
+  const paths = planningPaths(projectDir, workstream);
 
   // Idempotent: don't overwrite existing config
   if (existsSync(paths.config)) {
@@ -443,13 +443,13 @@ export const configNewProject: QueryHandler = async (args, projectDir, _workstre
  * @param projectDir - Project root directory
  * @returns QueryResult with { ensured: true, section }
  */
-export const configEnsureSection: QueryHandler = async (args, projectDir, _workstream) => {
+export const configEnsureSection: QueryHandler = async (args, projectDir, workstream) => {
   const sectionName = args[0];
   if (!sectionName) {
     throw new GSDError('Usage: config-ensure-section <section>', ErrorClassification.Validation);
   }
 
-  const paths = planningPaths(projectDir);
+  const paths = planningPaths(projectDir, workstream);
   let config: Record<string, unknown> = {};
   try {
     const raw = await readFile(paths.config, 'utf-8');

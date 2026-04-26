@@ -373,3 +373,112 @@ describe('initManager', () => {
     });
   });
 });
+
+// ─── Workstream path threading tests (#2731) ─────────────────────────────────
+
+const WORKSTREAM_CONFIG = JSON.stringify({
+  model_profile: 'balanced',
+  commit_docs: false,
+  git: {
+    branching_strategy: 'none',
+    phase_branch_template: 'gsd/phase-{phase}-{slug}',
+    milestone_branch_template: 'gsd/{milestone}-{slug}',
+    quick_branch_template: null,
+  },
+  workflow: { research: true, plan_check: true, verifier: true, nyquist_validation: true },
+});
+
+const WORKSTREAM_STATE = [
+  '---',
+  'milestone: v1.0',
+  'status: executing',
+  '---',
+  '',
+  '# Project State',
+].join('\n');
+
+const WORKSTREAM_ROADMAP = [
+  '# Roadmap',
+  '',
+  '## v1.0: Ops Milestone',
+  '',
+  '### Phase 1: Weave Cron',
+  '',
+  '**Goal:** Set up cron jobs',
+  '',
+  '### Phase 2: Alerts',
+  '',
+  '**Goal:** Set up alerting',
+  '',
+].join('\n');
+
+describe('initProgress workstream (#2731)', () => {
+  it('scans phases from workstream subdirectory, not root', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'gsd-ws-progress-'));
+    try {
+      const wsBase = join(tmp, '.planning', 'workstreams', 'production-support');
+
+      // Root .planning has NO phases — if workstream ignored, result will be empty
+      await mkdir(join(tmp, '.planning'), { recursive: true });
+      await writeFile(join(tmp, '.planning', 'config.json'), WORKSTREAM_CONFIG);
+
+      // Workstream-scoped structure
+      await mkdir(join(wsBase, 'phases', '01-weave-cron'), { recursive: true });
+      await mkdir(join(wsBase, 'phases', '02-alerts'), { recursive: true });
+      await writeFile(join(wsBase, 'config.json'), WORKSTREAM_CONFIG);
+      await writeFile(join(wsBase, 'STATE.md'), WORKSTREAM_STATE);
+      await writeFile(join(wsBase, 'ROADMAP.md'), WORKSTREAM_ROADMAP);
+
+      // Phase 01: plan + summary (complete)
+      await writeFile(join(wsBase, 'phases', '01-weave-cron', '01-01-PLAN.md'), '# Plan');
+      await writeFile(join(wsBase, 'phases', '01-weave-cron', '01-01-SUMMARY.md'), '# Done');
+
+      // Phase 02: plan only (in_progress)
+      await writeFile(join(wsBase, 'phases', '02-alerts', '02-01-PLAN.md'), '# Plan');
+
+      const result = await initProgress([], tmp, 'production-support');
+      const data = result.data as Record<string, unknown>;
+      const phases = data.phases as Record<string, unknown>[];
+
+      expect(phases.length).toBeGreaterThan(0);
+      const phase1 = phases.find(p => (p.number as string).startsWith('01') || p.number === '1');
+      expect(phase1).toBeDefined();
+      expect(phase1?.status).toBe('complete');
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('initManager workstream (#2731)', () => {
+  it('reads ROADMAP.md from workstream subdirectory, not root', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'gsd-ws-manager-'));
+    try {
+      const wsBase = join(tmp, '.planning', 'workstreams', 'production-support');
+
+      // Root .planning has no ROADMAP — if workstream ignored, initManager errors
+      await mkdir(join(tmp, '.planning'), { recursive: true });
+      await writeFile(join(tmp, '.planning', 'config.json'), WORKSTREAM_CONFIG);
+
+      // Workstream-scoped structure
+      await mkdir(join(wsBase, 'phases', '01-weave-cron'), { recursive: true });
+      await writeFile(join(wsBase, 'config.json'), WORKSTREAM_CONFIG);
+      await writeFile(join(wsBase, 'STATE.md'), WORKSTREAM_STATE);
+      await writeFile(join(wsBase, 'ROADMAP.md'), WORKSTREAM_ROADMAP);
+      await writeFile(join(wsBase, 'phases', '01-weave-cron', '01-01-PLAN.md'), '# Plan');
+
+      const result = await initManager([], tmp, 'production-support');
+      const data = result.data as Record<string, unknown>;
+
+      // Should NOT return error (no ROADMAP found at root)
+      expect(data.error).toBeUndefined();
+      // Should find phases from the workstream ROADMAP
+      const phases = data.phases as Record<string, unknown>[];
+      expect(phases.length).toBeGreaterThan(0);
+      const phase1 = phases.find(p => p.number === '1');
+      expect(phase1).toBeDefined();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+});

@@ -344,7 +344,7 @@ export const validateConsistency: QueryHandler = async (_args, projectDir, works
  * @param projectDir - Project root directory
  * @returns QueryResult with { status, errors, warnings, info, repairable_count, repairs_performed? }
  */
-export const validateHealth: QueryHandler = async (args, projectDir, _workstream) => {
+export const validateHealth: QueryHandler = async (args, projectDir, workstream) => {
   const doRepair = args.includes('--repair');
 
   // T-12-09: Home directory guard
@@ -365,13 +365,13 @@ export const validateHealth: QueryHandler = async (args, projectDir, _workstream
     };
   }
 
-  const paths = planningPaths(projectDir);
-  const planBase = join(projectDir, '.planning');
+  const paths = planningPaths(projectDir, workstream);
+  const planBase = paths.planning;
   const projectPath = join(planBase, 'PROJECT.md');
-  const roadmapPath = join(planBase, 'ROADMAP.md');
-  const statePath = join(planBase, 'STATE.md');
-  const configPath = join(planBase, 'config.json');
-  const phasesDir = join(planBase, 'phases');
+  const roadmapPath = paths.roadmap;
+  const statePath = paths.state;
+  const configPath = paths.config;
+  const phasesDir = paths.phases;
 
   interface Issue {
     code: string;

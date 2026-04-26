@@ -153,7 +153,7 @@ gsd-tools path: $HOME/.claude/get-shit-done/bin/gsd-tools.cjs
 1. **Invoke graphify:**
    Run from the project root:
    ```
-   graphify . --update
+   graphify update .
    ```
    This builds the knowledge graph with SHA256 incremental caching.
    Timeout: up to 5 minutes (or as configured via graphify.build_timeout).

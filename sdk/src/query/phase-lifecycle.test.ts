@@ -150,6 +150,120 @@ describe('replaceInCurrentMilestone', () => {
     expect(before).toContain('3 plans'); // old milestone untouched
     expect(after).toContain('4 plans'); // current milestone updated
   });
+
+  it('replaces only in current milestone when older milestones are wrapped in <details>', async () => {
+    const { replaceInCurrentMilestone } = await import('./phase-lifecycle.js');
+    const content = [
+      '# Roadmap',
+      '',
+      '<details>',
+      '<summary>✅ v1.18 (shipped)</summary>',
+      '',
+      '### Phase 1: Old Phase',
+      '',
+      '- [ ] Phase 1: Old Phase',
+      '',
+      '</details>',
+      '',
+      '<details>',
+      '<summary>✅ v1.19 (shipped)</summary>',
+      '',
+      '### Phase 2: Another Old Phase',
+      '',
+      '</details>',
+      '',
+      '## Current Milestone: v1.20',
+      '',
+      '- [ ] Phase 3: Current work',
+      '',
+      '### Phase 3: Current work',
+      '',
+      '**Plans:** 0/2 plans',
+      '',
+    ].join('\n');
+
+    const pattern = /\*\*Plans:\*\* [^\n]+/;
+    const result = replaceInCurrentMilestone(content, pattern, '**Plans:** 2/2 plans complete');
+
+    // Should update Phase 3's Plans line (current milestone)
+    expect(result).toContain('**Plans:** 2/2 plans complete');
+    // Should NOT touch v1.18 or v1.19 sections
+    expect(result).toContain('✅ v1.18');
+    expect(result).toContain('✅ v1.19');
+  });
+
+  it('replaces inside active milestone when it is wrapped in a <details> block', async () => {
+    const { replaceInCurrentMilestone } = await import('./phase-lifecycle.js');
+    // Scenario: active milestone is collapsed in <details> (e.g. user collapsed it)
+    const content = [
+      '# Roadmap',
+      '',
+      '<details>',
+      '<summary>✅ v1.18 (shipped)</summary>',
+      '',
+      '### Phase 1: Old Phase',
+      '',
+      '**Plans:** 1/1 plans',
+      '',
+      '</details>',
+      '',
+      '<details>',
+      '<summary>🚧 v1.19 in-progress</summary>',
+      '',
+      '### Phase 2: Current Work',
+      '',
+      '**Plans:** 1/2 plans',
+      '',
+      '</details>',
+      '',
+    ].join('\n');
+
+    const pattern = /\*\*Plans:\*\* [^\n]+/g;
+    const result = replaceInCurrentMilestone(content, pattern, '**Plans:** 2/2 plans complete');
+
+    // The replacement should happen somewhere in the content (not silently dropped)
+    expect(result).toContain('**Plans:** 2/2 plans complete');
+    // v1.18 old plans line should remain untouched
+    expect(result).toContain('**Plans:** 1/1 plans');
+  });
+
+  it('replaces inside active <details> even when footer text exists after </details>', async () => {
+    const { replaceInCurrentMilestone } = await import('./phase-lifecycle.js');
+    // Scenario: active milestone is the last <details> block, but a footer
+    // (e.g. "---\n*Last updated*") follows it. The fast-path sees after.trim()
+    // non-empty and replaces in the footer instead of inside the active block.
+    const content = [
+      '# Roadmap',
+      '',
+      '<details>',
+      '<summary>v1.0 (Archived)</summary>',
+      '',
+      '**Plans:** 1/1 plans',
+      '',
+      '</details>',
+      '',
+      '<details>',
+      '<summary>v2.0 (Active)</summary>',
+      '',
+      '**Plans:** 1/2 plans',
+      '',
+      '</details>',
+      '',
+      '---',
+      '*Last updated: 2026-01-01*',
+    ].join('\n');
+
+    const pattern = /\*\*Plans:\*\* [^\n]+/g;
+    const result = replaceInCurrentMilestone(content, pattern, '**Plans:** 2/2 plans complete');
+
+    // Active milestone inside last <details> should be updated
+    expect(result).toContain('**Plans:** 2/2 plans complete');
+    // Archived milestone should remain untouched
+    expect(result).toContain('**Plans:** 1/1 plans');
+    // Footer should be preserved verbatim
+    expect(result).toContain('---');
+    expect(result).toContain('*Last updated: 2026-01-01*');
+  });
 });
 
 // ─── readModifyWriteRoadmapMd ───────────────────────────────────────────
@@ -244,6 +358,100 @@ describe('phaseAdd', () => {
     const sepIdx = roadmap.lastIndexOf('\n---');
     expect(phaseIdx).toBeLessThan(sepIdx);
     expect(phaseIdx).toBeGreaterThan(0);
+  });
+
+  it('detects max phase from bullet checklist format (regression #2726)', async () => {
+    const { phaseAdd } = await import('./phase-lifecycle.js');
+
+    const roadmap = [
+      '# Roadmap',
+      '',
+      '## Current Milestone: v5.0',
+      '',
+      '- [x] Phase 76: Data Import',
+      '- [x] Phase 77: Data Transform',
+      '- [ ] Phase 88: Final Cleanup',
+      '',
+    ].join('\n');
+
+    await setupTestProject(tmpDir, {
+      roadmap,
+      state: MINIMAL_STATE,
+      phases: [],
+    });
+
+    const result = await phaseAdd(['new-feature'], tmpDir);
+    const data = result.data as Record<string, unknown>;
+
+    expect(data.phase_number).toBe(89);
+    expect(data.padded).toBe('89');
+  });
+
+  it('detects max phase from bold inline format (regression #2726)', async () => {
+    const { phaseAdd } = await import('./phase-lifecycle.js');
+
+    const roadmap = [
+      '# Roadmap',
+      '',
+      '## Current Milestone: v5.0',
+      '',
+      '**Phase 50: Core Infrastructure**',
+      '**Phase 51: API Layer**',
+      '',
+    ].join('\n');
+
+    await setupTestProject(tmpDir, {
+      roadmap,
+      state: MINIMAL_STATE,
+      phases: [],
+    });
+
+    const result = await phaseAdd(['new-feature'], tmpDir);
+    const data = result.data as Record<string, unknown>;
+
+    expect(data.phase_number).toBe(52);
+  });
+
+  it('falls back to filesystem scan when no phase matches in ROADMAP (regression #2726)', async () => {
+    const { phaseAdd } = await import('./phase-lifecycle.js');
+
+    // ROADMAP with no recognizable phase entries
+    const roadmap = '# Roadmap\n\n## Current Milestone: v5.0\n\nSome content without phases\n';
+
+    await setupTestProject(tmpDir, {
+      roadmap,
+      state: MINIMAL_STATE,
+      phases: ['45-legacy-phase', '46-another-phase'],
+    });
+
+    const result = await phaseAdd(['new-feature'], tmpDir);
+    const data = result.data as Record<string, unknown>;
+
+    // Should detect phases 45 and 46 on disk, so new phase = 47
+    expect(data.phase_number).toBe(47);
+  });
+
+  it('filesystem fallback handles project-code-prefixed phase directories (regression coderabbit)', async () => {
+    const { phaseAdd } = await import('./phase-lifecycle.js');
+
+    const roadmap = '# Roadmap\n\n## Current Milestone: v5.0\n\nSome content\n';
+
+    await setupTestProject(tmpDir, {
+      roadmap,
+      state: MINIMAL_STATE,
+      phases: [],
+    });
+
+    // Create prefixed directories manually (project_code = "CK" scenario)
+    const phasesDir = join(tmpDir, '.planning', 'phases');
+    await mkdir(join(phasesDir, 'CK-45-legacy-phase'), { recursive: true });
+    await mkdir(join(phasesDir, 'CK-46-another-phase'), { recursive: true });
+
+    const result = await phaseAdd(['new-feature'], tmpDir);
+    const data = result.data as Record<string, unknown>;
+
+    // Should detect CK-45 and CK-46, so new phase = 47
+    expect(data.phase_number).toBe(47);
   });
 });
 
@@ -1014,6 +1222,74 @@ describe('phaseComplete', () => {
     expect(state).toContain('Total plans completed: 6');
     // By Phase table should have a row for phase 10
     expect(state).toMatch(/\|\s*10\s*\|\s*3\s*\|/);
+  });
+
+  it('does not overwrite plan checkbox when **Plans:** is on its own line (regression #2728)', async () => {
+    const { phaseComplete } = await import('./phase-lifecycle.js');
+
+    const roadmap = [
+      '# Roadmap',
+      '',
+      '## Current Milestone: v3.0',
+      '',
+      '- [ ] Phase 7: marketing-landing-v2',
+      '',
+      '### Phase 7: marketing-landing-v2',
+      '',
+      '**Goal:** Landing page',
+      '**Plans:**',
+      '- [x] 07-01-cherry-pick-foundation-PLAN.md — Wave 1',
+      '- [x] 07-02-routing-auth-seo-PLAN.md — Wave 2',
+      '',
+      '### Phase 8: p3-nice-to-haves',
+      '',
+      '**Goal:** Nice to haves',
+      '**Plans:** 3 plans',
+      '',
+    ].join('\n');
+
+    const state = [
+      '---',
+      'gsd_state_version: 1.0',
+      'milestone: v3.0',
+      'status: executing',
+      'progress:',
+      '  total_phases: 2',
+      '  completed_phases: 0',
+      '  total_plans: 4',
+      '  completed_plans: 2',
+      '  percent: 50',
+      '---',
+      '',
+      '# Project State',
+      '',
+      'Phase: 7 of 2 — EXECUTING',
+      'Status: Executing Phase 7',
+    ].join('\n');
+
+    await setupTestProject(tmpDir, {
+      roadmap,
+      state,
+      phases: ['07-marketing-landing-v2', '08-p3-nice-to-haves'],
+    });
+
+    const p7Dir = join(tmpDir, '.planning', 'phases', '07-marketing-landing-v2');
+    await writeFile(join(p7Dir, '07-01-PLAN.md'), 'plan1', 'utf-8');
+    await writeFile(join(p7Dir, '07-02-PLAN.md'), 'plan2', 'utf-8');
+    await writeFile(join(p7Dir, '07-01-SUMMARY.md'), 'summary1', 'utf-8');
+    await writeFile(join(p7Dir, '07-02-SUMMARY.md'), 'summary2', 'utf-8');
+
+    await phaseComplete(['7'], tmpDir);
+
+    const updated = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+
+    // The plan lines must NOT be replaced with "N/N plans complete"
+    expect(updated).toContain('07-01-cherry-pick-foundation-PLAN.md');
+    expect(updated).toContain('07-02-routing-auth-seo-PLAN.md');
+    expect(updated).not.toMatch(/^2\/2 plans complete/m);
+
+    // Phase 8's **Plans:** line must NOT be touched
+    expect(updated).toContain('**Plans:** 3 plans');
   });
 });
 

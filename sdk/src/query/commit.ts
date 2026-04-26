@@ -95,7 +95,7 @@ export function sanitizeCommitMessage(text: string): string {
  * @param projectDir - Project root directory
  * @returns QueryResult with commit result
  */
-export const commit: QueryHandler = async (args, projectDir, _workstream) => {
+export const commit: QueryHandler = async (args, projectDir, workstream) => {
   const allArgs = [...args];
 
   // Extract flags
@@ -117,7 +117,7 @@ export const commit: QueryHandler = async (args, projectDir, _workstream) => {
 
   // Check commit_docs config unless --force
   if (!hasForce) {
-    const paths = planningPaths(projectDir);
+    const paths = planningPaths(projectDir, workstream);
     try {
       const raw = await readFile(paths.config, 'utf-8');
       const config = JSON.parse(raw) as Record<string, unknown>;
@@ -180,8 +180,8 @@ export const commit: QueryHandler = async (args, projectDir, _workstream) => {
  * @param projectDir - Project root directory
  * @returns QueryResult with { can_commit, reason, commit_docs, staged_files }
  */
-export const checkCommit: QueryHandler = async (_args, projectDir, _workstream) => {
-  const paths = planningPaths(projectDir);
+export const checkCommit: QueryHandler = async (_args, projectDir, workstream) => {
+  const paths = planningPaths(projectDir, workstream);
 
   let commitDocs = true;
   try {
@@ -227,7 +227,7 @@ export const checkCommit: QueryHandler = async (_args, projectDir, _workstream) 
 
 // ─── commitToSubrepo ─────────────────────────────────────────────────────
 
-export const commitToSubrepo: QueryHandler = async (args, projectDir, _workstream) => {
+export const commitToSubrepo: QueryHandler = async (args, projectDir, workstream) => {
   const filesIdx = args.indexOf('--files');
   const endIdx = filesIdx >= 0 ? filesIdx : args.length;
   const knownFlags = new Set(['--force', '--amend', '--no-verify']);
@@ -239,7 +239,7 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir, _workstrea
     return { data: { committed: false, reason: 'commit message required' } };
   }
 
-  const paths = planningPaths(projectDir);
+  const paths = planningPaths(projectDir, workstream);
   let config: Record<string, unknown> = {};
   try {
     const raw = await readFile(paths.config, 'utf-8');

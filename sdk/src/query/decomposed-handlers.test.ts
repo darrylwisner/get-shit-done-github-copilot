@@ -170,6 +170,75 @@ describe('progressBar', () => {
   });
 });
 
+// ─── phase-lifecycle.ts — milestoneComplete ──────────────────────────────
+
+/**
+ * Regression tests for bug #2644: milestone.complete handler drops version arg.
+ *
+ * Original defect (first introduced in 6f79b1d): the handler called
+ * `phasesArchive([], projectDir)` instead of forwarding the version positional
+ * arg. phasesArchive read args[0] and threw GSDError('version required for
+ * phases archive'); the surrounding try/catch swallowed the throw into
+ * { completed: false, reason: String(err) }, masking it as a legitimate
+ * negative answer.
+ *
+ * Fixed in c5b1445: handler now validates version upfront and uses inline
+ * archive logic instead of delegating to phasesArchive.
+ */
+describe('milestoneComplete', () => {
+  const assertMilestoneSuccess = (result: Awaited<ReturnType<typeof milestoneComplete>>, version: string) => {
+    const data = result.data as Record<string, unknown>;
+    expect(data.version).toBe(version);
+    expect(typeof data.date).toBe('string');
+    expect(typeof data.phases).toBe('number');
+    expect(data.milestones_updated).toBe(true);
+    return data;
+  };
+
+  it('accepts version as first positional arg and returns it in data', async () => {
+    const result = await milestoneComplete(['v1.19', '--name', 'Test Milestone'], tmpDir);
+    const data = result.data as Record<string, unknown>;
+
+    // Must NOT return the error shape from the old bug
+    expect(data.completed).not.toBe(false);
+    expect((data as Record<string, unknown>).reason).toBeUndefined();
+
+    // Must return version echoed in data
+    expect(data.version).toBe('v1.19');
+  });
+
+  it('does not call phasesArchive with empty args (regression: bug #2644)', async () => {
+    // If the old bug were present, this would return { completed: false, reason: 'GSDError: version required for phases archive' }
+    // The fix ensures version is extracted from args[0] before any archive operation
+    const result = await milestoneComplete(['v1.0'], tmpDir);
+    assertMilestoneSuccess(result, 'v1.0');
+  });
+
+  it('throws GSDError when version arg is missing (not masked as completed: false)', async () => {
+    // The old bug swallowed ALL errors into { completed: false, reason: String(err) }
+    // The fix explicitly throws so callers can distinguish validation failure from "not complete"
+    await expect(milestoneComplete([], tmpDir)).rejects.toThrow('version required for milestone complete');
+  });
+
+  it('archives with --archive-phases when flag is present', async () => {
+    const result = await milestoneComplete(['v1.0', '--archive-phases'], tmpDir);
+    const data = assertMilestoneSuccess(result, 'v1.0');
+
+    const archived = data.archived as Record<string, unknown>;
+    // --archive-phases was passed; phases dir should have been scoped but
+    // may result in 0 if the milestone filter finds no matching dirs.
+    // The important assertion: no error, version is correctly forwarded.
+    expect(typeof archived.phases).toBe('boolean');
+  });
+
+  it('returns name from --name flag', async () => {
+    const result = await milestoneComplete(['v2.0', '--name', 'My Release'], tmpDir);
+    const data = assertMilestoneSuccess(result, 'v2.0');
+
+    expect(data.name).toBe('My Release');
+  });
+});
+
 // ─── summary.ts ──────────────────────────────────────────────────────────
 
 describe('summaryExtract', () => {
