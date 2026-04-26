@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import {
   splitInlineArray,
   extractFrontmatter,
+  extractFrontmatterLeading,
   stripFrontmatter,
   frontmatterGet,
   parseMustHavesBlock,
@@ -92,6 +93,20 @@ describe('extractFrontmatter', () => {
     const content = '---\r\nkey: value\r\n---\r\nbody';
     const result = extractFrontmatter(content);
     expect(result).toEqual({ key: 'value' });
+  });
+});
+
+// ─── extractFrontmatterLeading ─────────────────────────────────────────────
+
+describe('extractFrontmatterLeading', () => {
+  it('parses only the first leading block (gsd-tools.cjs / frontmatter.cjs parity)', () => {
+    const content = '---\nfirst: 1\n---\n---\nsecond: 2\n---\nbody';
+    expect(extractFrontmatterLeading(content)).toEqual({ first: '1' });
+  });
+
+  it('matches extractFrontmatter when a single block starts the file', () => {
+    const content = '---\na: b\n---\n';
+    expect(extractFrontmatterLeading(content)).toEqual(extractFrontmatter(content));
   });
 });
 

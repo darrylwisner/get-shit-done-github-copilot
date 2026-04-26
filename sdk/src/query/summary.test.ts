@@ -21,16 +21,55 @@ describe('summaryExtract', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('extracts headings from a summary file', async () => {
+  it('returns structured fields from SUMMARY frontmatter (CJS parity)', async () => {
     const rel = '.planning/phases/01-x/01-SUMMARY.md';
     await writeFile(
       join(tmpDir, '.planning', 'phases', '01-x', '01-SUMMARY.md'),
-      '# Summary\n\n## What Was Done\n\nBuilt the thing.\n\n## Tests\n\nUnit tests pass.\n',
+      [
+        '---',
+        'phase: "01"',
+        'name: Test Phase',
+        'one-liner: From YAML',
+        'key-files:',
+        '  - a.ts',
+        'key-decisions:',
+        '  - "Choice: because reasons"',
+        'patterns-established:',
+        '  - "Pattern one"',
+        'tech-stack:',
+        '  added:',
+        '    - vitest',
+        'requirements-completed:',
+        '  - R1',
+        '---',
+        '',
+        '# Summary',
+        '',
+        '**Body one-liner ignored when FM has one-liner**',
+        '',
+      ].join('\n'),
       'utf-8',
     );
     const r = await summaryExtract([rel], tmpDir);
-    const data = r.data as Record<string, Record<string, string>>;
-    expect(data.sections.what_was_done).toContain('Built');
+    const data = r.data as Record<string, unknown>;
+    expect(data.path).toBe(rel);
+    expect(data.one_liner).toBe('From YAML');
+    expect(data.key_files).toEqual(['a.ts']);
+    expect(data.requirements_completed).toEqual(['R1']);
+    expect(Array.isArray(data.decisions)).toBe(true);
+  });
+
+  it('filters with --fields', async () => {
+    const rel = '.planning/phases/01-x/01-SUMMARY.md';
+    await writeFile(
+      join(tmpDir, '.planning', 'phases', '01-x', '01-SUMMARY.md'),
+      ['---', 'phase: "01"', 'one-liner: X', 'key-files:', '  - z.ts', '---', ''].join('\n'),
+      'utf-8',
+    );
+    const r = await summaryExtract([rel, '--fields', 'path,one_liner'], tmpDir);
+    const data = r.data as Record<string, unknown>;
+    expect(Object.keys(data).sort()).toEqual(['one_liner', 'path'].sort());
+    expect(data.one_liner).toBe('X');
   });
 });
 
@@ -49,7 +88,8 @@ describe('historyDigest', () => {
   it('returns digest object for project without phases', async () => {
     const r = await historyDigest([], tmpDir);
     const data = r.data as Record<string, unknown>;
-    expect(data.phases).toBeDefined();
-    expect(data.decisions).toBeDefined();
+    expect(data.phases).toEqual({});
+    expect(data.decisions).toEqual([]);
+    expect(data.tech_stack).toEqual([]);
   });
 });

@@ -131,10 +131,10 @@ describe('commit', () => {
     // Stage config.json first then commit it so .planning/ has no unstaged changes
     execSync('git add .planning/config.json', { cwd: tmpDir, stdio: 'pipe' });
     execSync('git commit -m "init"', { cwd: tmpDir, stdio: 'pipe' });
-    // Now commit with specific nonexistent file
-    const result = await commit(['test msg', 'nonexistent-file.txt'], tmpDir);
+    // Now commit with specific nonexistent file (--files separates message from paths, matching CJS argv)
+    const result = await commit(['test msg', '--files', 'nonexistent-file.txt'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(false);
-    expect((result.data as { reason: string }).reason).toContain('nothing');
+    expect((result.data as { reason: string }).reason).toContain('nonexistent-file.txt');
   });
 
   it('commits specific files when provided', async () => {
@@ -145,7 +145,7 @@ describe('commit', () => {
     );
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# State\n');
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), '# Roadmap\n');
-    const result = await commit(['docs: state only', '.planning/STATE.md'], tmpDir);
+    const result = await commit(['docs: state only', '--files', '.planning/STATE.md'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(true);
 
     // Verify only STATE.md was committed
