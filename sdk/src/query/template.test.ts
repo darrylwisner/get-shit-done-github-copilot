@@ -137,14 +137,15 @@ describe('event emission wiring', () => {
     const events: GSDEvent[] = [];
     eventStream.on('event', (e: GSDEvent) => events.push(e));
 
-    const registry = createRegistry(eventStream);
+    const registry = createRegistry(eventStream, 'corr-xyz');
     await registry.dispatch('state.update', ['status', 'Executing'], tmpDir);
 
     const mutationEvents = events.filter(e => e.type === GSDEventType.StateMutation);
     expect(mutationEvents.length).toBe(1);
-    const evt = mutationEvents[0] as { type: string; command: string; success: boolean };
+    const evt = mutationEvents[0] as { type: string; command: string; success: boolean; sessionId?: string };
     expect(evt.command).toBe('state.update');
     expect(evt.success).toBe(true);
+    expect(evt.sessionId).toBe('corr-xyz');
   });
 
   it('emits ConfigMutation event for config-set dispatch', async () => {

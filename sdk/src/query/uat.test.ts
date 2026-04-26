@@ -68,6 +68,10 @@ describe('auditUat', () => {
     const r = await auditUat([], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(Array.isArray(data.results)).toBe(true);
-    expect((data.summary as Record<string, number>).total_files).toBe(0);
+    const summary = data.summary as Record<string, unknown>;
+    expect(summary.total_files).toBe(0);
+    expect(summary.total_items).toBe(0);
+    expect(summary.by_category).toEqual({});
+    expect(summary.by_phase).toEqual({});
   });
 });
