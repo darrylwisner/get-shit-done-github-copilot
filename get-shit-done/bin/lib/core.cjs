@@ -269,20 +269,59 @@ const CONFIG_DEFAULTS = {
   post_planning_gaps: true, // workflow.post_planning_gaps — unified post-planning gap report (#2493): scan REQUIREMENTS.md + CONTEXT.md decisions vs all PLAN.md files
 };
 
+/**
+ * Deep-merge two plain config objects. `overlay` wins on key conflict.
+ * Explicit `null` in overlay overrides base (null means "unset this key").
+ * Arrays are replaced, not merged. Non-object primitives use overlay value.
+ *
+ * Note: `undefined` in overlay is treated as "no value provided" and falls
+ * back to base (preserves inheritance). Explicit `null` overrides base.
+ */
+function _deepMergeConfig(base, overlay) {
+  if (overlay === null || overlay === undefined) return overlay;
+  if (typeof base !== 'object' || typeof overlay !== 'object') return overlay;
+  const result = { ...base };
+  for (const key of Object.keys(overlay)) {
+    if (overlay[key] !== null && typeof overlay[key] === 'object' && !Array.isArray(overlay[key])) {
+      result[key] = _deepMergeConfig(base[key] ?? {}, overlay[key]);
+    } else {
+      result[key] = overlay[key];
+    }
+  }
+  return result;
+}
+
 function loadConfig(cwd) {
+  // When GSD_WORKSTREAM is set, load root config first so workstream config
+  // can inherit from it. This prevents users from duplicating model_overrides,
+  // workflow.*, etc. across every workstream config (#2714).
+  const ws = process.env.GSD_WORKSTREAM || null;
+  let rootParsed = null;
+  if (ws) {
+    const rootConfigPath = path.join(planningRoot(cwd), 'config.json');
+    try {
+      const raw = fs.readFileSync(rootConfigPath, 'utf-8');
+      rootParsed = JSON.parse(raw);
+    } catch {
+      // Root config missing or unparseable — workstream config stands alone
+    }
+  }
+
   const configPath = path.join(planningDir(cwd), 'config.json');
   const defaults = CONFIG_DEFAULTS;
 
   try {
     const raw = fs.readFileSync(configPath, 'utf-8');
-    const parsed = JSON.parse(raw);
+    // `fileData` is the parsed content of the config.json file on disk — used
+    // for migrations and writes so we never persist merged values back to disk.
+    const fileData = JSON.parse(raw);
 
     // Migrate deprecated "depth" key to "granularity" with value mapping
-    if ('depth' in parsed && !('granularity' in parsed)) {
+    if ('depth' in fileData && !('granularity' in fileData)) {
       const depthToGranularity = { quick: 'coarse', standard: 'standard', comprehensive: 'fine' };
-      parsed.granularity = depthToGranularity[parsed.depth] || parsed.depth;
-      delete parsed.depth;
-      try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch { /* intentionally empty */ }
+      fileData.granularity = depthToGranularity[fileData.depth] || fileData.depth;
+      delete fileData.depth;
+      try { fs.writeFileSync(configPath, JSON.stringify(fileData, null, 2), 'utf-8'); } catch { /* intentionally empty */ }
     }
 
     // Auto-detect and sync sub_repos: scan for child directories with .git
@@ -291,46 +330,51 @@ function loadConfig(cwd) {
     // Migrate legacy "multiRepo: true" boolean → planning.sub_repos array.
     // Canonical location is planning.sub_repos (#2561); writing to top-level
     // would be flagged as unknown by the validator below (#2638).
-    if (parsed.multiRepo === true && !parsed.sub_repos && !parsed.planning?.sub_repos) {
+    if (fileData.multiRepo === true && !fileData.sub_repos && !fileData.planning?.sub_repos) {
       const detected = detectSubRepos(cwd);
       if (detected.length > 0) {
-        if (!parsed.planning) parsed.planning = {};
-        parsed.planning.sub_repos = detected;
-        parsed.planning.commit_docs = false;
-        delete parsed.multiRepo;
+        if (!fileData.planning) fileData.planning = {};
+        fileData.planning.sub_repos = detected;
+        fileData.planning.commit_docs = false;
+        delete fileData.multiRepo;
         configDirty = true;
       }
     }
 
     // Self-heal legacy/buggy installs: strip any stale top-level sub_repos,
     // preserving its value as the planning.sub_repos seed if that slot is empty.
-    if (Object.prototype.hasOwnProperty.call(parsed, 'sub_repos')) {
-      if (!parsed.planning) parsed.planning = {};
-      if (!parsed.planning.sub_repos) {
-        parsed.planning.sub_repos = parsed.sub_repos;
+    if (Object.prototype.hasOwnProperty.call(fileData, 'sub_repos')) {
+      if (!fileData.planning) fileData.planning = {};
+      if (!fileData.planning.sub_repos) {
+        fileData.planning.sub_repos = fileData.sub_repos;
       }
-      delete parsed.sub_repos;
+      delete fileData.sub_repos;
       configDirty = true;
     }
 
     // Keep planning.sub_repos in sync with actual filesystem
-    const currentSubRepos = parsed.planning?.sub_repos || [];
+    const currentSubRepos = fileData.planning?.sub_repos || [];
     if (Array.isArray(currentSubRepos) && currentSubRepos.length > 0) {
       const detected = detectSubRepos(cwd);
       if (detected.length > 0) {
         const sorted = [...currentSubRepos].sort();
         if (JSON.stringify(sorted) !== JSON.stringify(detected)) {
-          if (!parsed.planning) parsed.planning = {};
-          parsed.planning.sub_repos = detected;
+          if (!fileData.planning) fileData.planning = {};
+          fileData.planning.sub_repos = detected;
           configDirty = true;
         }
       }
     }
 
-    // Persist sub_repos changes (migration or sync)
+    // Persist sub_repos changes (migration or sync) — write only the on-disk
+    // file contents, never the merged result, to avoid polluting workstream configs.
     if (configDirty) {
-      try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch {}
+      try { fs.writeFileSync(configPath, JSON.stringify(fileData, null, 2), 'utf-8'); } catch {}
     }
+
+    // Now apply root→workstream inheritance. `parsed` is the effective config
+    // used for value extraction below; fileData is kept for disk writes only.
+    const parsed = rootParsed ? _deepMergeConfig(rootParsed, fileData) : fileData;
 
     // Warn about unrecognized top-level keys so users don't silently lose config.
     // Derived from config-set's VALID_CONFIG_KEYS (canonical source) plus internal-only
@@ -436,8 +480,22 @@ function loadConfig(cwd) {
     };
   } catch {
     // Fall back to ~/.gsd/defaults.json only for truly pre-project contexts (#1683)
-    // If .planning/ exists, the project is initialized — just missing config.json
+    // If .planning/ exists, the project is initialized — just missing config.json.
+    // When GSD_WORKSTREAM is set and root config was loaded, the workstream config
+    // doesn't exist — treat root config as the effective config for this workstream.
     if (fs.existsSync(planningDir(cwd))) {
+      if (rootParsed) {
+        // Workstream has no config.json: re-parse using root config as the sole source.
+        // Temporarily clear GSD_WORKSTREAM so planningDir() returns root .planning/,
+        // then reload. This is safe: rootParsed is already the root config object.
+        const savedWs = process.env.GSD_WORKSTREAM;
+        delete process.env.GSD_WORKSTREAM;
+        try {
+          return loadConfig(cwd);
+        } finally {
+          process.env.GSD_WORKSTREAM = savedWs;
+        }
+      }
       return defaults;
     }
     try {
@@ -1488,7 +1546,7 @@ function checkAgentsInstalled() {
  * Users can override with model_overrides in config.json for custom/latest models.
  */
 const MODEL_ALIAS_MAP = {
-  'opus': 'claude-opus-4-6',
+  'opus': 'claude-opus-4-7',
   'sonnet': 'claude-sonnet-4-6',
   'haiku': 'claude-haiku-4-5',
 };
@@ -1506,11 +1564,9 @@ const MODEL_ALIAS_MAP = {
  * provider-specific IDs the runtime cannot accept.
  */
 const RUNTIME_PROFILE_MAP = {
-  claude: {
-    opus:   { model: 'claude-opus-4-6' },
-    sonnet: { model: 'claude-sonnet-4-6' },
-    haiku:  { model: 'claude-haiku-4-5' },
-  },
+  claude: Object.fromEntries(
+    Object.entries(MODEL_ALIAS_MAP).map(([tier, model]) => [tier, { model }])
+  ),
   codex: {
     opus:   { model: 'gpt-5.4',        reasoning_effort: 'xhigh' },
     sonnet: { model: 'gpt-5.3-codex',  reasoning_effort: 'medium' },

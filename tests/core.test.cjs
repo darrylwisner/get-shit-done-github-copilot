@@ -200,6 +200,92 @@ describe('loadConfig', () => {
   });
 });
 
+// ─── loadConfig workstream config inheritance (#2714) ────────────────────────
+
+describe('loadConfig workstream config inheritance (#2714)', () => {
+  let tmpDir;
+  let originalEnv;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    originalEnv = process.env.GSD_WORKSTREAM;
+    delete process.env.GSD_WORKSTREAM;
+  });
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.GSD_WORKSTREAM = originalEnv;
+    } else {
+      delete process.env.GSD_WORKSTREAM;
+    }
+    cleanup(tmpDir);
+  });
+
+  function writeRootConfig(obj) {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify(obj, null, 2)
+    );
+  }
+
+  function writeWorkstreamConfig(wsName, obj) {
+    const wsDir = path.join(tmpDir, '.planning', 'workstreams', wsName);
+    fs.mkdirSync(wsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(wsDir, 'config.json'),
+      JSON.stringify(obj, null, 2)
+    );
+  }
+
+  test('workstream config inherits model_overrides from root when not defined in workstream', () => {
+    writeRootConfig({ model_overrides: { 'gsd-executor': 'opus' } });
+    writeWorkstreamConfig('feature-a', { model_profile: 'quality' });
+    process.env.GSD_WORKSTREAM = 'feature-a';
+    const config = loadConfig(tmpDir);
+    assert.deepStrictEqual(config.model_overrides, { 'gsd-executor': 'opus' });
+    assert.strictEqual(config.model_profile, 'quality');
+  });
+
+  test('workstream-specific keys override root config values', () => {
+    writeRootConfig({ model_profile: 'balanced', model_overrides: { 'gsd-executor': 'opus' } });
+    writeWorkstreamConfig('feature-b', { model_profile: 'speed', model_overrides: { 'gsd-executor': 'haiku' } });
+    process.env.GSD_WORKSTREAM = 'feature-b';
+    const config = loadConfig(tmpDir);
+    assert.strictEqual(config.model_profile, 'speed');
+    assert.deepStrictEqual(config.model_overrides, { 'gsd-executor': 'haiku' });
+  });
+
+  test('deep merge works for nested workflow.* keys', () => {
+    writeRootConfig({ workflow: { research: false, auto_advance: true } });
+    writeWorkstreamConfig('feature-c', { workflow: { auto_advance: false } });
+    process.env.GSD_WORKSTREAM = 'feature-c';
+    const config = loadConfig(tmpDir);
+    // research inherited from root
+    assert.strictEqual(config.research, false);
+    // auto_advance overridden by workstream
+    assert.strictEqual(config.auto_advance, false);
+  });
+
+  test('explicit null in workstream config overrides root value (PR #2717 null-override bug)', () => {
+    writeRootConfig({ model_overrides: { 'gsd-executor': 'opus', 'gsd-planner': 'sonnet' } });
+    writeWorkstreamConfig('feature-d', { model_overrides: null });
+    process.env.GSD_WORKSTREAM = 'feature-d';
+    const config = loadConfig(tmpDir);
+    // null in workstream should override root, not fall back to root value
+    assert.strictEqual(config.model_overrides, null);
+  });
+
+  test('workstream without config.json inherits root config', () => {
+    writeRootConfig({ model_profile: 'quality', model_overrides: { 'gsd-executor': 'opus' } });
+    // Create workstream dir without config.json
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'workstreams', 'feature-e'), { recursive: true });
+    process.env.GSD_WORKSTREAM = 'feature-e';
+    const config = loadConfig(tmpDir);
+    assert.strictEqual(config.model_profile, 'quality');
+    assert.deepStrictEqual(config.model_overrides, { 'gsd-executor': 'opus' });
+  });
+});
+
 // ─── loadConfig commit_docs gitignore auto-detection (#1250) ──────────────────
 
 describe('loadConfig commit_docs gitignore auto-detection (#1250)', () => {
@@ -377,6 +463,24 @@ describe('resolveModelInternal', () => {
     test('returns empty string with inherit profile', () => {
       writeConfig({ resolve_model_ids: 'omit', model_profile: 'inherit' });
       assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), '');
+    });
+  });
+
+  describe('resolve_model_ids: true', () => {
+    // Regression test for #2712: MODEL_ALIAS_MAP must track current model releases.
+    test('opus alias resolves to claude-opus-4-7', () => {
+      writeConfig({ resolve_model_ids: true, model_profile: 'quality' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'claude-opus-4-7');
+    });
+
+    test('sonnet alias resolves to claude-sonnet-4-6', () => {
+      writeConfig({ resolve_model_ids: true, model_profile: 'balanced' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-executor'), 'claude-sonnet-4-6');
+    });
+
+    test('haiku alias resolves to claude-haiku-4-5', () => {
+      writeConfig({ resolve_model_ids: true, model_profile: 'budget' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-codebase-mapper'), 'claude-haiku-4-5');
     });
   });
 });

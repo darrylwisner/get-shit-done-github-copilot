@@ -84,7 +84,7 @@ export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir, 
     });
 
     const planCountPattern = new RegExp(
-      `(#{2,4}\\s*Phase\\s+${phaseEscaped}[\\s\\S]*?\\*\\*Plans:\\*\\*\\s*)[^\\n]+`,
+      `(#{2,4}\\s*Phase\\s+${phaseEscaped}(?:(?!\\n#{2,4})[\\s\\S])*?\\*\\*Plans:\\*\\*[ \\t]*)[^\\n]+`,
       'i',
     );
     const planCountText = isComplete

@@ -85,6 +85,12 @@ function generateSlugInternal(text: string): string {
  * If no `</details>` blocks exist, replaces in the entire content.
  * Otherwise, only replaces in content after the last `</details>` close tag.
  *
+ * Edge case: when the active milestone is itself wrapped in a `<details>` block
+ * (e.g. collapsed before it is fully shipped), the last `</details>` belongs to
+ * the active milestone and the `after` slice is empty. In that case the function
+ * falls back to searching the full content with all complete `<details>` blocks
+ * stripped, so archived milestones are never touched.
+ *
  * @param content - Full ROADMAP.md content
  * @param pattern - Regex or string pattern to match
  * @param replacement - Replacement string
@@ -102,7 +108,41 @@ export function replaceInCurrentMilestone(
   const offset = lastDetailsClose + '</details>'.length;
   const before = content.slice(0, offset);
   const after = content.slice(offset);
-  return before + after.replace(pattern, replacement);
+
+  // Fast path: the current milestone is not inside a <details> block — the
+  // pattern lives in the plain text after the last </details>.
+  const replacedAfter = after.replace(pattern, replacement);
+  if (replacedAfter !== after) {
+    return before + replacedAfter;
+  }
+
+  // Slow path: the active milestone is inside the last <details> block.
+  // Strip every complete <details>…</details> block except the last one, then
+  // apply the replacement inside that last block while leaving the stripped
+  // (archived) blocks untouched.
+  //
+  // Strategy:
+  //   1. Collect all complete <details>…</details> spans.
+  //   2. Replace only inside the LAST span; leave earlier spans unchanged.
+  const detailsBlockRe = /<details>[\s\S]*?<\/details>/gi;
+  const spans: { start: number; end: number; text: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = detailsBlockRe.exec(content)) !== null) {
+    spans.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+  }
+
+  if (spans.length === 0) {
+    // No complete blocks found — fall back to full-content replace.
+    return content.replace(pattern, replacement);
+  }
+
+  const lastSpan = spans[spans.length - 1];
+  const updatedLastBlock = lastSpan.text.replace(pattern, replacement);
+  return (
+    content.slice(0, lastSpan.start) +
+    updatedLastBlock +
+    content.slice(lastSpan.end)
+  );
 }
 
 // ─── readModifyWriteRoadmapMd ───────────────────────────────────────────
@@ -191,13 +231,34 @@ export const phaseAdd: QueryHandler = async (args, projectDir, workstream) => {
     } else {
       // Sequential mode: find highest integer phase number (in current milestone only)
       // Skip 999.x backlog phases — they live outside the active sequence
-      const phasePattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
+      // Matches heading (## Phase N:), bullet checklist (- [x] Phase N:), and bold (**Phase N:**)
+      const phasePattern = /(?:^|\n)\s*(?:[-*]\s*(?:\[[x ]\]\s*)?|#{2,4}\s*|\*{1,2}\s*)Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
       let maxPhase = 0;
       let m: RegExpExecArray | null;
       while ((m = phasePattern.exec(content)) !== null) {
         const num = parseInt(m[1], 10);
         if (num >= 999) continue; // backlog phases use 999.x numbering
         if (num > maxPhase) maxPhase = num;
+      }
+
+      // Belt-and-suspenders: if ROADMAP scan found nothing, fall back to scanning
+      // .planning/phases/ directory names as the canonical source of truth
+      if (maxPhase === 0) {
+        const phasesDir = planningPaths(projectDir, workstream).phases;
+        try {
+          const entries = await readdir(phasesDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            const dirMatch = /^(?:[A-Z][A-Z0-9]*-)?(\d+)[A-Z]?(?:\.\d+)*-/i.exec(entry.name);
+            if (dirMatch) {
+              const num = parseInt(dirMatch[1], 10);
+              if (num >= 999) continue;
+              if (num > maxPhase) maxPhase = num;
+            }
+          }
+        } catch {
+          // phases dir may not exist yet — leave maxPhase as 0
+        }
       }
 
       newPhaseId = maxPhase + 1;
@@ -1194,7 +1255,7 @@ export const phaseComplete: QueryHandler = async (args, projectDir, workstream) 
 
       // Update plan count in phase section
       const planCountPattern = new RegExp(
-        `(#{2,4}\\s*Phase\\s+${phaseEscaped}[\\s\\S]*?\\*\\*Plans:\\*\\*\\s*)[^\\n]+`,
+        `(#{2,4}\\s*Phase\\s+${phaseEscaped}(?:(?!\\n#{2,4})[\\s\\S])*?\\*\\*Plans:\\*\\*[ \\t]*)[^\\n]+`,
         'i',
       );
       roadmapContent = replaceInCurrentMilestone(

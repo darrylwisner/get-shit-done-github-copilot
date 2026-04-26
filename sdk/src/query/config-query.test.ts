@@ -165,6 +165,31 @@ describe('resolveModel', () => {
     const data = result.data as Record<string, unknown>;
     expect(data).toHaveProperty('model', '');
   });
+
+  it('resolveModel uses workstream config when --ws is specified', async () => {
+    const { resolveModel } = await import('./config-query.js');
+    // Root config: balanced profile → gsd-executor resolves to 'sonnet'
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ model_profile: 'balanced' }),
+    );
+    // Workstream config: quality profile → gsd-executor resolves to 'opus'
+    await mkdir(join(tmpDir, '.planning', 'workstreams', 'frontend'), { recursive: true });
+    await writeFile(
+      join(tmpDir, '.planning', 'workstreams', 'frontend', 'config.json'),
+      JSON.stringify({ model_profile: 'quality' }),
+    );
+
+    const rootResult = await resolveModel(['gsd-executor'], tmpDir);
+    const rootData = rootResult.data as Record<string, unknown>;
+    expect(rootData.profile).toBe('balanced');
+    expect(rootData.model).toBe('sonnet');
+
+    const wsResult = await resolveModel(['gsd-executor'], tmpDir, 'frontend');
+    const wsData = wsResult.data as Record<string, unknown>;
+    expect(wsData.profile).toBe('quality');
+    expect(wsData.model).toBe('opus');
+  });
 });
 
 // ─── MODEL_PROFILES ─────────────────────────────────────────────────────────
