@@ -560,6 +560,8 @@ increases monotonically across waves. `{status}` is `complete` (success),
    )
    ```
 
+   > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above to spawn executor agent(s), stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+
    **Sequential mode** (`USE_WORKTREES` is `false`):
 
    Omit `isolation="worktree"` from the Task call. Replace the `<parallel_execution>` block with:
@@ -759,58 +761,18 @@ increases monotonically across waves. `{status}` is `complete` (success),
 
    **If no worktrees found:** Skip silently — agents may have been spawned without worktree isolation.
 
-5.6. **Post-merge test gate (parallel mode only):**
+5.6. **Post-merge build & test gate:**
 
-   After merging all worktrees in a wave, run the project's test suite to catch
-   cross-plan integration issues that individual worktree self-checks cannot detect
-   (e.g., conflicting type definitions, removed exports, import changes).
+   After merging all worktrees in a wave (parallel mode), or after the last plan completes
+   (serial mode), run a build and then the project's test suite to catch cross-plan
+   integration issues that individual worktree self-checks cannot detect (e.g., conflicting
+   type definitions, removed exports, import changes, link errors).
 
    This addresses the Generator self-evaluation blind spot identified in Anthropic's
    harness engineering research: agents reliably report Self-Check: PASSED even when
    merging their work creates failures.
 
-   ```bash
-   # Resolve test command: project config > Makefile > language sniff
-   TEST_CMD=$(gsd-sdk query config-get workflow.test_command --default "" 2>/dev/null || true)
-   if [ -z "$TEST_CMD" ]; then
-     if [ -f "Makefile" ] && grep -q "^test:" Makefile; then
-       TEST_CMD="make test"
-     elif [ -f "Justfile" ] || [ -f "justfile" ]; then
-       TEST_CMD="just test"
-     elif [ -f "package.json" ]; then
-       TEST_CMD="npm test"
-     elif [ -f "Cargo.toml" ]; then
-       TEST_CMD="cargo test"
-     elif [ -f "go.mod" ]; then
-       TEST_CMD="go test ./..."
-     elif [ -f "pyproject.toml" ] || [ -f "requirements.txt" ]; then
-       TEST_CMD="python -m pytest -x -q --tb=short 2>&1 || uv run python -m pytest -x -q --tb=short"
-     else
-       TEST_CMD="true"
-       echo "⚠ No test runner detected — skipping post-merge test gate"
-     fi
-   fi
-   # Detect test runner and run quick smoke test (timeout: 5 minutes)
-   TEST_EXIT=0
-   timeout 300 bash -c "$TEST_CMD" 2>&1
-   TEST_EXIT=$?
-   if [ "${TEST_EXIT}" -eq 0 ]; then
-     echo "✓ Post-merge test gate passed — no cross-plan conflicts"
-   elif [ "${TEST_EXIT}" -eq 124 ]; then
-     echo "⚠ Post-merge test gate timed out after 5 minutes"
-   else
-     echo "✗ Post-merge test gate failed (exit code ${TEST_EXIT})"
-     WAVE_FAILURE_COUNT=$((WAVE_FAILURE_COUNT + 1))
-   fi
-   ```
-
-   **If `TEST_EXIT` is 0 (pass):** `✓ Post-merge test gate: {N} tests passed — no cross-plan conflicts` → continue to orchestrator tracking update.
-
-   **If `TEST_EXIT` is 124 (timeout):** Log warning, treat as non-blocking, continue. Tests may need a longer budget or manual run.
-
-   **If `TEST_EXIT` is non-zero (test failure):** Increment `WAVE_FAILURE_COUNT` to track
-   cumulative failures across waves. Subsequent waves should report:
-   `⚠ Note: ${WAVE_FAILURE_COUNT} prior wave(s) had test failures`
+   Read and execute `get-shit-done/workflows/execute-phase/steps/post-merge-gate.md`.
 
 5.7. **Post-wave shared artifact update (worktree mode only, skip if tests failed):**
 
@@ -1369,6 +1331,8 @@ ${VERIFIER_SKILLS}",
   model="{verifier_model}"
 )
 ```
+
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 Read status:
 ```bash
