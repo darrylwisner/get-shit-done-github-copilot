@@ -15,23 +15,7 @@ import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
 
 export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir, workstream) => {
-  // Support --phase <N> flag form in addition to positional (fixes #2796).
-  // execute-phase.md:228 passes --phase so positional-only parsing silently
-  // took the literal string "--phase" as the phase value.
-  const phaseIdx = args.indexOf('--phase');
-  let phaseNum: string;
-  const phaseFlagValue = phaseIdx !== -1 ? args[phaseIdx + 1] : undefined;
-  if (
-    phaseIdx !== -1 &&
-    phaseFlagValue !== undefined &&
-    !String(phaseFlagValue).startsWith('--')
-  ) {
-    phaseNum = String(phaseFlagValue);
-  } else {
-    // Positional: skip any leading flag tokens in case of mixed invocations.
-    const positional = args.filter((a) => !String(a).startsWith('--'));
-    phaseNum = positional[0] ? String(positional[0]) : '';
-  }
+  const phaseNum = args[0];
   if (!phaseNum) {
     throw new GSDError('phase number required for roadmap update-plan-progress', ErrorClassification.Validation);
   }
@@ -100,7 +84,7 @@ export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir, 
     });
 
     const planCountPattern = new RegExp(
-      `(#{2,4}\\s*Phase\\s+${phaseEscaped}(?:(?!\\n#{2,4})[\\s\\S])*?\\*\\*Plans:\\*\\*[ \\t]*)[^\\n]+`,
+      `(#{2,4}\\s*Phase\\s+${phaseEscaped}[\\s\\S]*?\\*\\*Plans:\\*\\*\\s*)[^\\n]+`,
       'i',
     );
     const planCountText = isComplete

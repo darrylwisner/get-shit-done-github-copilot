@@ -102,55 +102,26 @@ function checkGraphifyInstalled() {
 }
 
 /**
- * Detect graphify version and check compatibility.
+ * Detect graphify version via python3 importlib.metadata and check compatibility.
  * Tested range: >=0.4.0,<1.0
- *
- * Detection strategy:
- * 1. Try `graphify --version` (works for most CLI installations, incl. venv installs)
- * 2. Fall back to python3 importlib.metadata (legacy / system Python path)
- * 3. Return null version gracefully if both fail
  *
  * @returns {{ version: string|null, compatible: boolean|null, warning: string|null }}
  */
 function checkGraphifyVersion() {
-  // Strategy 1: try `graphify --version` directly (2s timeout -- fast path)
-  const versionResult = childProcess.spawnSync('graphify', ['--version'], {
+  const result = childProcess.spawnSync('python3', [
+    '-c',
+    'from importlib.metadata import version; print(version("graphifyy"))',
+  ], {
     stdio: 'pipe',
     encoding: 'utf-8',
-    timeout: 2000,
+    timeout: 5000,
   });
 
-  let versionStr = null;
-
-  if (!versionResult.error && versionResult.status === 0) {
-    const raw = (versionResult.stdout || '').trim();
-    // graphify --version may emit "graphify 0.4.23" or just "0.4.23"
-    const match = raw.match(/(\d+\.\d+(?:\.\d+)*)/);
-    if (match) {
-      versionStr = match[1];
-    }
-  }
-
-  // Strategy 2: fall back to python3 importlib.metadata
-  if (!versionStr) {
-    const pyResult = childProcess.spawnSync('python3', [
-      '-c',
-      'from importlib.metadata import version; print(version("graphifyy"))',
-    ], {
-      stdio: 'pipe',
-      encoding: 'utf-8',
-      timeout: 5000,
-    });
-
-    if (!pyResult.error && pyResult.status === 0 && pyResult.stdout && pyResult.stdout.trim()) {
-      versionStr = pyResult.stdout.trim();
-    }
-  }
-
-  if (!versionStr) {
+  if (result.status !== 0 || !result.stdout || !result.stdout.trim()) {
     return { version: null, compatible: null, warning: 'Could not determine graphify version' };
   }
 
+  const versionStr = result.stdout.trim();
   const parts = versionStr.split('.').map(Number);
 
   if (parts.length < 2 || parts.some(isNaN)) {

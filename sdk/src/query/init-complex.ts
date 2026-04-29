@@ -93,8 +93,8 @@ function deriveStatusFromCheckbox(
  *
  * Port of cmdInitNewProject from init.cjs lines 296-399.
  */
-export const initNewProject: QueryHandler = async (_args, projectDir, workstream) => {
-  const config = await loadConfig(projectDir, workstream);
+export const initNewProject: QueryHandler = async (_args, projectDir, _workstream) => {
+  const config = await loadConfig(projectDir);
 
   // Detect search API key availability from env vars and ~/.gsd/ files
   const gsdHome = join(homedir(), '.gsd');
@@ -209,10 +209,10 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
  *
  * Port of cmdInitProgress from init.cjs lines 1139-1284.
  */
-export const initProgress: QueryHandler = async (_args, projectDir, workstream) => {
-  const config = await loadConfig(projectDir, workstream);
-  const milestone = await getMilestoneInfo(projectDir, workstream);
-  const paths = planningPaths(projectDir, workstream);
+export const initProgress: QueryHandler = async (_args, projectDir, _workstream) => {
+  const config = await loadConfig(projectDir);
+  const milestone = await getMilestoneInfo(projectDir);
+  const paths = planningPaths(projectDir);
 
   const phases: Record<string, unknown>[] = [];
   let currentPhase: Record<string, unknown> | null = null;
@@ -225,7 +225,7 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
 
   try {
     const rawRoadmap = await readFile(paths.roadmap, 'utf-8');
-    const roadmapContent = await extractCurrentMilestone(rawRoadmap, projectDir, workstream);
+    const roadmapContent = await extractCurrentMilestone(rawRoadmap, projectDir);
     const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
     let hm: RegExpExecArray | null;
     while ((hm = headingPattern.exec(roadmapContent)) !== null) {
@@ -372,10 +372,10 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
  *
  * Port of cmdInitManager from init.cjs lines 854-1137.
  */
-export const initManager: QueryHandler = async (_args, projectDir, workstream) => {
-  const config = await loadConfig(projectDir, workstream);
-  const milestone = await getMilestoneInfo(projectDir, workstream);
-  const paths = planningPaths(projectDir, workstream);
+export const initManager: QueryHandler = async (_args, projectDir, _workstream) => {
+  const config = await loadConfig(projectDir);
+  const milestone = await getMilestoneInfo(projectDir);
+  const paths = planningPaths(projectDir);
 
   let rawContent: string;
   try {
@@ -384,7 +384,7 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
     return { data: { error: 'No ROADMAP.md found. Run /gsd-new-milestone first.' } };
   }
 
-  const content = await extractCurrentMilestone(rawContent, projectDir, workstream);
+  const content = await extractCurrentMilestone(rawContent, projectDir);
 
   // Pre-compute directory listing once
   let phaseDirEntries: string[] = [];

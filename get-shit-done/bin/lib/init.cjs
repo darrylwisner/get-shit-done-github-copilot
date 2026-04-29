@@ -7,11 +7,6 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, planningPaths, planningDir, planningRoot, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
 
-// Accept all bold/colon variants of the Requirements header (#2769):
-// **Requirements:** / **Requirements**: / **Requirements** : render the
-// same in markdown but differ textually.
-const REQUIREMENTS_HEADER_RE = /^\*\*Requirements:?\*\*[^\S\n]*:?[^\S\n]*([^\n]*)$/m;
-
 function getLatestCompletedMilestone(cwd) {
   const milestonesPath = path.join(planningRoot(cwd), 'MILESTONES.md');
   if (!fs.existsSync(milestonesPath)) return null;
@@ -107,7 +102,7 @@ function cmdInitExecutePhase(cwd, phase, raw, options = {}) {
       has_reviews: false,
     };
   }
-  const reqMatch = roadmapPhase?.section?.match(REQUIREMENTS_HEADER_RE);
+  const reqMatch = roadmapPhase?.section?.match(/^\*\*Requirements\*\*:[^\S\n]*([^\n]*)$/m);
   const reqExtracted = reqMatch
     ? reqMatch[1].replace(/[\[\]]/g, '').split(',').map(s => s.trim()).filter(Boolean).join(', ')
     : null;
@@ -240,7 +235,7 @@ function cmdInitPlanPhase(cwd, phase, raw, options = {}) {
       has_reviews: false,
     };
   }
-  const reqMatch = roadmapPhase?.section?.match(REQUIREMENTS_HEADER_RE);
+  const reqMatch = roadmapPhase?.section?.match(/^\*\*Requirements\*\*:[^\S\n]*([^\n]*)$/m);
   const reqExtracted = reqMatch
     ? reqMatch[1].replace(/[\[\]]/g, '').split(',').map(s => s.trim()).filter(Boolean).join(', ')
     : null;
@@ -559,25 +554,6 @@ function cmdInitQuick(cwd, description, raw) {
 
   };
 
-  output(withProjectRoot(cwd, result), raw);
-}
-
-/**
- * Init handler for ingest-docs workflow (#2801).
- *
- * Returns the minimal set of fields that ingest-docs.md needs to detect
- * whether a project/planning dir exists and choose new vs merge mode.
- * Mirrors the initIngestDocs SDK handler in sdk/src/query/init.ts.
- */
-function cmdInitIngestDocs(cwd, raw) {
-  const config = loadConfig(cwd);
-  const result = {
-    project_exists: pathExistsInternal(cwd, '.planning/PROJECT.md'),
-    planning_exists: fs.existsSync(planningRoot(cwd)),
-    has_git: fs.existsSync(path.join(cwd, '.git')),
-    project_path: '.planning/PROJECT.md',
-    commit_docs: config.commit_docs,
-  };
   output(withProjectRoot(cwd, result), raw);
 }
 
@@ -1947,7 +1923,6 @@ module.exports = {
   cmdInitNewProject,
   cmdInitNewMilestone,
   cmdInitQuick,
-  cmdInitIngestDocs,
   cmdInitResume,
   cmdInitVerifyWork,
   cmdInitPhaseOp,

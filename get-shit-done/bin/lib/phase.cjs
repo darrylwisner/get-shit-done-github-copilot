@@ -868,11 +868,7 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
         );
 
         const sectionText = phaseSectionMatch ? phaseSectionMatch[1] : '';
-        // Accept all bold/colon variants (#2769) — the previous pattern only
-        // matched **Requirements:** (colon inside bold) and silently skipped
-        // **Requirements**: (colon outside), preventing the matching REQ-IDs
-        // from being ticked off in REQUIREMENTS.md on phase completion.
-        const reqMatch = sectionText.match(/\*\*Requirements:?\*\*[^\S\n]*:?[^\S\n]*([^\n]+)/i);
+        const reqMatch = sectionText.match(/\*\*Requirements:\*\*\s*([^\n]+)/i);
 
         let reqContent = fs.readFileSync(reqPath, 'utf-8');
 

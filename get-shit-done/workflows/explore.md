@@ -66,8 +66,6 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
-
 Share findings and continue the conversation.
 
 If the topic doesn't warrant research, skip this step entirely. **Don't force it.**
@@ -115,7 +113,7 @@ For each selected output, write the file:
 
 Commit if `commit_docs` is enabled:
 ```bash
-gsd-sdk query commit "docs: capture exploration — {topic_slug}" --files {file_list}
+gsd-sdk query commit "docs: capture exploration — {topic_slug}" {file_list}
 ```
 
 ## Step 6: Close

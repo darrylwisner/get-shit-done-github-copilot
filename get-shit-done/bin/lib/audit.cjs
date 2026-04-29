@@ -105,27 +105,12 @@ function scanQuickTasks(planDir) {
       continue;
     }
 
-    // workflows/quick.md mandates `${quick_id}-SUMMARY.md`; older flows used
-    // bare `SUMMARY.md`. Accept either to avoid false-positive "missing".
-    let summaryPath = null;
-    try {
-      const summaryFiles = fs.readdirSync(safeTaskDir, { withFileTypes: true })
-        .filter(e => e.isFile() && (e.name === 'SUMMARY.md' || e.name.endsWith('-SUMMARY.md')));
-      if (summaryFiles.length > 0) {
-        // Prefer the per-task `${quick_id}-SUMMARY.md` form when present.
-        const preferred = summaryFiles.find(e => e.name === `${dirName}-SUMMARY.md`)
-          || summaryFiles.find(e => e.name.endsWith('-SUMMARY.md'))
-          || summaryFiles[0];
-        summaryPath = path.join(safeTaskDir, preferred.name);
-      }
-    } catch {
-      // fall through with summaryPath = null → status: missing
-    }
+    const summaryPath = path.join(safeTaskDir, 'SUMMARY.md');
 
     let status = 'missing';
     let description = '';
 
-    if (summaryPath && fs.existsSync(summaryPath)) {
+    if (fs.existsSync(summaryPath)) {
       let safeSum;
       try {
         safeSum = requireSafePath(summaryPath, planDir, 'quick task summary', { allowAbsolute: true });
@@ -359,11 +344,6 @@ function scanSeeds(planDir) {
   return results;
 }
 
-// Terminal UAT states: `complete` (legacy) and `resolved` (post-gap-closure
-// per workflows/execute-phase.md). Hoisted outside scanUatGaps so the Set is
-// not recreated on each loop iteration.
-const TERMINAL_UAT_STATUSES = new Set(['complete', 'resolved']);
-
 /**
  * Scan .planning/phases for UAT gaps (UAT files with status != 'complete').
  */
@@ -414,12 +394,8 @@ function scanUatGaps(planDir) {
 
       const fm = extractFrontmatter(content);
       const status = (fm.status || 'unknown').toLowerCase();
-      const result = (fm.result || '').toString().toLowerCase();
 
-      // Also accept `result: all_pass` as a fallback when status is absent
-      // — covers UATs that omit `status:`.
-      if (TERMINAL_UAT_STATUSES.has(status)) continue;
-      if (status === 'unknown' && result === 'all_pass') continue;
+      if (status === 'complete') continue;
 
       // Count open scenarios
       const pendingMatches = (content.match(/result:\s*(?:pending|\[pending\])/gi) || []).length;

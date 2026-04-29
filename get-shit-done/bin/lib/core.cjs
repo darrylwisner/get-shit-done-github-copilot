@@ -269,59 +269,20 @@ const CONFIG_DEFAULTS = {
   post_planning_gaps: true, // workflow.post_planning_gaps — unified post-planning gap report (#2493): scan REQUIREMENTS.md + CONTEXT.md decisions vs all PLAN.md files
 };
 
-/**
- * Deep-merge two plain config objects. `overlay` wins on key conflict.
- * Explicit `null` in overlay overrides base (null means "unset this key").
- * Arrays are replaced, not merged. Non-object primitives use overlay value.
- *
- * Note: `undefined` in overlay is treated as "no value provided" and falls
- * back to base (preserves inheritance). Explicit `null` overrides base.
- */
-function _deepMergeConfig(base, overlay) {
-  if (overlay === null || overlay === undefined) return overlay;
-  if (typeof base !== 'object' || typeof overlay !== 'object') return overlay;
-  const result = { ...base };
-  for (const key of Object.keys(overlay)) {
-    if (overlay[key] !== null && typeof overlay[key] === 'object' && !Array.isArray(overlay[key])) {
-      result[key] = _deepMergeConfig(base[key] ?? {}, overlay[key]);
-    } else {
-      result[key] = overlay[key];
-    }
-  }
-  return result;
-}
-
 function loadConfig(cwd) {
-  // When GSD_WORKSTREAM is set, load root config first so workstream config
-  // can inherit from it. This prevents users from duplicating model_overrides,
-  // workflow.*, etc. across every workstream config (#2714).
-  const ws = process.env.GSD_WORKSTREAM || null;
-  let rootParsed = null;
-  if (ws) {
-    const rootConfigPath = path.join(planningRoot(cwd), 'config.json');
-    try {
-      const raw = fs.readFileSync(rootConfigPath, 'utf-8');
-      rootParsed = JSON.parse(raw);
-    } catch {
-      // Root config missing or unparseable — workstream config stands alone
-    }
-  }
-
   const configPath = path.join(planningDir(cwd), 'config.json');
   const defaults = CONFIG_DEFAULTS;
 
   try {
     const raw = fs.readFileSync(configPath, 'utf-8');
-    // `fileData` is the parsed content of the config.json file on disk — used
-    // for migrations and writes so we never persist merged values back to disk.
-    const fileData = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
 
     // Migrate deprecated "depth" key to "granularity" with value mapping
-    if ('depth' in fileData && !('granularity' in fileData)) {
+    if ('depth' in parsed && !('granularity' in parsed)) {
       const depthToGranularity = { quick: 'coarse', standard: 'standard', comprehensive: 'fine' };
-      fileData.granularity = depthToGranularity[fileData.depth] || fileData.depth;
-      delete fileData.depth;
-      try { fs.writeFileSync(configPath, JSON.stringify(fileData, null, 2), 'utf-8'); } catch { /* intentionally empty */ }
+      parsed.granularity = depthToGranularity[parsed.depth] || parsed.depth;
+      delete parsed.depth;
+      try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch { /* intentionally empty */ }
     }
 
     // Auto-detect and sync sub_repos: scan for child directories with .git
@@ -330,51 +291,46 @@ function loadConfig(cwd) {
     // Migrate legacy "multiRepo: true" boolean → planning.sub_repos array.
     // Canonical location is planning.sub_repos (#2561); writing to top-level
     // would be flagged as unknown by the validator below (#2638).
-    if (fileData.multiRepo === true && !fileData.sub_repos && !fileData.planning?.sub_repos) {
+    if (parsed.multiRepo === true && !parsed.sub_repos && !parsed.planning?.sub_repos) {
       const detected = detectSubRepos(cwd);
       if (detected.length > 0) {
-        if (!fileData.planning) fileData.planning = {};
-        fileData.planning.sub_repos = detected;
-        fileData.planning.commit_docs = false;
-        delete fileData.multiRepo;
+        if (!parsed.planning) parsed.planning = {};
+        parsed.planning.sub_repos = detected;
+        parsed.planning.commit_docs = false;
+        delete parsed.multiRepo;
         configDirty = true;
       }
     }
 
     // Self-heal legacy/buggy installs: strip any stale top-level sub_repos,
     // preserving its value as the planning.sub_repos seed if that slot is empty.
-    if (Object.prototype.hasOwnProperty.call(fileData, 'sub_repos')) {
-      if (!fileData.planning) fileData.planning = {};
-      if (!fileData.planning.sub_repos) {
-        fileData.planning.sub_repos = fileData.sub_repos;
+    if (Object.prototype.hasOwnProperty.call(parsed, 'sub_repos')) {
+      if (!parsed.planning) parsed.planning = {};
+      if (!parsed.planning.sub_repos) {
+        parsed.planning.sub_repos = parsed.sub_repos;
       }
-      delete fileData.sub_repos;
+      delete parsed.sub_repos;
       configDirty = true;
     }
 
     // Keep planning.sub_repos in sync with actual filesystem
-    const currentSubRepos = fileData.planning?.sub_repos || [];
+    const currentSubRepos = parsed.planning?.sub_repos || [];
     if (Array.isArray(currentSubRepos) && currentSubRepos.length > 0) {
       const detected = detectSubRepos(cwd);
       if (detected.length > 0) {
         const sorted = [...currentSubRepos].sort();
         if (JSON.stringify(sorted) !== JSON.stringify(detected)) {
-          if (!fileData.planning) fileData.planning = {};
-          fileData.planning.sub_repos = detected;
+          if (!parsed.planning) parsed.planning = {};
+          parsed.planning.sub_repos = detected;
           configDirty = true;
         }
       }
     }
 
-    // Persist sub_repos changes (migration or sync) — write only the on-disk
-    // file contents, never the merged result, to avoid polluting workstream configs.
+    // Persist sub_repos changes (migration or sync)
     if (configDirty) {
-      try { fs.writeFileSync(configPath, JSON.stringify(fileData, null, 2), 'utf-8'); } catch {}
+      try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch {}
     }
-
-    // Now apply root→workstream inheritance. `parsed` is the effective config
-    // used for value extraction below; fileData is kept for disk writes only.
-    const parsed = rootParsed ? _deepMergeConfig(rootParsed, fileData) : fileData;
 
     // Warn about unrecognized top-level keys so users don't silently lose config.
     // Derived from config-set's VALID_CONFIG_KEYS (canonical source) plus internal-only
@@ -480,22 +436,8 @@ function loadConfig(cwd) {
     };
   } catch {
     // Fall back to ~/.gsd/defaults.json only for truly pre-project contexts (#1683)
-    // If .planning/ exists, the project is initialized — just missing config.json.
-    // When GSD_WORKSTREAM is set and root config was loaded, the workstream config
-    // doesn't exist — treat root config as the effective config for this workstream.
+    // If .planning/ exists, the project is initialized — just missing config.json
     if (fs.existsSync(planningDir(cwd))) {
-      if (rootParsed) {
-        // Workstream has no config.json: re-parse using root config as the sole source.
-        // Temporarily clear GSD_WORKSTREAM so planningDir() returns root .planning/,
-        // then reload. This is safe: rootParsed is already the root config object.
-        const savedWs = process.env.GSD_WORKSTREAM;
-        delete process.env.GSD_WORKSTREAM;
-        try {
-          return loadConfig(cwd);
-        } finally {
-          process.env.GSD_WORKSTREAM = savedWs;
-        }
-      }
       return defaults;
     }
     try {
@@ -1380,10 +1322,8 @@ function extractCurrentMilestone(content, cwd) {
 
   const sectionStart = sectionMatch.index;
 
-  // Find the end: next milestone heading at same or higher level, or EOF.
+  // Find the end: next milestone heading at same or higher level, or EOF
   // Milestone headings look like: ## v2.0, ## Roadmap v2.0, ## ✅ v1.0, etc.
-  // Scan line-by-line so that heading-like lines inside fenced code blocks
-  // (``` or ~~~) are not mistaken for milestone boundaries. See #2787.
   const headingLevel = sectionMatch[1].match(/^(#{1,3})\s/)[1].length;
   const restContent = content.slice(sectionStart + sectionMatch[0].length);
   // Exclude phase headings (e.g. "### Phase 12: v1.0 Tech-Debt Closure") from
@@ -1391,31 +1331,15 @@ function extractCurrentMilestone(content, cwd) {
   // the title. Phase headings always start with the literal `Phase `. See #2619.
   const nextMilestonePattern = new RegExp(
     `^#{1,${headingLevel}}\\s+(?!Phase\\s+\\S)(?:.*v\\d+\\.\\d+|✅|📋|🚧)`,
-    'i'
+    'mi'
   );
+  const nextMatch = restContent.match(nextMilestonePattern);
 
-  let sectionEnd = content.length;
-  let fenceChar = null;
-  let fenceLen = 0;
-  let charOffset = 0;
-  for (const line of restContent.split('\n')) {
-    const fenceMatch = line.match(/^\s{0,3}((?:`{3,}|~{3,}))(.*)/);
-    if (fenceMatch) {
-      const char = fenceMatch[1][0];
-      const len = fenceMatch[1].length;
-      const trailing = fenceMatch[2] || '';
-      if (!fenceChar) {
-        fenceChar = char;
-        fenceLen = len;
-      } else if (char === fenceChar && len >= fenceLen && /^\s*$/.test(trailing)) {
-        fenceChar = null;
-        fenceLen = 0;
-      }
-    } else if (!fenceChar && nextMilestonePattern.test(line)) {
-      sectionEnd = sectionStart + sectionMatch[0].length + charOffset;
-      break;
-    }
-    charOffset += line.length + 1;
+  let sectionEnd;
+  if (nextMatch) {
+    sectionEnd = sectionStart + sectionMatch[0].length + nextMatch.index;
+  } else {
+    sectionEnd = content.length;
   }
 
   // Return everything before the current milestone section (non-milestone content
@@ -1564,7 +1488,7 @@ function checkAgentsInstalled() {
  * Users can override with model_overrides in config.json for custom/latest models.
  */
 const MODEL_ALIAS_MAP = {
-  'opus': 'claude-opus-4-7',
+  'opus': 'claude-opus-4-6',
   'sonnet': 'claude-sonnet-4-6',
   'haiku': 'claude-haiku-4-5',
 };
@@ -1582,33 +1506,15 @@ const MODEL_ALIAS_MAP = {
  * provider-specific IDs the runtime cannot accept.
  */
 const RUNTIME_PROFILE_MAP = {
-  claude: Object.fromEntries(
-    Object.entries(MODEL_ALIAS_MAP).map(([tier, model]) => [tier, { model }])
-  ),
+  claude: {
+    opus:   { model: 'claude-opus-4-6' },
+    sonnet: { model: 'claude-sonnet-4-6' },
+    haiku:  { model: 'claude-haiku-4-5' },
+  },
   codex: {
     opus:   { model: 'gpt-5.4',        reasoning_effort: 'xhigh' },
     sonnet: { model: 'gpt-5.3-codex',  reasoning_effort: 'medium' },
     haiku:  { model: 'gpt-5.4-mini',   reasoning_effort: 'medium' },
-  },
-  gemini: {
-    opus:   { model: 'gemini-3-pro' },
-    sonnet: { model: 'gemini-3-flash' },
-    haiku:  { model: 'gemini-2.5-flash-lite' },
-  },
-  qwen: {
-    opus:   { model: 'qwen3-max-2026-01-23' },
-    sonnet: { model: 'qwen3-coder-plus' },
-    haiku:  { model: 'qwen3-coder-next' },
-  },
-  opencode: {
-    opus:   { model: 'anthropic/claude-opus-4-7' },
-    sonnet: { model: 'anthropic/claude-sonnet-4-6' },
-    haiku:  { model: 'anthropic/claude-haiku-4-5' },
-  },
-  copilot: {
-    opus:   { model: 'claude-opus-4-7' },
-    sonnet: { model: 'claude-sonnet-4-6' },
-    haiku:  { model: 'claude-haiku-4-5' },
   },
 };
 

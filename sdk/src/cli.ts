@@ -17,8 +17,6 @@ import { CLITransport } from './cli-transport.js';
 import { WSTransport } from './ws-transport.js';
 import { InitRunner } from './init-runner.js';
 import { validateWorkstreamName } from './workstream-utils.js';
-import { loadConfig } from './config.js';
-import { assertRuntimeSupportsAutoMode } from './runtime-gate.js';
 
 // ─── Parsed CLI args ─────────────────────────────────────────────────────────
 
@@ -343,17 +341,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     return;
   }
 
-  // Fall back to GSD_WORKSTREAM env var when --ws is not supplied (#2791).
-  // gsd-tools.cjs resolves the active workstream via this env var; parity
-  // means gsd-sdk query commands see the same .planning/ path as gsd-tools.
-  if (args.ws === undefined && process.env.GSD_WORKSTREAM) {
-    const envWs = process.env.GSD_WORKSTREAM;
-    if (validateWorkstreamName(envWs)) {
-      args = { ...args, ws: envWs };
-    }
-    // If the env var contains an invalid name, silently ignore it (same as CJS).
-  }
-
   // Multi-repo project-root resolution (issue #2623).
   //
   // When the user launches `gsd-sdk` from inside a `sub_repos`-listed child repo,
@@ -558,18 +545,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 
   // ─── Auto command ─────────────────────────────────────────────────────────
   if (args.command === 'auto') {
-    // #2832: refuse to silently route non-Claude runtime projects through the
-    // Claude Agent SDK. Load project config (best effort — falls back to
-    // defaults when missing) and gate before constructing GSD/InitRunner.
-    try {
-      const cfg = await loadConfig(args.projectDir, args.ws);
-      assertRuntimeSupportsAutoMode(cfg);
-    } catch (err) {
-      console.error(`Fatal error: ${(err as Error).message}`);
-      process.exitCode = 1;
-      return;
-    }
-
     const gsd = new GSD({
       projectDir: args.projectDir,
       model: args.model,

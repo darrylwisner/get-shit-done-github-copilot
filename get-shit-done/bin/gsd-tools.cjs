@@ -483,18 +483,14 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
       } else if (subcommand === 'prune') {
         const { 'keep-recent': keepRecent, 'dry-run': dryRun } = parseNamedArgs(args, ['keep-recent'], ['dry-run']);
         state.cmdStatePrune(cwd, { keepRecent: keepRecent || '3', dryRun: !!dryRun }, raw);
-      } else if (subcommand === 'complete-phase') {
-        state.cmdStateCompletePhase(cwd, raw);
       } else if (subcommand === 'milestone-switch') {
         // Bug #2630: reset STATE.md frontmatter + Current Position for new milestone.
         // NB: the flag is `--milestone`, not `--version` — gsd-tools reserves
         // `--version` as a globally-invalid help flag (see NEVER_VALID_FLAGS above).
         const { milestone, name } = parseNamedArgs(args, ['milestone', 'name']);
         state.cmdStateMilestoneSwitch(cwd, milestone, name, raw);
-      } else if (subcommand === undefined || subcommand === 'load') {
-        state.cmdStateLoad(cwd, raw);
       } else {
-        error(`Unknown state subcommand: "${subcommand}". Available: load, json, get, patch, update, advance-plan, record-metric, update-progress, add-decision, add-blocker, resolve-blocker, record-session, begin-phase, signal-waiting, signal-resume, planned-phase, validate, sync, prune, complete-phase, milestone-switch`);
+        state.cmdStateLoad(cwd, raw);
       }
       break;
     }
@@ -884,9 +880,6 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
         case 'quick':
           init.cmdInitQuick(cwd, args.slice(2).join(' '), raw);
           break;
-        case 'ingest-docs':
-          init.cmdInitIngestDocs(cwd, raw);
-          break;
         case 'resume':
           init.cmdInitResume(cwd, raw);
           break;
@@ -921,7 +914,7 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
           init.cmdInitRemoveWorkspace(cwd, args[2], raw);
           break;
         default:
-          error(`Unknown init workflow: ${workflow}\nAvailable: execute-phase, plan-phase, new-project, new-milestone, quick, ingest-docs, resume, verify-work, phase-op, todos, milestone-op, map-codebase, progress, manager, new-workspace, list-workspaces, remove-workspace`);
+          error(`Unknown init workflow: ${workflow}\nAvailable: execute-phase, plan-phase, new-project, new-milestone, quick, resume, verify-work, phase-op, todos, milestone-op, map-codebase, progress, manager, new-workspace, list-workspaces, remove-workspace`);
       }
       break;
     }

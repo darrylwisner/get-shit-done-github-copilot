@@ -189,7 +189,7 @@ mkdir -p .planning/reports
 
 Write the summary, then commit:
 ```bash
-gsd-sdk query commit "docs(v${VERSION}): generate milestone summary for onboarding" --files \
+gsd-sdk query commit "docs(v${VERSION}): generate milestone summary for onboarding" \
   ".planning/reports/MILESTONE_SUMMARY-v${VERSION}.md"
 ```
 

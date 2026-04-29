@@ -1,6 +1,6 @@
 ---
 name: gsd:settings-advanced
-description: Power-user configuration for plan bounce, timeouts, branch templates, and cross-AI execution.
+description: Power-user configuration — plan bounce, timeouts, branch templates, cross-AI execution, runtime knobs
 allowed-tools:
   - Read
   - Write

@@ -79,26 +79,13 @@ export function getAgentToModelMapForProfile(normalizedProfile: string): Record<
  * @returns QueryResult with the config value at the given path
  * @throws GSDError with Validation classification if key missing or not found
  */
-export const configGet: QueryHandler = async (args, projectDir, workstream) => {
-  // Support --default <value> flag (#2803): return this value (exit 0) when the
-  // key is absent, mirroring gsd-tools.cjs config-get behavior from #1893.
-  const defaultIdx = args.indexOf('--default');
-  let defaultValue: string | undefined;
-  let filteredArgs = args;
-  if (defaultIdx !== -1) {
-    if (defaultIdx + 1 >= args.length) {
-      throw new GSDError('Usage: config-get <key.path> [--default <value>]', ErrorClassification.Validation);
-    }
-    defaultValue = String(args[defaultIdx + 1]);
-    filteredArgs = [...args.slice(0, defaultIdx), ...args.slice(defaultIdx + 2)];
-  }
-
-  const keyPath = filteredArgs[0];
+export const configGet: QueryHandler = async (args, projectDir, _workstream) => {
+  const keyPath = args[0];
   if (!keyPath) {
-    throw new GSDError('Usage: config-get <key.path> [--default <value>]', ErrorClassification.Validation);
+    throw new GSDError('Usage: config-get <key.path>', ErrorClassification.Validation);
   }
 
-  const paths = planningPaths(projectDir, workstream);
+  const paths = planningPaths(projectDir);
   let raw: string;
   try {
     raw = await readFile(paths.config, 'utf-8');
@@ -119,13 +106,11 @@ export const configGet: QueryHandler = async (args, projectDir, workstream) => {
     if (current === undefined || current === null || typeof current !== 'object') {
       // UNIX convention (cf. `git config --get`): missing key exits 1, not 10.
       // See issue #2544 — callers use `if ! gsd-sdk query config-get k; then` patterns.
-      if (defaultValue !== undefined) return { data: defaultValue };
       throw new GSDError(`Key not found: ${keyPath}`, ErrorClassification.Execution);
     }
     current = (current as Record<string, unknown>)[key];
   }
   if (current === undefined) {
-    if (defaultValue !== undefined) return { data: defaultValue };
     throw new GSDError(`Key not found: ${keyPath}`, ErrorClassification.Execution);
   }
 
@@ -144,8 +129,8 @@ export const configGet: QueryHandler = async (args, projectDir, workstream) => {
  * @param projectDir - Project root directory
  * @returns QueryResult with `{ path: string }` absolute or project-relative resolution via planningPaths
  */
-export const configPath: QueryHandler = async (_args, projectDir, workstream) => {
-  const paths = planningPaths(projectDir, workstream);
+export const configPath: QueryHandler = async (_args, projectDir, _workstream) => {
+  const paths = planningPaths(projectDir);
   return { data: { path: paths.config } };
 };
 
@@ -159,18 +144,16 @@ export const configPath: QueryHandler = async (_args, projectDir, workstream) =>
  *
  * @param args - args[0] is the agent type (e.g., 'gsd-planner')
  * @param projectDir - Project root directory
- * @param workstream - Optional workstream name; forwarded to loadConfig so per-workstream
- *   model_profile settings are respected (mirrors configGet/configPath behavior)
  * @returns QueryResult with { model, profile } or { model, profile, unknown_agent: true }
  * @throws GSDError with Validation classification if agent type not provided
  */
-export const resolveModel: QueryHandler = async (args, projectDir, workstream) => {
+export const resolveModel: QueryHandler = async (args, projectDir) => {
   const agentType = args[0];
   if (!agentType) {
     throw new GSDError('agent-type required', ErrorClassification.Validation);
   }
 
-  const config = await loadConfig(projectDir, workstream);
+  const config = await loadConfig(projectDir);
   const profile = String(config.model_profile || 'balanced').toLowerCase();
 
   // Check per-agent override first
