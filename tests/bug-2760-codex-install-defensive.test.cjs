@@ -90,12 +90,59 @@ describe('#2760 defect 3 — Hooks AoT preservation across install/uninstall/rei
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('preserves both pre-existing [[hooks.SessionStart]] entries and adds GSD entry in namespaced form', () => {
+  test('fresh install emits the two-level nested AoT schema (#2773)', () => {
+    // Codex 0.124.0+ requires [[hooks.SessionStart]] + [[hooks.SessionStart.hooks]]
+    // with type = "command". Neither the flat [[hooks]] + event field form nor
+    // the single-block [[hooks.SessionStart]] form without .hooks is accepted.
+    writeCodexConfig(codexHome, '');
+    runCodexInstall(codexHome);
+    const content = readCodexConfig(codexHome);
+    const parsed = parseTomlToObject(content);
+
+    // hooks must be an object (namespaced), NOT a flat array.
+    assert.ok(
+      parsed.hooks && !Array.isArray(parsed.hooks) && typeof parsed.hooks === 'object',
+      'hooks must be a namespaced object, not a flat array: got ' + JSON.stringify(parsed.hooks)
+    );
+    // hooks.SessionStart must be an array-of-tables.
+    assert.ok(
+      Array.isArray(parsed.hooks.SessionStart),
+      'hooks.SessionStart must be array-of-tables: got ' + typeof parsed.hooks.SessionStart
+    );
+    // Each event entry must have a .hooks sub-array.
+    const eventEntry = parsed.hooks.SessionStart[0];
+    assert.ok(
+      eventEntry && Array.isArray(eventEntry.hooks),
+      'hooks.SessionStart[0].hooks must be an array of handlers: got ' + JSON.stringify(eventEntry)
+    );
+    // The handler must have type = "command" and reference gsd-check-update.js.
+    const handler = eventEntry.hooks[0];
+    assert.strictEqual(handler.type, 'command', 'handler type must be "command"');
+    assert.ok(
+      typeof handler.command === 'string' && /gsd-check-update\.js/.test(handler.command),
+      'handler command must reference gsd-check-update.js: got ' + handler.command
+    );
+    // No flat [[hooks]] entries must exist alongside the namespaced form.
+    assert.ok(
+      !Array.isArray(parsed.hooks),
+      'flat [[hooks]] AoT must not coexist with namespaced [[hooks.SessionStart]]'
+    );
+  });
+
+  test('preserves user [[hooks.SessionStart]] entries and adds GSD nested handler', () => {
+    // Users may have their own [[hooks.SessionStart]] entries using the new schema.
+    // GSD must append its own two-level block without disturbing theirs.
     const userConfig = [
       '[[hooks.SessionStart]]',
+      '',
+      '[[hooks.SessionStart.hooks]]',
+      'type = "command"',
       'command = "echo first user hook"',
       '',
       '[[hooks.SessionStart]]',
+      '',
+      '[[hooks.SessionStart.hooks]]',
+      'type = "command"',
       'command = "echo second user hook"',
       '',
     ].join('\n');
@@ -105,58 +152,110 @@ describe('#2760 defect 3 — Hooks AoT preservation across install/uninstall/rei
     const afterInstall = readCodexConfig(codexHome);
     const parsed = parseTomlToObject(afterInstall);
 
-    // hooks.SessionStart must be an array-of-tables (namespaced AoT form).
     assert.ok(
       parsed.hooks && Array.isArray(parsed.hooks.SessionStart),
-      'hooks.SessionStart must be an array-of-tables, got: '
-        + (parsed.hooks ? typeof parsed.hooks.SessionStart : 'no hooks table')
+      'hooks.SessionStart must remain an array-of-tables after install'
     );
 
-    const commands = parsed.hooks.SessionStart.map((entry) => entry.command);
-
-    // Both pre-existing user hook entries survive in the parsed structure.
-    assert.ok(
-      commands.includes('echo first user hook'),
-      'first user [[hooks.SessionStart]] entry preserved in parsed structure: ' + JSON.stringify(commands)
-    );
-    assert.ok(
-      commands.includes('echo second user hook'),
-      'second user [[hooks.SessionStart]] entry preserved in parsed structure: ' + JSON.stringify(commands)
+    // Collect all handler commands across all event entries.
+    const allCommands = parsed.hooks.SessionStart.flatMap((entry) =>
+      Array.isArray(entry.hooks) ? entry.hooks.map((h) => h.command) : []
     );
 
-    // GSD's managed entry is emitted in the same namespaced AoT shape so it
-    // does not collide with the user's preferred form.
     assert.ok(
-      commands.some((cmd) => typeof cmd === 'string' && /gsd-check-update\.js/.test(cmd)),
-      'GSD entry must appear in hooks.SessionStart array (not top-level [[hooks]]): '
-        + JSON.stringify(commands)
+      allCommands.includes('echo first user hook'),
+      'first user hook preserved: ' + JSON.stringify(allCommands)
     );
-
-    // Top-level [[hooks]] AoT must not coexist when namespaced form is in use —
-    // mixing forms is what produces the round-trip break this fix prevents.
     assert.ok(
-      !Array.isArray(parsed.hooks) || parsed.hooks.length === 0,
-      'no top-level [[hooks]] AoT entries when namespaced form is in use'
+      allCommands.includes('echo second user hook'),
+      'second user hook preserved: ' + JSON.stringify(allCommands)
     );
+    assert.ok(
+      allCommands.some((cmd) => typeof cmd === 'string' && /gsd-check-update\.js/.test(cmd)),
+      'GSD handler must appear in hooks.SessionStart[].hooks: ' + JSON.stringify(allCommands)
+    );
+    assert.ok(!Array.isArray(parsed.hooks), 'no flat [[hooks]] entries');
   });
 
-  test('selects top-level [[hooks]] form when user has no namespaced hooks (status-quo behavior)', () => {
-    writeCodexConfig(codexHome, '');
+  test('reinstall replaces flat [[hooks]] + event form with nested schema', () => {
+    // Upgrade path: user has a config written by GSD 1.38.x (flat [[hooks]] form).
+    const legacyConfig = [
+      '[features]',
+      'codex_hooks = true',
+      '',
+      '# GSD Hooks',
+      '[[hooks]]',
+      'event = "SessionStart"',
+      'command = "node /old/path/to/gsd-check-update.js"',
+      '',
+    ].join('\n');
+    writeCodexConfig(codexHome, legacyConfig);
+
     runCodexInstall(codexHome);
     const content = readCodexConfig(codexHome);
     const parsed = parseTomlToObject(content);
 
-    // Top-level hooks must be an array-of-tables; the GSD entry must be one
-    // of those tables and carry event = "SessionStart".
-    assert.ok(
-      Array.isArray(parsed.hooks),
-      'fresh install must produce top-level [[hooks]] AoT, got: ' + typeof parsed.hooks
+    // Old flat form must be gone.
+    assert.ok(!Array.isArray(parsed.hooks), 'flat [[hooks]] must be stripped on upgrade');
+    // New nested form must be present.
+    assert.ok(Array.isArray(parsed.hooks && parsed.hooks.SessionStart), 'new [[hooks.SessionStart]] must be present');
+    const handler = parsed.hooks.SessionStart[0].hooks[0];
+    assert.strictEqual(handler.type, 'command');
+    assert.ok(/gsd-check-update\.js/.test(handler.command));
+    // Only one GSD hook entry must exist (no duplication).
+    const sessionStart = parsed.hooks?.SessionStart ?? [];
+    const gsdHandlers = sessionStart.flatMap((entry) =>
+      Array.isArray(entry.hooks) ? entry.hooks : []
+    ).filter((h) => typeof h?.command === 'string' && /gsd-check-update\.js/.test(h.command));
+    assert.strictEqual(gsdHandlers.length, 1, 'exactly one managed handler after upgrade');
+  });
+
+  test('reinstall replaces single-block [[hooks.SessionStart]] (no .hooks sub-table) with nested schema', () => {
+    // Upgrade path: user has a config written by the PR #2802 shape —
+    // [[hooks.SessionStart]] without a nested [[hooks.SessionStart.hooks]] sub-table.
+    const prBranchConfig = [
+      '[features]',
+      'codex_hooks = true',
+      '',
+      '# GSD Hooks',
+      '[[hooks.SessionStart]]',
+      'command = "node /old/path/to/gsd-check-update.js"',
+      '',
+    ].join('\n');
+    writeCodexConfig(codexHome, prBranchConfig);
+
+    runCodexInstall(codexHome);
+    const content = readCodexConfig(codexHome);
+    const parsed = parseTomlToObject(content);
+
+    assert.ok(Array.isArray(parsed.hooks && parsed.hooks.SessionStart), '[[hooks.SessionStart]] must be present');
+    const eventEntry = parsed.hooks.SessionStart[0];
+    assert.ok(Array.isArray(eventEntry.hooks), '[[hooks.SessionStart.hooks]] sub-table must be present');
+    const handler = eventEntry.hooks[0];
+    assert.strictEqual(handler.type, 'command');
+    assert.ok(/gsd-check-update\.js/.test(handler.command));
+    const handlers = (parsed.hooks?.SessionStart ?? []).flatMap((entry) =>
+      Array.isArray(entry.hooks) ? entry.hooks : []
     );
-    assert.ok(
-      parsed.hooks.some((h) => h && h.event === 'SessionStart'),
-      'top-level [[hooks]] AoT must contain an entry with event = "SessionStart": '
-        + JSON.stringify(parsed.hooks)
+    assert.strictEqual(
+      handlers.filter((h) => typeof h?.command === 'string' && /gsd-check-update\.js/.test(h.command)).length,
+      1,
+      'exactly one managed handler after upgrade from PR-#2802-shape'
     );
+  });
+
+  test('reinstall is idempotent: correct nested schema is stripped and re-emitted cleanly', () => {
+    writeCodexConfig(codexHome, '');
+    runCodexInstall(codexHome);
+    runCodexInstall(codexHome); // second install
+    const content = readCodexConfig(codexHome);
+
+    const parsed = parseTomlToObject(content);
+    const sessionStart = parsed.hooks?.SessionStart ?? [];
+    assert.strictEqual(sessionStart.length, 1, 'exactly one SessionStart event entry after double install');
+    assert.ok(Array.isArray(sessionStart[0].hooks), 'SessionStart event has nested handlers array');
+    assert.strictEqual(sessionStart[0].hooks.length, 1, 'exactly one handler in SessionStart after double install');
+    assert.ok(/gsd-check-update\.js/.test(sessionStart[0].hooks[0].command), 'managed handler command preserved');
   });
 });
 
@@ -572,15 +671,25 @@ describe('#2760 CR4 finding 2 — Legacy flat [[hooks]] block migrates to namesp
         + (parsed.hooks ? typeof parsed.hooks.SessionStart : 'no hooks table')
     );
 
-    const namespacedCommands = parsed.hooks.SessionStart.map((entry) => entry.command);
+    // Migration now handles stale [[hooks.SessionStart]] entries with handler
+    // fields at event-entry level (pre-#2773 shape), promoting them to the
+    // two-level nested form. Every entry must carry a .hooks sub-array after
+    // migration, so collect from nested handlers only.
     assert.ok(
-      namespacedCommands.includes('echo user hook'),
-      'user [[hooks.SessionStart]] entry preserved: ' + JSON.stringify(namespacedCommands)
+      parsed.hooks.SessionStart.every((entry) => Array.isArray(entry.hooks)),
+      'every hooks.SessionStart entry must use nested [[hooks.SessionStart.hooks]] handlers after migration'
+    );
+    const allSessionStartCommands = parsed.hooks.SessionStart.flatMap((entry) =>
+      entry.hooks.map((h) => h.command).filter(Boolean)
     );
     assert.ok(
-      namespacedCommands.some((cmd) => typeof cmd === 'string' && /gsd-check-update\.js/.test(cmd)),
+      allSessionStartCommands.includes('echo user hook'),
+      'user [[hooks.SessionStart]] entry preserved: ' + JSON.stringify(allSessionStartCommands)
+    );
+    assert.ok(
+      allSessionStartCommands.some((cmd) => typeof cmd === 'string' && /gsd-check-update\.js/.test(cmd)),
       'GSD entry must appear in hooks.SessionStart array (namespaced AoT form): '
-        + JSON.stringify(namespacedCommands)
+        + JSON.stringify(allSessionStartCommands)
     );
 
     // The legacy top-level [[hooks]] AoT must NOT coexist with the namespaced
@@ -592,7 +701,7 @@ describe('#2760 CR4 finding 2 — Legacy flat [[hooks]] block migrates to namesp
     );
 
     // No duplicate gsd-check-update entries — exactly one managed entry.
-    const gsdEntries = namespacedCommands.filter(
+    const gsdEntries = allSessionStartCommands.filter(
       (cmd) => typeof cmd === 'string' && /gsd-check-update\.js/.test(cmd)
     );
     assert.equal(gsdEntries.length, 1,
@@ -936,18 +1045,35 @@ describe('#2760 CR5 finding 3 — migration emits namespaced AoT (no flat/namesp
       parsed.hooks && Array.isArray(parsed.hooks.AfterTool),
       'pre-existing [[hooks.AfterTool]] must remain a namespaced AoT array'
     );
+    // AfterTool was in [[hooks.AfterTool]] with command at event-entry level
+    // (pre-#2773 stale namespaced AoT shape). Migration now promotes these to
+    // the two-level nested form, so every entry must have a .hooks sub-array.
     assert.ok(
-      parsed.hooks.AfterTool.some((entry) => entry.command === 'x'),
-      'user AfterTool entry must be preserved: ' + JSON.stringify(parsed.hooks.AfterTool)
+      parsed.hooks.AfterTool.every((e) => Array.isArray(e.hooks)),
+      'every AfterTool entry must use nested [[hooks.AfterTool.hooks]] handlers after migration'
+    );
+    const afterToolCommands = parsed.hooks.AfterTool.flatMap((e) =>
+      e.hooks.map((h) => h.command).filter(Boolean)
+    );
+    assert.ok(
+      afterToolCommands.includes('x'),
+      'user AfterTool entry must be preserved: ' + JSON.stringify(afterToolCommands)
     );
 
-    // The migrated SessionStart entry is now namespaced AoT, not flat
-    // [[hooks]] with event="SessionStart".
+    // The migrated SessionStart entry is now namespaced AoT with nested .hooks sub-table.
     assert.ok(
       parsed.hooks && Array.isArray(parsed.hooks.SessionStart),
       'migrated SessionStart must be namespaced AoT (not flat [[hooks]])'
     );
-    const ssCommands = parsed.hooks.SessionStart.map((e) => e.command);
+    // After migration, [hooks.SessionStart] map-format is promoted to nested AoT.
+    // Command lives in [[hooks.SessionStart.hooks]][0].command (nested schema).
+    assert.ok(
+      parsed.hooks.SessionStart.every((e) => Array.isArray(e.hooks)),
+      'every SessionStart entry must use nested [[hooks.SessionStart.hooks]] handlers after migration'
+    );
+    const ssCommands = parsed.hooks.SessionStart.flatMap((e) =>
+      e.hooks.map((h) => h.command).filter(Boolean)
+    );
     assert.ok(
       ssCommands.includes('y'),
       'user SessionStart command "y" must be preserved in namespaced array: ' +
