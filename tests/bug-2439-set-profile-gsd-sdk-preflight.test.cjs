@@ -17,38 +17,65 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const COMMAND_PATH = path.join(__dirname, '..', 'commands', 'gsd', 'set-profile.md');
+// #2790: set-profile.md was consolidated into config.md as the --profile flag.
+// The gsd-sdk pre-flight check logic moved to config.md body.
+const COMMAND_PATH = path.join(__dirname, '..', 'commands', 'gsd', 'config.md');
 
 describe('bug #2439: /gsd-set-profile gsd-sdk pre-flight check', () => {
-  const content = fs.readFileSync(COMMAND_PATH, 'utf-8');
-
-  test('command file exists', () => {
-    assert.ok(fs.existsSync(COMMAND_PATH), 'commands/gsd/set-profile.md should exist');
+  test('command file exists (config.md — absorbed set-profile in #2790)', () => {
+    assert.ok(fs.existsSync(COMMAND_PATH), 'commands/gsd/config.md should exist (absorbed set-profile)');
   });
 
-  test('guards gsd-sdk invocation with command -v check', () => {
-    const sdkCall = content.indexOf('gsd-sdk query config-set-model-profile');
-    assert.ok(sdkCall !== -1, 'gsd-sdk query config-set-model-profile must be present');
-
-    const preamble = content.slice(0, sdkCall);
+  test('config.md --profile flag references gsd-sdk config-set-model-profile', () => {
+    const content = fs.readFileSync(COMMAND_PATH, 'utf-8');
     assert.ok(
-      preamble.includes('command -v gsd-sdk') || preamble.includes('which gsd-sdk'),
-      'set-profile must check for gsd-sdk in PATH before invoking it. ' +
-      'Without this guard the command crashes with exit 127 when gsd-sdk ' +
-      'is not installed (root cause of #2439).'
+      content.includes('gsd-sdk query config-set-model-profile') || content.includes('config-set-model-profile'),
+      'config.md must reference gsd-sdk query config-set-model-profile for --profile flag'
     );
   });
 
-  test('pre-flight error message references install/update path', () => {
-    const sdkCall = content.indexOf('gsd-sdk query config-set-model-profile');
-    const preamble = content.slice(0, sdkCall);
-    const hasInstallHint =
-      preamble.includes('@gsd-build/sdk') ||
-      preamble.includes('gsd-update') ||
-      preamble.includes('/gsd-update');
+  test('pre-flight guard for #2439 is explicitly documented in config.md --profile path', () => {
+    // The original #2439 bug: gsd-sdk was invoked with no pre-flight check, producing
+    // an opaque "command not found: gsd-sdk" error.
+    //
+    // Structural assertion (no raw .includes() on the whole file): isolate the
+    // <context> block, locate the --profile branch, then verify it documents both
+    // (a) the pre-flight check (`command -v gsd-sdk`) and (b) the install hint
+    // BEFORE the gsd-sdk invocation. Otherwise the regression returns silently.
+    const content = fs.readFileSync(COMMAND_PATH, 'utf-8');
+
+    const ctxMatch = content.match(/<context>([\s\S]*?)<\/context>/);
+    assert.ok(ctxMatch, 'config.md must contain a <context> block describing flag routing');
+    const ctx = ctxMatch[1];
+
+    // Find the --profile bullet (everything from the --profile mention up to the
+    // next top-level `- ` bullet that does not start with `--profile`).
+    const profileBranchMatch = ctx.match(/- If it starts with `--profile`[\s\S]*?(?=\n- (?!\s)[A-Z])/);
+    assert.ok(profileBranchMatch, 'config.md <context> must contain a --profile branch');
+    const profileBranch = profileBranchMatch[0];
+
+    // (a) pre-flight check token
     assert.ok(
-      hasInstallHint,
-      'Pre-flight error must point users at `npm install -g @gsd-build/sdk` or `/gsd-update`.'
+      /command -v gsd-sdk/.test(profileBranch),
+      'config.md --profile branch must document `command -v gsd-sdk` pre-flight check (#2439)'
     );
+    // (b) install hint near the guard, not after the invocation
+    assert.ok(
+      /install/i.test(profileBranch),
+      'config.md --profile branch must surface an install hint when gsd-sdk is absent (#2439)'
+    );
+    // (c) #2439 reference so future maintainers can trace the contract
+    assert.ok(
+      /#2439/.test(profileBranch),
+      'config.md --profile branch must cite #2439 so the regression contract is discoverable'
+    );
+
+    // (d) ordering: the pre-flight guard text must appear BEFORE the actual
+    // `gsd-sdk query config-set-model-profile` invocation in the same branch.
+    const guardIdx = profileBranch.indexOf('command -v gsd-sdk');
+    const invokeIdx = profileBranch.indexOf('gsd-sdk query config-set-model-profile');
+    assert.notEqual(guardIdx, -1, 'guard token missing');
+    assert.notEqual(invokeIdx, -1, 'invocation token missing');
+    assert.ok(guardIdx < invokeIdx, 'pre-flight guard must appear before the gsd-sdk invocation (#2439 contract)');
   });
 });

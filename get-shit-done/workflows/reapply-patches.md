@@ -1,14 +1,10 @@
----
-name: gsd:reapply-patches
-description: Reapply local modifications after a GSD update
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
----
+# Reapply Local Patches Workflow
 
-<purpose>
-After a GSD update wipes and reinstalls files, this command merges user's previously saved local modifications back into the new version. Uses three-way comparison (pristine baseline, user-modified backup, newly installed version) to reliably distinguish user customizations from version drift.
+Invoked by `/gsd-update --reapply` (`commands/gsd/update.md`).
+
+After a GSD update wipes and reinstalls files, this workflow merges user's previously saved local modifications back into the new version. Uses three-way comparison (pristine baseline, user-modified backup, newly installed version) to reliably distinguish user customizations from version drift.
 
 **Critical invariant:** Every file in `gsd-local-patches/` was backed up because the installer's hash comparison detected it was modified. The workflow must NEVER conclude "no custom content" for any backed-up file — that is a logical contradiction. When in doubt, classify as CONFLICT requiring user review, not SKIP.
-</purpose>
 
 <process>
 
@@ -278,7 +274,7 @@ Before proceeding to cleanup, evaluate the Hunk Verification Table produced in S
 **If the Hunk Verification Table is absent** (Step 4 did not produce it), STOP immediately and report to the user:
 ```
 ERROR: Hunk Verification Table is missing. Post-merge verification was not completed.
-Rerun /gsd-reapply-patches to retry with full verification.
+Rerun /gsd-update --reapply to retry with full verification.
 ```
 
 **If any row in the Hunk Verification Table shows `verified: no`**, STOP and report to the user:

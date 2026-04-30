@@ -813,7 +813,7 @@ against the mapping point, not HEAD.
 ### 27a. Post-Execute Codebase Drift Detection
 
 **Introduced by:** #2003
-**Trigger:** Runs automatically at the end of every `/gsd:execute-phase`
+**Trigger:** Runs automatically at the end of every `/gsd-execute-phase`
 **Configuration:**
 - `workflow.drift_threshold` (integer, default `3`) — minimum new
   structural elements before the gate acts.
@@ -837,7 +837,7 @@ continues. Drift detection cannot fail verification.
 - REQ-DRIFT-02: Action fires only when element count ≥ `workflow.drift_threshold`
 - REQ-DRIFT-03: `warn` action MUST NOT spawn any agent
 - REQ-DRIFT-04: `auto-remap` action MUST pass sanitized `--paths` to the mapper
-- REQ-DRIFT-05: Detection/remap failure MUST be non-blocking for `/gsd:execute-phase`
+- REQ-DRIFT-05: Detection/remap failure MUST be non-blocking for `/gsd-execute-phase`
 - REQ-DRIFT-06: `last_mapped_commit` round-trip through YAML frontmatter
   on each `.planning/codebase/*.md` file
 

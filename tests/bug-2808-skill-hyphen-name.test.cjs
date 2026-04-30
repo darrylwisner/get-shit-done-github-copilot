@@ -11,7 +11,7 @@
  * #2643. Since then, workflows have been updated to use hyphen form (#2808).
  *
  * Fix: skillFrontmatterName() now returns the hyphen form unchanged.
- * Four workflow Skill() colon calls updated to hyphen.
+ * Workflow Skill() colon calls are updated to hyphen.
  *
  * This test verifies:
  * 1. skillFrontmatterName returns hyphen form (not colon).
@@ -27,9 +27,10 @@ const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { cleanup, createTempDir } = require('./helpers.cjs');
 
 const ROOT = path.join(__dirname, '..');
-const { convertClaudeCommandToClaudeSkill, skillFrontmatterName } =
+const { convertClaudeCommandToClaudeSkill, copyCommandsAsClaudeSkills, skillFrontmatterName } =
   require(path.join(ROOT, 'bin', 'install.js'));
 
 const WORKFLOWS_DIR = path.join(ROOT, 'get-shit-done', 'workflows');
@@ -100,7 +101,16 @@ describe('bug-2808: SKILL.md name: uses hyphen form', () => {
       // Parsing line-by-line is more precise than a multi-line regex
       // and avoids false positives from incidental matches in prose.
       for (const line of stripped.split('\n')) {
-        const colonCallRe = /Skill\(skill=['"]gsd:([a-z0-9-]+)['"]/gi;
+        // Tolerate whitespace around the parenthesis, the `skill` keyword,
+        // and the `=` so variants like `Skill( skill = "gsd:foo" )` are still
+        // flagged. Without the `\s*` allowances, drift slips through this guard.
+        //
+        // The local-name capture must be permissive (`[^'"\s)]+`, not
+        // `[a-z0-9-]+`) — the whole purpose of this guard is to surface
+        // *malformed* drift, including legacy underscore-form names like
+        // `gsd:extract_learnings`. A character-class that excludes the very
+        // characters we need to flag would silently let drift through.
+        const colonCallRe = /Skill\(\s*skill\s*=\s*\\?['"]gsd:([^'"\s)]+)\\?['"]/gi;
         let m;
         while ((m = colonCallRe.exec(line)) !== null) {
           colonCalls.push(`${path.basename(f)}: Skill(skill="gsd:${m[1]}")`);
@@ -112,5 +122,56 @@ describe('bug-2808: SKILL.md name: uses hyphen form', () => {
       [],
       'deprecated colon-form Skill() calls found — update to gsd-<cmd>: ' + colonCalls.join(', ')
     );
+  });
+
+  test('generated autocomplete skill surface uses hyphen names without underscores', (t) => {
+    const tmp = createTempDir('gsd-autocomplete-surface-');
+    t.after(() => cleanup(tmp));
+    const skillsDir = path.join(tmp, 'skills');
+    copyCommandsAsClaudeSkills(COMMANDS_DIR, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
+
+    // Don't filter the directory listing by `startsWith('gsd-')` — that
+    // would silently hide exactly the kind of drift this test exists to
+    // catch (a `gsd:extract-learnings` colon variant or a bare
+    // `extract-learnings` without the namespace prefix would never be
+    // collected, and the loop below would never see them). Capture every
+    // generated directory and assert the namespace invariants explicitly.
+    const skillDirs = fs.readdirSync(skillsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    assert.ok(skillDirs.length > 0, 'expected generated skill directories under skillsDir');
+    for (const dir of skillDirs) {
+      assert.ok(
+        dir.startsWith('gsd-'),
+        `${dir}: generated skill directory must start with the canonical 'gsd-' namespace`,
+      );
+      assert.ok(
+        !dir.includes(':'),
+        `${dir}: generated skill directory must not contain the retired colon namespace separator`,
+      );
+      assert.ok(
+        !dir.includes('_'),
+        `${dir}: generated skill directory must use hyphens, not underscores`,
+      );
+    }
+
+    assert.ok(skillDirs.includes('gsd-extract-learnings'), 'autocomplete surface must include gsd-extract-learnings');
+    assert.ok(!skillDirs.includes('gsd-extract_learnings'), 'autocomplete surface must not include gsd-extract_learnings');
+
+    for (const skillDir of skillDirs) {
+      const skillContent = fs.readFileSync(path.join(skillsDir, skillDir, 'SKILL.md'), 'utf-8');
+      // Scope the name: lookup to the YAML frontmatter block so a stray
+      // `name:` line in the body cannot satisfy the assertion.
+      const fmMatch = skillContent.match(/^---\n([\s\S]*?)\n---/);
+      assert.ok(fmMatch, `${skillDir}: generated SKILL.md must include frontmatter`);
+      const nameLine = fmMatch[1].split('\n').find((l) => /^name:\s*/.test(l));
+      assert.ok(nameLine, `${skillDir}: generated SKILL.md is missing name: frontmatter`);
+      const name = nameLine.replace(/^name:\s*/, '').trim();
+      assert.ok(name.startsWith('gsd-'), `${skillDir}: autocomplete name must start with gsd-, got ${name}`);
+      assert.ok(!name.includes(':'), `${skillDir}: autocomplete name must not contain colon, got ${name}`);
+      assert.ok(!name.includes('_'), `${skillDir}: autocomplete name must not contain underscore, got ${name}`);
+    }
   });
 });

@@ -134,7 +134,7 @@ Orchestration logic that commands reference. Contains the step-by-step process i
 #### Progressive disclosure for workflows
 
 Workflow files are loaded verbatim into Claude's context every time the
-corresponding `/gsd:*` command is invoked. To keep that cost bounded, the
+corresponding `/gsd-*` command is invoked. To keep that cost bounded, the
 workflow size budget enforced by `tests/workflow-size-budget.test.cjs`
 mirrors the agent budget from #2361:
 
@@ -534,7 +534,7 @@ Equivalent paths for other runtimes:
 
 ### Post-Execute Codebase Drift Gate (#2003)
 
-After the last wave of `/gsd:execute-phase` commits, the workflow runs a
+After the last wave of `/gsd-execute-phase` commits, the workflow runs a
 non-blocking `codebase_drift_gate` step (between `schema_drift_gate` and
 `verify_phase_goal`). It compares the diff `last_mapped_commit..HEAD`
 against `.planning/codebase/STRUCTURE.md` and counts four kinds of
@@ -546,7 +546,7 @@ structural elements:
 4. New route modules under `routes/` or `api/`
 
 If the count meets `workflow.drift_threshold` (default 3), the gate either
-**warns** (default) with the suggested `/gsd:map-codebase --paths …` command,
+**warns** (default) with the suggested `/gsd-map-codebase --paths …` command,
 or **auto-remaps** (`workflow.drift_action = auto-remap`) by spawning
 `gsd-codebase-mapper` scoped to the affected paths. Any error in detection
 or remap is logged and the phase continues — drift detection cannot fail

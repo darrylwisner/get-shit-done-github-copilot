@@ -52,7 +52,8 @@ If `PATH_NOT_FOUND` or `MANIFEST_NOT_FOUND`: display error and exit.
 Run the init query:
 
 ```bash
-INIT=$(gsd-tools init ingest-docs)
+INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init ingest-docs)
+if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
 Parse `project_exists`, `planning_exists`, `has_git`, `project_path` from INIT.
@@ -289,7 +290,8 @@ Preview the merge diff to the user and gate via approve-revise-abort before writ
 Commit the ingest results:
 
 ```bash
-gsd-tools commit "docs: ingest {N} docs from {SCAN_PATH} (#2387)" --files \
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit \
+  "docs: ingest {N} docs from {SCAN_PATH} (#2387)" --files \
   .planning/PROJECT.md \
   .planning/REQUIREMENTS.md \
   .planning/ROADMAP.md \

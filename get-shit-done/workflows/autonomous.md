@@ -322,7 +322,7 @@ UI_SPEC_FILE=$(ls "${PHASE_DIR}"/*-UI-SPEC.md 2>/dev/null | head -1)
 Agent(
   description="Plan phase ${PHASE_NUM}: ${PHASE_NAME}",
   run_in_background=true,
-  prompt="Run plan-phase for phase ${PHASE_NUM}: Skill(skill=\"gsd:plan-phase\", args=\"${PHASE_NUM}\")"
+  prompt="Run plan-phase for phase ${PHASE_NUM}: Skill(skill=\"gsd-plan-phase\", args=\"${PHASE_NUM}\")"
 )
 ```
 
@@ -344,7 +344,7 @@ Verify plan produced output — re-run `init phase-op` and check `has_plans`. If
 Agent(
   description="Execute phase ${PHASE_NUM}: ${PHASE_NAME}",
   run_in_background=true,
-  prompt="Run execute-phase for phase ${PHASE_NUM}: Skill(skill=\"gsd:execute-phase\", args=\"${PHASE_NUM} --no-transition\")"
+  prompt="Run execute-phase for phase ${PHASE_NUM}: Skill(skill=\"gsd-execute-phase\", args=\"${PHASE_NUM} --no-transition\")"
 )
 ```
 
@@ -371,8 +371,8 @@ Skill(skill="gsd-code-review", args="${PHASE_NUM}")
 ```
 
 Parse status from REVIEW.md frontmatter. If "clean" or "skipped": proceed to 3d. If findings found: auto-invoke:
-```text
-Skill(skill="gsd-code-review-fix", args="${PHASE_NUM} --auto")
+```
+Skill(skill="gsd-code-review", args="${PHASE_NUM} --fix --auto")
 ```
 
 **Error handling:** If either Skill fails, catch the error, display as non-blocking, and proceed to 3d.
@@ -780,7 +780,7 @@ When any phase operation fails or a blocker is detected, present 3 options via A
 - [ ] `--to N` compatible with `--from N` (run phases from M to N)
 - [ ] `--to N` handle_blocker resume message preserves --to flag
 - [ ] `--to N` skips lifecycle when not all milestone phases complete
-- [ ] `--interactive` runs discuss inline via gsd:discuss-phase (asks questions, waits for user)
+- [ ] `--interactive` runs discuss inline via gsd-discuss-phase (asks questions, waits for user)
 - [ ] `--interactive` dispatches plan and execute as background agents (context isolation)
 - [ ] `--interactive` enables pipeline parallelism: discuss Phase N+1 while Phase N builds
 - [ ] `--interactive` main context only accumulates discuss conversations (lean)
