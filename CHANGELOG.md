@@ -26,6 +26,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   RC. (#2833)
 
 ### Changed — 1.40.0-rc.1
+- **Planning workspace seam extracted from `core.cjs` into `planning-workspace.cjs`** — path/workstream/lock behavior now lives in a dedicated module (`planningDir`, `planningPaths`, `planningRoot`, active-workstream routing, `withPlanningLock`). `core.cjs` keeps compatibility re-exports while call-sites migrate to direct imports, improving locality and reducing coupling. (#2900)
 - **Skill surface consolidated 86 → 59 `commands/gsd/*.md` entries** — four new
   grouped skills (`capture`, `phase`, `config`, `workspace`) replace clusters of
   micro-skills. Six existing parents absorb wrap-up and sub-operations as flags:
@@ -38,6 +39,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   posting a comment that points to the contribution guide. (#2872)
 
 ### Fixed — 1.40.0-rc.1
+- **`gap-analysis` now parses non-`REQ-` requirement IDs and ignores traceability table headers** — `parseRequirements()` no longer hard-codes the `REQ-` prefix and now accepts uppercase prefixed IDs such as `TST-01`, `BACK-07`, and `INSP-04`; markdown table header rows (for example `| REQ-ID | ... |`) are excluded so header tokens are not reported as phantom uncovered requirements. Added regression coverage for mixed-prefix REQUIREMENTS files with traceability tables. (#2897)
 - **Gemini slash commands namespaced as `/gsd:<cmd>` instead of `/gsd-<cmd>`** —
   Gemini CLI namespaces commands under `gsd:`, so `/gsd-plan-phase` was unexecutable.
   Body-text references in commands, agents, banners, and patch-reapply hints are now
