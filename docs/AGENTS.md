@@ -343,7 +343,7 @@ GSD uses a multi-agent architecture where thin orchestrators (workflow files) sp
 
 | Property | Value |
 |----------|-------|
-| **Spawned by** | `/gsd-map-codebase`, post-execute drift gate in `/gsd:execute-phase` |
+| **Spawned by** | `/gsd-map-codebase`, post-execute drift gate in `/gsd-execute-phase` |
 | **Parallelism** | 4 instances (tech, architecture, quality, concerns) |
 | **Tools** | Read, Bash, Grep, Glob, Write |
 | **Model (balanced)** | Haiku |

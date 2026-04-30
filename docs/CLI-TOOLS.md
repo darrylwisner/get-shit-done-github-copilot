@@ -498,4 +498,4 @@ API keys configured via `/gsd-settings-integrations` (`brave_search`, `firecrawl
 
 - [sdk/src/query/QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md) — registry matrix, routing, golden parity, intentional CJS differences
 - [Architecture](ARCHITECTURE.md) — where `gsd-sdk query` fits in orchestration
-- [Command Reference](COMMANDS.md) — user-facing `/gsd:` commands
+- [Command Reference](COMMANDS.md) — user-facing `/gsd-` commands

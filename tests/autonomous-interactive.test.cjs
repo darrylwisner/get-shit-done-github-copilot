@@ -38,10 +38,40 @@ describe('autonomous --interactive flag (#1413)', () => {
   });
 
   test('workflow uses discuss-phase skill in interactive mode', () => {
+    // Per #2697 the user-facing form is the hyphen invariant gsd-discuss-phase;
+    // the colon form was retired and is enforced absent by bug-2543 tests.
+    //
+    // Don't `.includes()` against the full file — both tokens could appear in
+    // unrelated sections (e.g. INTERACTIVE="" initialization + a stray
+    // gsd-discuss-phase mention in prose) and falsely pass. Instead, isolate
+    // the structural region that gates on INTERACTIVE and assert the Skill
+    // invocation lives inside it.
     const content = fs.readFileSync(workflowPath, 'utf8');
+    const interactiveMarker = '**If `INTERACTIVE` is set:**';
+    const branchStart = content.indexOf(interactiveMarker);
+    assert.notStrictEqual(
+      branchStart, -1,
+      `workflow must define an explicit '${interactiveMarker}' branch`,
+    );
+    // Bound the branch by the next "**If `..." prose marker (the non-interactive
+    // sibling) or, failing that, the next `<step ...>`/`</step>` boundary.
+    const afterStart = branchStart + interactiveMarker.length;
+    const candidates = [
+      content.indexOf('**If `INTERACTIVE` is NOT set', afterStart),
+      content.indexOf('**If `', afterStart),
+      content.indexOf('</step>', afterStart),
+      content.indexOf('<step ', afterStart),
+    ].filter((i) => i !== -1);
+    assert.ok(candidates.length > 0, 'INTERACTIVE branch must have a closing boundary');
+    const branchEnd = Math.min(...candidates);
+    const branch = content.slice(branchStart, branchEnd);
+
+    // The branch must invoke the hyphen-form Skill. Tolerate whitespace
+    // around `(`, `skill`, and `=` so harmless reformatting doesn't break this.
+    const skillCall = /Skill\(\s*skill\s*=\s*['"]gsd-discuss-phase['"]/.test(branch);
     assert.ok(
-      content.includes('gsd:discuss-phase') && content.includes('INTERACTIVE'),
-      'workflow should invoke gsd:discuss-phase when INTERACTIVE is set'
+      skillCall,
+      `INTERACTIVE branch must invoke Skill(skill="gsd-discuss-phase"). Got branch:\n${branch}`,
     );
   });
 

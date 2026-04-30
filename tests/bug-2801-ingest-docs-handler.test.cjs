@@ -126,11 +126,19 @@ describe('bug-2801: ingest-docs.md workflow calls gsd-tools not gsd-sdk', () => 
     );
   });
 
-  test('ingest-docs.md init step uses gsd-tools init ingest-docs', () => {
+  test('ingest-docs.md init step uses canonical node-path gsd-tools.cjs invocation', () => {
     const content = fs.readFileSync(WORKFLOW_FILE, 'utf-8');
-    const lines = content.split('\n');
-    const initLine = lines.find(l => /gsd-tools\s+init\s+ingest-docs/.test(l));
-    assert.ok(initLine, 'workflow must contain "gsd-tools init ingest-docs"');
+    // Parse fenced bash blocks structurally — do not match raw markdown text.
+    const codeBlockRe = /```bash\n([\s\S]*?)```/g;
+    const bashLines = [...content.matchAll(codeBlockRe)]
+      .flatMap((m) => m[1].split('\n'))
+      .filter((l) => !/^\s*#/.test(l));
+    // Per #2851 the only valid form is the absolute-path node invocation; the
+    // legacy bare `gsd-tools` is the bug being fixed and must not be accepted.
+    const initLine = bashLines.find((l) =>
+      /\bnode\s+["']?\$HOME\/\.claude\/get-shit-done\/bin\/gsd-tools\.cjs["']?\s+init\s+ingest-docs\b/.test(l)
+    );
+    assert.ok(initLine, 'workflow must invoke init ingest-docs via canonical node-path gsd-tools.cjs');
   });
 
   test('cmdInitIngestDocs is exported from init.cjs', () => {

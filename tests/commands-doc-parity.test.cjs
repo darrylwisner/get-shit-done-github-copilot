@@ -35,9 +35,7 @@ function mentionedInInventory(slug) {
 
 describe('every shipped command is documented somewhere', () => {
   for (const file of commandFiles) {
-    // Command files may use `_` in their filename (e.g. extract_learnings.md)
-    // while the user-facing slash command uses `-` (/gsd-extract-learnings).
-    const slug = file.replace(/\.md$/, '').replace(/_/g, '-');
+    const slug = file.replace(/\.md$/, '');
     test(`/gsd-${slug}`, () => {
       const inCommandsDoc = mentionedInCommandsDoc(slug);
       const inInventory = mentionedInInventory(slug);

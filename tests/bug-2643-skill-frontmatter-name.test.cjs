@@ -40,20 +40,63 @@ function collectFiles(dir, results) {
   return results;
 }
 
+/**
+ * Extract every `Skill(skill="<name>")` invocation as a structured record.
+ *
+ * Per project test rigor (`feedback_no_source_grep_tests.md`), this parses
+ * each call as a unit instead of leaning on a single regex over raw bytes.
+ * The flow is:
+ *
+ *   1. Strip HTML comments so commented-out examples don't count as drift.
+ *   2. Walk the content for `Skill(` openers; for each, find the matching
+ *      `)` closer (Skill bodies are simple kwarg lists, no nesting).
+ *   3. Parse the call body for the `skill = "..."` keyword argument.
+ *      Permissive whitespace around the keyword and `=`, permissive
+ *      single/double quoting (with optional `\` escapes from string-
+ *      embedded examples), permissive name body — so malformed drift like
+ *      `Skill(skill="gsd:extract_learnings")` is surfaced rather than
+ *      silently skipped by an over-strict character class.
+ *
+ * Returns `[{ name, raw }]` per call. Filtering by namespace (gsd- vs gsd:)
+ * happens at the call site so the extractor stays neutral.
+ */
+function extractSkillCalls(content) {
+  const stripped = content.replace(/<!--[\s\S]*?-->/g, '');
+  const calls = [];
+  // Body class excludes backslash so the extractor doesn't include an
+  // escape character that precedes the closing quote in embedded examples
+  // (e.g. `Skill(skill=\"gsd-plan-phase\", …)` written inside a string
+  // context). A trailing `\` is permitted on the closing-quote side via the
+  // optional `\\?` so both `\"` and `"` close the value cleanly.
+  const argRe = /^\s*skill\s*=\s*\\?(['"])([^'"\\]+)\\?\1/i;
+  let i = 0;
+  while (i < stripped.length) {
+    const open = stripped.indexOf('Skill(', i);
+    if (open === -1) break;
+    const close = stripped.indexOf(')', open);
+    if (close === -1) break;
+    const body = stripped.slice(open + 'Skill('.length, close);
+    const match = body.match(argRe);
+    if (match) calls.push({ name: match[2], raw: stripped.slice(open, close + 1) });
+    i = close + 1;
+  }
+  return calls;
+}
+
 function extractSkillNamesHyphen(content) {
-  const names = new Set();
-  const rx = /Skill\(skill=['"]gsd-([a-z0-9-]+)['"]/gi;
-  let m;
-  while ((m = rx.exec(content)) !== null) names.add('gsd-' + m[1]);
-  return names;
+  return new Set(
+    extractSkillCalls(content)
+      .map((c) => c.name)
+      .filter((n) => n.startsWith('gsd-')),
+  );
 }
 
 function extractSkillNamesColon(content) {
-  const names = new Set();
-  const rx = /Skill\(skill=['"]gsd:([a-z0-9-]+)['"]/gi;
-  let m;
-  while ((m = rx.exec(content)) !== null) names.add('gsd:' + m[1]);
-  return names;
+  return new Set(
+    extractSkillCalls(content)
+      .map((c) => c.name)
+      .filter((n) => n.startsWith('gsd:')),
+  );
 }
 
 describe('skill frontmatter name parity (#2643 / #2808)', () => {
