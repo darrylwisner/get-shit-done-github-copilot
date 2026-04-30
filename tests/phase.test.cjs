@@ -222,6 +222,139 @@ describe('phase-plan-index command', () => {
     assert.deepStrictEqual(output.waves, {}, 'waves should be empty');
     assert.deepStrictEqual(output.incomplete, [], 'incomplete should be empty');
     assert.strictEqual(output.has_checkpoints, false, 'no checkpoints');
+    assert.ok(output.warning === undefined, 'truly empty dir must not emit a warning');
+  });
+
+  // #2893 — when the planner produces filenames that don't match the canonical
+  // `{padded_phase}-{NN}-PLAN.md` contract, the executor used to silently see
+  // plan_count: 0 with no signal. Now the response must include a `warning`
+  // field naming every offender, so the user gets an actionable error instead
+  // of "execute-phase blocked, no clue why".
+  test('non-canonical plan filenames surface a warning naming each offender (#2893)', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // The reporter's exact symptom: planner wrote `{phase-id}-PLAN-{N}-{slug}.md`.
+    fs.writeFileSync(path.join(phaseDir, '01-PLAN-01-foundation.md'), '---\n---\n');
+    fs.writeFileSync(path.join(phaseDir, '01-PLAN-02-api.md'), '---\n---\n');
+
+    const result = runGsdTools('phase-plan-index 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.plans.length, 0, 'non-canonical files are not silently accepted');
+    assert.ok(typeof output.warning === 'string', 'warning field must be present');
+    assert.ok(output.warning.includes('01-PLAN-01-foundation.md'), 'warning names the first offender');
+    assert.ok(output.warning.includes('01-PLAN-02-api.md'), 'warning names the second offender');
+    assert.ok(
+      output.warning.includes('{padded_phase}-{NN}-PLAN.md'),
+      'warning cites the canonical pattern so user knows what to rename to',
+    );
+  });
+
+  test('canonical plans suppress the warning even alongside derivative files (#2893)', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // Canonical plan + the legitimate derivative artifacts the planner emits.
+    fs.writeFileSync(path.join(phaseDir, '03-01-PLAN.md'), '---\nwave: 1\n---\n');
+    fs.writeFileSync(path.join(phaseDir, '03-PLAN-OUTLINE.md'), '# outline\n');
+    fs.writeFileSync(path.join(phaseDir, '03-01-PLAN.pre-bounce.md'), '---\n---\n');
+
+    const result = runGsdTools('phase-plan-index 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.plans.length, 1, 'canonical plan detected');
+    assert.ok(
+      output.warning === undefined,
+      `outline and pre-bounce files must not trigger the warning, got: ${output.warning}`,
+    );
+  });
+
+  // #2893 parity — find-phase reads the same phase directory and applies the
+  // same canonical filter, so it must emit the same warning shape. Without
+  // these tests the two code paths could silently diverge.
+  test('find-phase: non-canonical plan filenames surface the same warning (#2893 parity)', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-PLAN-01-foundation.md'), '---\n---\n');
+    fs.writeFileSync(path.join(phaseDir, '01-PLAN-02-api.md'), '---\n---\n');
+
+    const result = runGsdTools('find-phase 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.found, true, 'phase directory found');
+    assert.deepStrictEqual(output.plans, [], 'non-canonical files are not silently accepted');
+    assert.ok(typeof output.warning === 'string', 'warning field must be present');
+    assert.ok(output.warning.includes('01-PLAN-01-foundation.md'), 'warning names the first offender');
+    assert.ok(output.warning.includes('01-PLAN-02-api.md'), 'warning names the second offender');
+    assert.ok(
+      output.warning.includes('{padded_phase}-{NN}-PLAN.md'),
+      'warning cites the canonical pattern',
+    );
+  });
+
+  test('find-phase: canonical plans + derivatives suppress the warning (#2893 parity)', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '03-01-PLAN.md'), '---\nwave: 1\n---\n');
+    fs.writeFileSync(path.join(phaseDir, '03-PLAN-OUTLINE.md'), '# outline\n');
+    fs.writeFileSync(path.join(phaseDir, '03-01-PLAN.pre-bounce.md'), '---\n---\n');
+
+    const result = runGsdTools('find-phase 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.deepStrictEqual(output.plans, ['03-01-PLAN.md'], 'canonical plan detected');
+    assert.ok(
+      output.warning === undefined,
+      `outline and pre-bounce files must not trigger the warning, got: ${output.warning}`,
+    );
+  });
+
+  // #2893 parity — `phases list --type plans` aggregates across phase dirs
+  // and prefixes each warning with `${dir}: ` so the user can locate the
+  // offending phase. Test mirrors the find-phase pair but accounts for that
+  // prefix in the assertion.
+  test('phases list --type plans: non-canonical filenames surface a per-dir warning (#2893 parity)', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-PLAN-01-foundation.md'), '---\n---\n');
+    fs.writeFileSync(path.join(phaseDir, '01-PLAN-02-api.md'), '---\n---\n');
+
+    const result = runGsdTools('phases list --type plans --phase 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.deepStrictEqual(output.files, [], 'non-canonical files are not silently accepted');
+    assert.ok(typeof output.warning === 'string', 'warning field must be present');
+    assert.ok(output.warning.includes('03-api:'), 'warning is prefixed with the offending phase dir');
+    assert.ok(output.warning.includes('01-PLAN-01-foundation.md'), 'warning names the first offender');
+    assert.ok(output.warning.includes('01-PLAN-02-api.md'), 'warning names the second offender');
+    assert.ok(
+      output.warning.includes('{padded_phase}-{NN}-PLAN.md'),
+      'warning cites the canonical pattern',
+    );
+  });
+
+  test('phases list --type plans: canonical plans suppress the warning (#2893 parity)', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '03-01-PLAN.md'), '---\nwave: 1\n---\n');
+    fs.writeFileSync(path.join(phaseDir, '03-PLAN-OUTLINE.md'), '# outline\n');
+    fs.writeFileSync(path.join(phaseDir, '03-01-PLAN.pre-bounce.md'), '---\n---\n');
+
+    const result = runGsdTools('phases list --type plans --phase 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.deepStrictEqual(output.files, ['03-01-PLAN.md'], 'canonical plan detected');
+    assert.ok(
+      output.warning === undefined,
+      `outline and pre-bounce files must not trigger the warning, got: ${output.warning}`,
+    );
   });
 
   test('extracts single plan with frontmatter', () => {

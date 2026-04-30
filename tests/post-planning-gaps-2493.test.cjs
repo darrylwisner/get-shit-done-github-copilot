@@ -240,6 +240,59 @@ describe('gap-analysis CLI (#2493)', () => {
     assert.deepStrictEqual(reqRows, ['REQ-01', 'REQ-02', 'REQ-10']);
   });
 
+  test('parses non-REQ prefixes and ignores traceability header tokens', () => {
+    const requirementsMd = [
+      '# Requirements',
+      '',
+      '| REQ-ID | Phase | Plan(s) |',
+      '|--------|-------|---------|',
+      '| TST-01 | Phase 01 | TBD |',
+      '| BACK-07 | Phase 01 | TBD |',
+      '',
+      '- [ ] **INSP-04** Inspector requirement.',
+    ].join('\n');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'REQUIREMENTS.md'), `${requirementsMd}\n`);
+
+    writePlan('01', '# Plan\n\nCovers TST-01, BACK-07, and INSP-04.\n');
+
+    const r = runGsdTools(['gap-analysis', '--phase-dir', phaseDir], tmpDir);
+    assert.ok(r.success, r.error);
+    const out = JSON.parse(r.output);
+
+    const reqRows = out.rows.filter(x => x.source === 'REQUIREMENTS.md');
+    const ids = reqRows.map(x => x.item);
+
+    assert.deepStrictEqual(ids, ['BACK-07', 'INSP-04', 'TST-01']);
+    assert.ok(!ids.includes('REQ-ID'), 'traceability header token must not be parsed as a requirement ID');
+    assert.ok(reqRows.every(x => x.status === 'Covered'));
+  });
+
+  test('does not parse requirement-like IDs from non-first table columns', () => {
+    const requirementsMd = [
+      '# Requirements',
+      '',
+      '| REQ-ID | Phase | Plan(s) |',
+      '|--------|-------|---------|',
+      '| TST-01 | Phase 01 | PLAN-01 |',
+      '| BACK-07 | Phase 01 | PLAN-02 |',
+    ].join('\n');
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'REQUIREMENTS.md'), `${requirementsMd}\n`);
+
+    writePlan('01', '# Plan\n\nCovers TST-01 and BACK-07 only.\n');
+
+    const r = runGsdTools(['gap-analysis', '--phase-dir', phaseDir], tmpDir);
+    assert.ok(r.success, r.error);
+    const out = JSON.parse(r.output);
+
+    const ids = out.rows
+      .filter(x => x.source === 'REQUIREMENTS.md')
+      .map(x => x.item);
+
+    assert.deepStrictEqual(ids, ['BACK-07', 'TST-01']);
+    assert.ok(!ids.includes('PLAN-01'));
+    assert.ok(!ids.includes('PLAN-02'));
+  });
+
   test('REQUIREMENTS.md missing → CONTEXT-only run still works', () => {
     writeContext([{ id: 'D-01', text: 'foo' }]);
     writePlan('01', '# Plan mentioning D-01\n');
