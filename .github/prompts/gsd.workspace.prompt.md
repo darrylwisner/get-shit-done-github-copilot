@@ -1,12 +1,12 @@
 ---
-name: gsd.new-workspace
-description: "Create an isolated workspace with repo copies and independent .planning/"
-argument-hint: "--name <name> [--repos repo1,repo2] [--path /target] [--strategy worktree|clone] [--branch name] [--auto]"
+name: gsd.workspace
+description: "Manage GSD workspaces — create, list, or remove isolated workspace environments"
+argument-hint: "[--new | --list | --remove] [name]"
 tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Bash","Write","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Bash","AskUserQuestion"] -->
 
 ## Path Resolution 
 
@@ -34,37 +34,44 @@ Instead, whenever the upstream instructions say "Use AskUserQuestion", use **#to
 
 ---
 
-<context>
-**Flags:**
-- `--name` (required) — Workspace name
-- `--repos` — Comma-separated repo paths or names. If omitted, interactive selection from child git repos in cwd
-- `--path` — Target directory. Defaults to `~/gsd-workspaces/<name>`
-- `--strategy` — `worktree` (default, lightweight) or `clone` (fully independent)
-- `--branch` — Branch to checkout. Defaults to `workspace/<name>`
-- `--auto` — Skip interactive questions, use defaults
-</context>
-
 <objective>
-Create a physical workspace directory containing copies of specified git repos (as worktrees or clones) with an independent `.planning/` directory for isolated GSD sessions.
+Manage GSD workspaces with a single consolidated command.
 
-**Use cases:**
-- Multi-repo orchestration: work on a subset of repos in parallel with isolated GSD state
-- Feature branch isolation: create a worktree of the current repo with its own `.planning/`
-
-**Creates:**
-- `<path>/WORKSPACE.md` — workspace manifest
-- `<path>/.planning/` — independent planning directory
-- `<path>/<repo>/` — git worktree or clone for each specified repo
-
-**After this command:** `cd` into the workspace and run `/gsd-new-project` to initialize GSD.
+Mode routing:
+- **--new**: Create an isolated workspace with repo copies and independent .planning/ → new-workspace workflow
+- **--list**: List active GSD workspaces and their status → list-workspaces workflow
+- **--remove**: Remove a GSD workspace and clean up worktrees → remove-workspace workflow
 </objective>
+
+<routing>
+
+| Flag | Action | Workflow |
+|------|--------|----------|
+| --new | Create workspace with worktree/clone strategy | new-workspace |
+| --list | Scan ~/gsd-workspaces/, show summary table | list-workspaces |
+| --remove | Confirm and remove workspace directory | remove-workspace |
+
+</routing>
 
 <execution_context>
 - Read file at: ./.claude/get-shit-done/workflows/new-workspace.md
+- Read file at: ./.claude/get-shit-done/workflows/list-workspaces.md
+- Read file at: ./.claude/get-shit-done/workflows/remove-workspace.md
 - Read file at: ./.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
+<context>
+Arguments: $ARGUMENTS
+
+Parse the first token of $ARGUMENTS:
+- If it is `--new`: strip the flag, pass remainder (--name, --repos, --path, --strategy, --branch, --auto flags) to new-workspace workflow
+- If it is `--list`: execute list-workspaces workflow (no argument needed)
+- If it is `--remove`: strip the flag, pass remainder (workspace-name) to remove-workspace workflow
+- Otherwise (no flag): show usage — one of --new, --list, or --remove is required
+</context>
+
 <process>
-Execute the new-workspace workflow from @./.claude/get-shit-done/workflows/new-workspace.md end-to-end.
-Preserve all workflow gates (validation, approvals, commits, routing).
+1. Parse the leading flag from $ARGUMENTS.
+2. Load and execute the appropriate workflow end-to-end based on the routing table above.
+3. Preserve all workflow gates from the target workflow (validation, approvals, commits, routing).
 </process>

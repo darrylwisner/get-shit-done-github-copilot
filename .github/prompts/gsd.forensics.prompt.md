@@ -1,6 +1,6 @@
 ---
 name: gsd.forensics
-description: "Post-mortem investigation for failed GSD workflows — analyzes git history, artifacts, and state to diagnose what went wrong"
+description: "Post-mortem investigation for failed GSD workflows — diagnoses what went wrong."
 argument-hint: "[problem description]"
 tools: ['edit', 'execute', 'read', 'search']
 agent: agent
