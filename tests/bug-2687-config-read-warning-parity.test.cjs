@@ -1,5 +1,9 @@
 'use strict';
 
+// allow-test-rule: pending-migration-to-typed-ir [#2974]
+// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
+// "Prohibited: Raw Text Matching on Test Outputs". Do not copy this pattern.
+
 /**
  * Regression test for #2687 — loadConfig must not emit "unknown config key"
  * warnings for keys that are registered in DYNAMIC_KEY_PATTERNS (e.g. review,
