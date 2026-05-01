@@ -703,12 +703,15 @@ async function runCommand(command, args, cwd, raw, defaultValue) {
 
     case 'audit-open': {
       const { auditOpenArtifacts, formatAuditReport } = require('./lib/audit.cjs');
-      const includeRaw = args.includes('--json');
+      const wantJson = args.includes('--json');
       const result = auditOpenArtifacts(cwd);
-      if (includeRaw) {
+      if (wantJson) {
+        // core.output JSON-stringifies its first arg; pass the object directly.
         core.output(result, raw);
       } else {
-        core.output(formatAuditReport(result), raw);
+        // Human-readable report must bypass JSON encoding — use the rawValue
+        // form (third arg) which core.output emits verbatim.
+        core.output(null, true, formatAuditReport(result));
       }
       break;
     }
