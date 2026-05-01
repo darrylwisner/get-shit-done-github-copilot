@@ -1,0 +1,344 @@
+# Release SDK Bundle
+#
+# Stopgap workflow_dispatch publish path: builds get-shit-done-cc with the
+# compiled SDK and the SDK .tgz bundled inside the CC tarball, then
+# publishes the CC package to ONE chosen dist-tag (dev | next | latest)
+# per run.
+#
+# Why this exists: @gsd-build/sdk publishes from canary.yml and release.yml
+# fail because the @gsd-build npm token is currently unavailable. CC users
+# do not consume @gsd-build/sdk directly — bin/gsd-sdk.js resolves
+# sdk/dist/cli.js from inside the installed CC package, so the bundled
+# copy is sufficient for full functionality. This workflow ships CC alone
+# (no separate @gsd-build/sdk publish attempt) and additionally bakes a
+# bundled gsd-sdk-<version>.tgz at sdk-bundle/gsd-sdk.tgz inside the CC
+# tarball as a recoverable npm-installable artifact.
+#
+# Existing canary.yml and release.yml are intentionally untouched. They
+# remain the canonical two-package publish path; restore them to primary
+# use once @gsd-build/sdk ownership is recovered.
+#
+# Tracking issues: #2925 (initial workflow), #2929 (CI-gate parity with release.yml)
+
+name: Release SDK Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'npm dist-tag to publish under'
+        required: true
+        type: choice
+        options:
+          - dev
+          - next
+          - latest
+      version:
+        description: 'Explicit version (e.g. 1.50.0-dev.3, 1.50.0-rc.2, 1.50.0). Empty = derive from package.json base + tag-appropriate suffix.'
+        required: false
+        type: string
+      ref:
+        description: 'Branch or ref to build from (default: the workflow-dispatch ref, typically dev)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (skip npm publish, git tag, and push)'
+        required: false
+        type: boolean
+        default: false
+
+# Per dist-tag, no concurrent publishes for the same stream. Different streams
+# can publish in parallel because they target different dist-tags.
+concurrency:
+  group: release-sdk-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  # Cross-platform install validation gate (parity with release.yml).
+  # Publish job depends on this — won't proceed if the package fails to
+  # install cleanly across the supported matrix.
+  install-smoke:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/install-smoke.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  release:
+    needs: install-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write       # tag + push + GitHub Release
+      id-token: write       # provenance
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Determine version
+        id: ver
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_OVERRIDE: ${{ inputs.version }}
+        run: |
+          set -e
+          RAW=$(node -p "require('./package.json').version")
+          BASE=$(echo "$RAW" | sed 's/-.*//')
+          if [ -n "$INPUT_OVERRIDE" ]; then
+            VERSION="$INPUT_OVERRIDE"
+          else
+            case "$INPUT_TAG" in
+              dev)
+                N=1
+                while git tag -l "v${BASE}-dev.${N}" | grep -q .; do
+                  N=$((N + 1))
+                done
+                VERSION="${BASE}-dev.${N}"
+                ;;
+              next)
+                N=1
+                while git tag -l "v${BASE}-rc.${N}" | grep -q .; do
+                  N=$((N + 1))
+                done
+                VERSION="${BASE}-rc.${N}"
+                ;;
+              latest)
+                VERSION="$BASE"
+                ;;
+              *)
+                echo "::error::Unknown tag '$INPUT_TAG' (expected dev|next|latest)"
+                exit 1
+                ;;
+            esac
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          echo "→ Will publish v${VERSION} to dist-tag '${INPUT_TAG}'"
+
+      - name: Refuse if version already exists on npm
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          EXISTING=$(npm view get-shit-done-cc@"$VERSION" version 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            echo "::error::get-shit-done-cc@${VERSION} is already published. Bump version or pass an explicit override input."
+            exit 1
+          fi
+
+      # Tolerant tag-existence check (matches release.yml pattern). An
+      # operator re-running after a mid-flight publish-step failure should
+      # not be blocked just because the tag step succeeded last time. Only
+      # error if the existing tag points at a different commit than HEAD.
+      - name: Check git tag (skip if matches HEAD, error if mismatched)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            EXISTING_SHA=$(git rev-parse "refs/tags/v${VERSION}")
+            HEAD_SHA=$(git rev-parse HEAD)
+            if [ "$EXISTING_SHA" != "$HEAD_SHA" ]; then
+              echo "::error::git tag v${VERSION} already exists pointing at ${EXISTING_SHA}, but HEAD is ${HEAD_SHA}"
+              exit 1
+            fi
+            echo "::notice::tag v${VERSION} already exists at HEAD; tag step will skip"
+          fi
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump in-tree version (not committed)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version
+          cd sdk && npm version "$VERSION" --no-git-tag-version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full test suite with coverage (parity with release.yml)
+        run: npm run test:coverage
+
+      - name: Build SDK dist for tarball
+        run: npm run build:sdk
+
+      - name: Verify CC tarball ships sdk/dist/cli.js (bug #2647 guard)
+        run: bash scripts/verify-tarball-sdk-dist.sh
+
+      - name: Pack SDK as tarball and bundle into CC source tree
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          cd sdk
+          npm pack
+          # npm pack emits gsd-build-sdk-<version>.tgz in the cwd
+          TARBALL="gsd-build-sdk-${VERSION}.tgz"
+          if [ ! -f "$TARBALL" ]; then
+            echo "::error::Expected $TARBALL but npm pack did not produce it. Listing sdk/:"
+            ls -la
+            exit 1
+          fi
+          mkdir -p ../sdk-bundle
+          mv "$TARBALL" ../sdk-bundle/gsd-sdk.tgz
+          cd ..
+          ls -la sdk-bundle/
+
+      - name: Add sdk-bundle to CC files whitelist (in-tree, not committed)
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          if (!Array.isArray(pkg.files)) {
+            console.error('::error::package.json files is not an array');
+            process.exit(1);
+          }
+          if (!pkg.files.includes('sdk-bundle')) {
+            pkg.files.push('sdk-bundle');
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('Added sdk-bundle/ to package.json files whitelist');
+          } else {
+            console.log('sdk-bundle/ already in files whitelist');
+          }
+          NODE
+
+      - name: Verify CC tarball will contain sdk-bundle/gsd-sdk.tgz
+        run: |
+          set -e
+          TARBALL=$(npm pack --ignore-scripts 2>/dev/null | tail -1)
+          if [ -z "$TARBALL" ] || [ ! -f "$TARBALL" ]; then
+            echo "::error::npm pack produced no tarball"
+            exit 1
+          fi
+          echo "Inspecting $TARBALL for sdk-bundle/gsd-sdk.tgz:"
+          if ! tar -tzf "$TARBALL" | grep -q "package/sdk-bundle/gsd-sdk.tgz"; then
+            echo "::error::CC tarball is missing package/sdk-bundle/gsd-sdk.tgz"
+            tar -tzf "$TARBALL" | grep -E "sdk-bundle|sdk/dist" | head -20
+            exit 1
+          fi
+          echo "✅ CC tarball contains sdk-bundle/gsd-sdk.tgz"
+          rm -f "$TARBALL"
+
+      - name: Dry-run publish validation
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --dry-run --tag "$TAG"
+
+      - name: Tag and push
+        if: ${{ !inputs.dry_run }}
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "Tag v${VERSION} already exists at HEAD (per pre-flight check); skipping git tag step"
+          else
+            git tag "v${VERSION}"
+          fi
+          git push origin "v${VERSION}"
+
+      - name: Publish to npm (CC bundle, SDK included as both loose tree and .tgz)
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public --tag "$TAG"
+
+      # Keep `next` from going stale relative to `latest`. When publishing a
+      # stable release, also point `next` at it so users on `@next` don't
+      # get stuck on an older pre-release than what's now stable. Parity
+      # with release.yml#finalize "Clean up next dist-tag" step.
+      - name: Re-point next dist-tag at the new latest (only when tag=latest)
+        if: ${{ !inputs.dry_run && steps.ver.outputs.tag == 'latest' }}
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm dist-tag add "get-shit-done-cc@${VERSION}" next
+          echo "✅ next dist-tag re-pointed to v${VERSION} (matches latest)"
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          # Per-tag release flags:
+          #   dev, next → --prerelease (won't be highlighted as the latest release on the repo page)
+          #   latest    → --latest (becomes the highlighted release)
+          if [ "$TAG" = "latest" ]; then
+            gh release create "v${VERSION}" \
+              --title "v${VERSION}" \
+              --generate-notes \
+              --latest
+          else
+            gh release create "v${VERSION}" \
+              --title "v${VERSION}" \
+              --generate-notes \
+              --prerelease
+          fi
+          echo "✅ GitHub Release v${VERSION} created"
+
+      - name: Verify publish landed on registry
+        if: ${{ !inputs.dry_run }}
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          PUBLISHED="NOT_FOUND"
+          for delay in 5 10 20 30 45; do
+            PUBLISHED=$(npm view get-shit-done-cc@"$VERSION" version 2>/dev/null || echo "NOT_FOUND")
+            if [ "$PUBLISHED" = "$VERSION" ]; then
+              break
+            fi
+            echo "Waiting ${delay}s for registry to catch up (saw: $PUBLISHED)..."
+            sleep "$delay"
+          done
+          if [ "$PUBLISHED" != "$VERSION" ]; then
+            echo "::error::Version $VERSION did not appear on the registry within timeout"
+            exit 1
+          fi
+          TAG_VERSION=$(npm view get-shit-done-cc dist-tags."$TAG" 2>/dev/null || echo "NOT_FOUND")
+          if [ "$TAG_VERSION" != "$VERSION" ]; then
+            echo "::error::dist-tag '$TAG' resolves to '$TAG_VERSION', expected '$VERSION'"
+            exit 1
+          fi
+          echo "✅ get-shit-done-cc@${VERSION} live on dist-tag '${TAG}'"
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "## Release SDK Bundle: v${VERSION} → @${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "**DRY RUN** — npm publish, git tag, push, and GitHub Release were skipped." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Published \`get-shit-done-cc@${VERSION}\` to dist-tag \`${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- SDK bundled inside the CC tarball at:" >> "$GITHUB_STEP_SUMMARY"
+            echo "  - \`sdk/dist/cli.js\` (loose tree, consumed by \`bin/gsd-sdk.js\` shim)" >> "$GITHUB_STEP_SUMMARY"
+            echo "  - \`sdk-bundle/gsd-sdk.tgz\` (npm-installable artifact)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Git tag \`v${VERSION}\` pushed" >> "$GITHUB_STEP_SUMMARY"
+            echo "- GitHub Release \`v${VERSION}\` created" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$TAG" = "latest" ]; then
+              echo "- \`next\` dist-tag re-pointed at \`v${VERSION}\` (kept current with \`latest\`)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "- Install: \`npm install -g get-shit-done-cc@${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
