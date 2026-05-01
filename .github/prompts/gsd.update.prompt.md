@@ -1,11 +1,12 @@
 ---
 name: gsd.update
 description: "Update GSD to latest version with changelog display"
-tools: ['execute', 'vscode/askQuestions']
+argument-hint: "[--sync | --reapply]"
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Bash","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","AskUserQuestion"] -->
 
 ## Path Resolution 
 
@@ -49,10 +50,19 @@ Routes to the update workflow which handles:
 - Read file at: ./.claude/get-shit-done/workflows/update.md
 </execution_context>
 
-<process>
-**Follow the update workflow** from `@./.claude/get-shit-done/workflows/update.md`.
+<flags>
+- **--sync**: Sync managed GSD skills across runtime roots so multi-runtime users stay aligned after an update. Runs the sync-skills workflow (--from, --to, --dry-run, --apply flags supported).
+- **--reapply**: Reapply local modifications after a GSD update. Uses three-way comparison (pristine baseline, user-modified backup, newly installed version) to merge user customizations back. Runs the reapply-patches workflow.
+- **(no flag)**: Standard update — check for new version, show changelog, install.
+</flags>
 
-The workflow handles all logic including:
+<process>
+Parse the first token of $ARGUMENTS:
+- If it is `--sync`: strip the flag, execute the sync-skills workflow (passing remaining args for --from/--to/--dry-run/--apply).
+- If it is `--reapply`: strip the flag, execute the reapply-patches workflow.
+- Otherwise: **Follow the update workflow** from `@./.claude/get-shit-done/workflows/update.md`.
+
+The update workflow handles all logic including:
 1. Installed version detection (local/global)
 2. Latest version checking via npm
 3. Version comparison
@@ -62,3 +72,8 @@ The workflow handles all logic including:
 7. Update execution
 8. Cache clearing
 </process>
+
+<execution_context_extended>
+- Read file at: ./.claude/get-shit-done/workflows/sync-skills.md
+- Read file at: ./.claude/get-shit-done/workflows/reapply-patches.md
+</execution_context_extended>
