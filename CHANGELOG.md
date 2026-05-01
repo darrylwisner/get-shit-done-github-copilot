@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.38.5...HEAD)
 
+### Fixed
+
+- **`gsd-sdk query agent-skills` emits raw `<agent_skills>` block instead of JSON-wrapped string** — workflows that embed via `$(gsd-sdk query agent-skills <agent>)` were receiving a JSON-quoted string literal mid-prompt (e.g. `"<agent_skills>\n…"`), silently breaking all `<agent_skills>` injection into spawned subagents. The CLI dispatcher now honors an opt-in `format: 'text'` field on `QueryResult` and writes such results raw via `process.stdout.write`; `--pick` always returns JSON regardless. (#2917)
+- **`sketch --wrap-up` now dispatches correctly** — `/gsd-sketch --wrap-up` was silently no-oping because the flag dispatch wiring was omitted when the micro-skill entry point was absorbed in #2790. (#2949)
+
 ### Added — 1.40.0-rc.1
 - **Six namespace meta-skills with keyword-tag descriptions** — replace the flat 86-skill
   listing with two-stage hierarchical routing. Model sees 6 namespace routers
@@ -26,6 +31,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   RC. (#2833)
 
 ### Changed — 1.40.0-rc.1
+- **Hotfix release flow now auto-incorporates fixes from `main` and bundles the SDK** — `hotfix.yml create` auto-cherry-picks every `fix:`/`chore:` commit on `origin/main` not yet shipped (oldest-first; patch-equivalents skipped via `git cherry`; `feat:`/`refactor:` excluded; conflicts halt with the offending SHA; run summary lists every included SHA). `hotfix.yml finalize` adds the `install-smoke` cross-platform gate, bundles `sdk-bundle/gsd-sdk.tgz` inside the CC tarball (parity with `release-sdk.yml`), tightens the `next` dist-tag re-point, and marks the GitHub Release `--latest`. `release-sdk.yml` gains `action: publish | hotfix` plus an `auto_cherry_pick` toggle, with a new `prepare` job that branches `hotfix/X.YY.Z` from the highest existing `vX.YY.*` tag and runs the same cherry-pick logic — idempotent if the branch was pre-prepared via `hotfix.yml`. Hotfix `vX.YY.Z` is now defined as everything in `vX.YY.{Z-1}` plus every `fix:`/`chore:` since that base, so each tag is the cumulative-fix anchor for the next. (#2955)
 - **Planning workspace seam extracted from `core.cjs` into `planning-workspace.cjs`** — path/workstream/lock behavior now lives in a dedicated module (`planningDir`, `planningPaths`, `planningRoot`, active-workstream routing, `withPlanningLock`). `core.cjs` keeps compatibility re-exports while call-sites migrate to direct imports, improving locality and reducing coupling. (#2900)
 - **Skill surface consolidated 86 → 59 `commands/gsd/*.md` entries** — four new
   grouped skills (`capture`, `phase`, `config`, `workspace`) replace clusters of
@@ -38,7 +44,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   now auto-closes PRs opened without a closing keyword that links a tracking issue,
   posting a comment that points to the contribution guide. (#2872)
 
+### Fixed
+
+- **Stale deleted command references updated across workflow files** — `help.md`, `do.md`, `settings.md`, `discuss-phase.md`, `new-project.md`, `plan-phase.md`, `spike.md`, and `sketch.md` referenced command names removed in #2790; updated to new consolidated equivalents. (#2950)
+
 ### Fixed — 1.40.0-rc.1
+- **`spike --wrap-up` now dispatches correctly** — `/gsd-spike --wrap-up` was silently no-oping because the flag dispatch wiring was omitted when the micro-skill entry point was absorbed in #2790. (#2948)
+- **`config-get context_window` returns `200000` when key absent** — querying an unset `context_window` previously exited 1 with "Key not found", surfacing a confusing error in planning logs even though the workflow fallback worked correctly. `cmdConfigGet` now consults a `SCHEMA_DEFAULTS` map and returns the documented default (`200000`, exit 0) for absent schema-defaulted keys; unknown absent keys still error as before. (#2943)
 - **`gap-analysis` now parses non-`REQ-` requirement IDs and ignores traceability table headers** — `parseRequirements()` no longer hard-codes the `REQ-` prefix and now accepts uppercase prefixed IDs such as `TST-01`, `BACK-07`, and `INSP-04`; markdown table header rows (for example `| REQ-ID | ... |`) are excluded so header tokens are not reported as phantom uncovered requirements. Added regression coverage for mixed-prefix REQUIREMENTS files with traceability tables. (#2897)
 - **Gemini slash commands namespaced as `/gsd:<cmd>` instead of `/gsd-<cmd>`** —
   Gemini CLI namespaces commands under `gsd:`, so `/gsd-plan-phase` was unexecutable.
