@@ -3,59 +3,29 @@
  * Verifies that promptRuntime accepts comma-separated, space-separated,
  * and single-choice inputs, deduplicates, and falls back to claude.
  * See issue #1281.
+ *
+ * Per CONTRIBUTING.md "no-source-grep" testing standard, prompt + parser
+ * behavior is asserted via the install module's exported pure functions
+ * (`runtimeMap`, `allRuntimes`, `parseRuntimeInput`, `buildRuntimePromptText`)
+ * instead of regexing bin/install.js source text.
  */
+
+process.env.GSD_TEST_MODE = '1';
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 
-// Read install.js source to extract the runtimeMap and parsing logic
-const installSrc = fs.readFileSync(
-  path.join(__dirname, '..', 'bin', 'install.js'),
-  'utf8'
-);
+const {
+  runtimeMap,
+  allRuntimes,
+  parseRuntimeInput,
+  buildRuntimePromptText,
+} = require('../bin/install.js');
 
-// Extract runtimeMap from source for validation
-const runtimeMap = {
-  '1': 'claude',
-  '2': 'antigravity',
-  '3': 'augment',
-  '4': 'cline',
-  '5': 'codebuddy',
-  '6': 'codex',
-  '7': 'copilot',
-  '8': 'cursor',
-  '9': 'gemini',
-  '10': 'kilo',
-  '11': 'opencode',
-  '12': 'qwen',
-  '13': 'trae',
-  '14': 'windsurf'
-};
-const allRuntimes = ['claude', 'antigravity', 'augment', 'cline', 'codebuddy', 'codex', 'copilot', 'cursor', 'gemini', 'kilo', 'opencode', 'qwen', 'trae', 'windsurf'];
-
-/**
- * Simulate the parsing logic from promptRuntime without requiring readline.
- * This mirrors the exact logic in the rl.question callback.
- */
-function parseRuntimeInput(input) {
-  input = input.trim() || '1';
-
-  if (input === '15') {
-    return allRuntimes;
-  }
-
-  const choices = input.split(/[\s,]+/).filter(Boolean);
-  const selected = [];
-  for (const c of choices) {
-    const runtime = runtimeMap[c];
-    if (runtime && !selected.includes(runtime)) {
-      selected.push(runtime);
-    }
-  }
-
-  return selected.length > 0 ? selected : ['claude'];
+// Strip ANSI color codes for human-readable assertions on prompt text.
+function stripAnsi(s) {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
 describe('multi-runtime selection parsing', () => {
@@ -78,7 +48,7 @@ describe('multi-runtime selection parsing', () => {
 
   test('space-separated choices return multiple runtimes', () => {
     assert.deepStrictEqual(parseRuntimeInput('1 7 9'), ['claude', 'copilot', 'gemini']);
-    assert.deepStrictEqual(parseRuntimeInput('8 10'), ['cursor', 'kilo']);
+    assert.deepStrictEqual(parseRuntimeInput('8 11'), ['cursor', 'kilo']);
   });
 
   test('mixed comma and space separators work', () => {
@@ -86,24 +56,43 @@ describe('multi-runtime selection parsing', () => {
     assert.deepStrictEqual(parseRuntimeInput('2 , 8'), ['antigravity', 'cursor']);
   });
 
+  test('single choice for hermes', () => {
+    assert.deepStrictEqual(parseRuntimeInput('10'), ['hermes']);
+  });
+
+  test('single choice for kilo', () => {
+    assert.deepStrictEqual(parseRuntimeInput('11'), ['kilo']);
+  });
+
   test('single choice for opencode', () => {
-    assert.deepStrictEqual(parseRuntimeInput('11'), ['opencode']);
+    assert.deepStrictEqual(parseRuntimeInput('12'), ['opencode']);
   });
 
   test('single choice for qwen', () => {
-    assert.deepStrictEqual(parseRuntimeInput('12'), ['qwen']);
+    assert.deepStrictEqual(parseRuntimeInput('13'), ['qwen']);
   });
 
   test('single choice for trae', () => {
-    assert.deepStrictEqual(parseRuntimeInput('13'), ['trae']);
+    assert.deepStrictEqual(parseRuntimeInput('14'), ['trae']);
   });
 
   test('single choice for windsurf', () => {
-    assert.deepStrictEqual(parseRuntimeInput('14'), ['windsurf']);
+    assert.deepStrictEqual(parseRuntimeInput('15'), ['windsurf']);
   });
 
-  test('choice 15 returns all runtimes', () => {
-    assert.deepStrictEqual(parseRuntimeInput('15'), allRuntimes);
+  test('choice 16 returns all runtimes', () => {
+    assert.deepStrictEqual(parseRuntimeInput('16'), allRuntimes);
+  });
+
+  test('choice 16 returns all runtimes when mixed with separators or other tokens', () => {
+    // CR feedback: tokenized inputs that include 16 (e.g. trailing comma, or
+    // alongside other choices) must still expand to all-runtimes — previously
+    // only the bare "16" matched, so "16," or "16 1" silently installed a
+    // subset.
+    assert.deepStrictEqual(parseRuntimeInput('16,'), allRuntimes);
+    assert.deepStrictEqual(parseRuntimeInput('16 1'), allRuntimes);
+    assert.deepStrictEqual(parseRuntimeInput('1,16'), allRuntimes);
+    assert.deepStrictEqual(parseRuntimeInput('  16  '), allRuntimes);
   });
 
   test('empty input defaults to claude', () => {
@@ -112,13 +101,13 @@ describe('multi-runtime selection parsing', () => {
   });
 
   test('invalid choices are ignored, falls back to claude if all invalid', () => {
-    assert.deepStrictEqual(parseRuntimeInput('16'), ['claude']);
+    assert.deepStrictEqual(parseRuntimeInput('17'), ['claude']);
     assert.deepStrictEqual(parseRuntimeInput('0'), ['claude']);
     assert.deepStrictEqual(parseRuntimeInput('abc'), ['claude']);
   });
 
   test('invalid choices mixed with valid are filtered out', () => {
-    assert.deepStrictEqual(parseRuntimeInput('1,16,7'), ['claude', 'copilot']);
+    assert.deepStrictEqual(parseRuntimeInput('1,17,7'), ['claude', 'copilot']);
     assert.deepStrictEqual(parseRuntimeInput('abc 3 xyz'), ['augment']);
   });
 
@@ -129,68 +118,79 @@ describe('multi-runtime selection parsing', () => {
 
   test('preserves selection order', () => {
     assert.deepStrictEqual(parseRuntimeInput('9,1,7'), ['gemini', 'claude', 'copilot']);
-    assert.deepStrictEqual(parseRuntimeInput('10,2,8'), ['kilo', 'antigravity', 'cursor']);
+    assert.deepStrictEqual(parseRuntimeInput('11,2,8'), ['kilo', 'antigravity', 'cursor']);
   });
 });
 
-describe('install.js source contains multi-select support', () => {
-  test('runtimeMap is defined with all 14 runtimes', () => {
-    for (const [key, name] of Object.entries(runtimeMap)) {
-      assert.ok(
-        installSrc.includes(`'${key}': '${name}'`),
-        `runtimeMap has ${key} -> ${name}`
-      );
+describe('install.js exports multi-select runtime metadata', () => {
+  const expectedRuntimeMap = {
+    '1': 'claude',
+    '2': 'antigravity',
+    '3': 'augment',
+    '4': 'cline',
+    '5': 'codebuddy',
+    '6': 'codex',
+    '7': 'copilot',
+    '8': 'cursor',
+    '9': 'gemini',
+    '10': 'hermes',
+    '11': 'kilo',
+    '12': 'opencode',
+    '13': 'qwen',
+    '14': 'trae',
+    '15': 'windsurf',
+  };
+  const expectedRuntimes = [
+    'claude', 'antigravity', 'augment', 'cline', 'codebuddy', 'codex',
+    'copilot', 'cursor', 'gemini', 'hermes', 'kilo', 'opencode', 'qwen',
+    'trae', 'windsurf',
+  ];
+
+  test('runtimeMap exports every option key bound to the right runtime', () => {
+    assert.deepStrictEqual(runtimeMap, expectedRuntimeMap,
+      'exported runtimeMap matches the canonical option list');
+  });
+
+  test('allRuntimes contains every runtime exactly once', () => {
+    assert.strictEqual(allRuntimes.length, expectedRuntimes.length);
+    for (const rt of expectedRuntimes) {
+      assert.ok(allRuntimes.includes(rt), `allRuntimes contains ${rt}`);
     }
+    assert.strictEqual(new Set(allRuntimes).size, allRuntimes.length,
+      'allRuntimes has no duplicates');
   });
 
-  test('allRuntimes array contains all runtimes', () => {
-    const match = installSrc.match(/const allRuntimes = \[([^\]]+)\]/);
-    assert.ok(match, 'allRuntimes array found');
-    for (const rt of allRuntimes) {
-      assert.ok(match[1].includes(`'${rt}'`), `allRuntimes includes ${rt}`);
-    }
+  test('"All" shortcut (option 16) selects every runtime', () => {
+    assert.deepStrictEqual(parseRuntimeInput('16'), allRuntimes);
   });
 
-  test('all shortcut uses option 15', () => {
-    assert.ok(
-      installSrc.includes("if (input === '15')"),
-      'all shortcut uses option 15'
-    );
-  });
-
-  test('prompt lists Qwen Code as option 12, Trae as option 13 and All as option 15', () => {
-    assert.ok(
-      installSrc.includes('12${reset}) Qwen Code'),
-      'prompt lists Qwen Code as option 12'
-    );
-    assert.ok(
-      installSrc.includes('13${reset}) Trae'),
-      'prompt lists Trae as option 13'
-    );
-    assert.ok(
-      installSrc.includes('15${reset}) All'),
-      'prompt lists All as option 15'
-    );
+  test('prompt lists Hermes Agent (10), Qwen Code (13), Trae (14), and All (16)', () => {
+    const prompt = stripAnsi(buildRuntimePromptText());
+    assert.ok(/\b10\)\s*Hermes Agent\b/.test(prompt),
+      'prompt lists Hermes Agent as option 10');
+    assert.ok(/\b13\)\s*Qwen Code\b/.test(prompt),
+      'prompt lists Qwen Code as option 13');
+    assert.ok(/\b14\)\s*Trae\b/.test(prompt),
+      'prompt lists Trae as option 14');
+    assert.ok(/\b16\)\s*All\b/.test(prompt),
+      'prompt lists All as option 16');
   });
 
   test('prompt text shows multi-select hint', () => {
-    assert.ok(
-      installSrc.includes('Select multiple'),
-      'prompt includes multi-select instructions'
-    );
+    const prompt = stripAnsi(buildRuntimePromptText());
+    assert.ok(/Select multiple/i.test(prompt),
+      'prompt includes multi-select instructions');
   });
 
-  test('parsing uses split with comma and space regex', () => {
-    assert.ok(
-      installSrc.includes("split(/[\\s,]+/)"),
-      'input is split on commas and whitespace'
+  test('parser splits on commas and whitespace and deduplicates', () => {
+    // Behavioral assertion: same set of choices in different separators
+    // produces the same selection, and duplicates collapse.
+    assert.deepStrictEqual(
+      parseRuntimeInput('1,7,9'),
+      parseRuntimeInput('1 7 9'),
+      'comma- and space-separated input yield identical selections'
     );
-  });
-
-  test('deduplication check exists', () => {
-    assert.ok(
-      installSrc.includes('!selected.includes(runtime)'),
-      'deduplication guard exists'
-    );
+    assert.deepStrictEqual(parseRuntimeInput('1,1,7,7'), ['claude', 'copilot'],
+      'duplicates collapsed in order');
   });
 });

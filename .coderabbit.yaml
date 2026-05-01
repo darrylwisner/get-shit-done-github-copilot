@@ -1,0 +1,26 @@
+# CodeRabbit configuration — gsd-build/get-shit-done
+#
+# Schema: https://docs.coderabbit.ai/reference/yaml-template/
+#
+# Project context: GSD ships a CLI tool + an agent runtime, not a documented
+# public library. We carry rich JSDoc on internal helpers that warrant it
+# (see bin/install.js, get-shit-done/bin/lib/*.cjs) but we do not enforce a
+# blanket docstring coverage bar — see issue #2932 for rationale.
+
+reviews:
+  pre_merge_checks:
+    # Disable docstring coverage check.
+    #
+    # The check produces false-positive warnings on PRs whose new code is
+    # entirely test files: it counts test(...) / beforeEach / afterEach
+    # arrow-function callbacks as functions and then reports 0% coverage
+    # because nothing has JSDoc. There is no per-check path filter in CR's
+    # documented schema that would let us exclude tests/** while keeping
+    # the check active elsewhere, and the top-level path_filters approach
+    # would silence ALL CR review on tests (security scans, out-of-scope
+    # checks, line-level findings) which we want to keep.
+    #
+    # All other CR pre-merge checks (out-of-scope, security, title) remain
+    # at their defaults.
+    docstrings:
+      mode: off

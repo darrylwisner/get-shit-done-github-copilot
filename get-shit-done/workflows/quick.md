@@ -180,10 +180,52 @@ Quick tasks can run mid-phase - validation only checks ROADMAP.md exists, not ph
 
 **If `branch_name` is empty/null:** Skip and continue on the current branch.
 
-**If `branch_name` is set:** Check out the quick-task branch before any planning commits:
+**If `branch_name` is set:** Check out the quick-task branch before any planning commits.
+
+The new branch must fork off the project's default branch (`origin/HEAD`), not
+off whatever HEAD happens to be checked out — otherwise consecutive quick tasks
+compound on top of each other and stay unpushed (#2916). If `$branch_name`
+already exists locally, reuse it as-is so resumed work is not rebased.
 
 ```bash
-git checkout -b "$branch_name" 2>/dev/null || git checkout "$branch_name"
+DEFAULT_BRANCH=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
+DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
+
+if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+  git switch "$branch_name" \
+    || { echo "ERROR: Could not switch to existing quick-task branch '$branch_name'." >&2; exit 1; }
+else
+  # Fetch the default branch so origin/$DEFAULT_BRANCH is current. If the fetch
+  # fails (offline, no remote, auth failure) AND we have no local copy of
+  # origin/$DEFAULT_BRANCH to fall back on, abort — creating the branch off
+  # arbitrary HEAD is exactly the bug #2916 fixed.
+  if ! git fetch --quiet origin "$DEFAULT_BRANCH"; then
+    if ! git show-ref --verify --quiet "refs/remotes/origin/$DEFAULT_BRANCH"; then
+      echo "ERROR: Could not fetch origin/$DEFAULT_BRANCH and no local copy exists. Refusing to create '$branch_name' off the current HEAD (#2916). Resolve the remote/network issue and retry." >&2
+      exit 1
+    fi
+    echo "WARNING: git fetch origin $DEFAULT_BRANCH failed; using the local copy of origin/$DEFAULT_BRANCH as base." >&2
+  fi
+
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "WARNING: Uncommitted changes present. Carrying them onto the new quick-task branch — they will be branched off origin/$DEFAULT_BRANCH (not the previous-task HEAD)."
+  else
+    # Best-effort: fast-forward the local default branch so subsequent local
+    # work sees the latest tip. Failure here is non-fatal because we always
+    # create the new branch directly from origin/$DEFAULT_BRANCH below.
+    git switch --quiet "$DEFAULT_BRANCH" 2>/dev/null \
+      && git merge --ff-only --quiet "origin/$DEFAULT_BRANCH" 2>/dev/null \
+      || true
+  fi
+
+  # Pin the new branch to origin/$DEFAULT_BRANCH so the start point is
+  # deterministic regardless of which branch we are currently on (#2916).
+  # On success HEAD is exactly at origin/$DEFAULT_BRANCH, so a post-creation
+  # merge-base / "ahead-of" guard would be unreachable — the explicit base
+  # argument here is the single source of correctness for #2916.
+  git checkout -b "$branch_name" "origin/$DEFAULT_BRANCH" \
+    || { echo "ERROR: Could not create '$branch_name' from origin/$DEFAULT_BRANCH (#2916)." >&2; exit 1; }
+fi
 ```
 
 All quick-task commits for this run stay on that branch. User handles merge/rebase afterward.
