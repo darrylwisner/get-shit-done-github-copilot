@@ -177,6 +177,7 @@ describe('Trae local install/uninstall', () => {
       settingsPath: null,
       settings: null,
       statuslineCommand: null,
+      updateBannerCommand: null,
       runtime: 'trae',
       configDir: fs.realpathSync(targetDir),
     });

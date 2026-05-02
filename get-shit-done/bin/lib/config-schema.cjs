@@ -84,6 +84,17 @@ const DYNAMIC_KEY_PATTERNS = [
   // <runtime> is a free string (so users can map non-built-in runtimes); <tier> is enum-restricted.
   { topLevel: 'model_profile_overrides', test: (k) => /^model_profile_overrides\.[a-zA-Z0-9_-]+\.(opus|sonnet|haiku)$/.test(k),
     description: 'model_profile_overrides.<runtime>.<opus|sonnet|haiku>' },
+  // #3023 — per-phase-type model map: models.<phase_type> = <tier>
+  // Six named slots (planning/discuss/research/execution/verification/completion);
+  // unknown phase-types are rejected. Per-agent model_overrides still take
+  // precedence over phase-type at resolve time.
+  { topLevel: 'models', test: (k) => /^models\.(planning|discuss|research|execution|verification|completion)$/.test(k),
+    description: 'models.<planning|discuss|research|execution|verification|completion>' },
+  // #3024 — dynamic routing block. Three top-level scalar settings
+  // plus a tier_models sub-block keyed by light/standard/heavy.
+  { topLevel: 'dynamic_routing',
+    test: (k) => /^dynamic_routing\.(enabled|escalate_on_failure|max_escalations|tier_models\.(light|standard|heavy))$/.test(k),
+    description: 'dynamic_routing.<enabled|escalate_on_failure|max_escalations|tier_models.<light|standard|heavy>>' },
 ];
 
 /**
