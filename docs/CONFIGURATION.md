@@ -16,6 +16,8 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
   "granularity": "standard",
   "model_profile": "balanced",
   "model_overrides": {},
+  "models": {},
+  "dynamic_routing": null,
   "planning": {
     "commit_docs": true,
     "search_gitignored": false,
@@ -117,6 +119,11 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
 | `model_profile` | enum | `quality`, `balanced`, `budget`, `adaptive`, `inherit` | `balanced` | Model tier for each agent (see [Model Profiles](#model-profiles)). `adaptive` was added per [#1713](https://github.com/gsd-build/get-shit-done/issues/1713) / [#1806](https://github.com/gsd-build/get-shit-done/issues/1806) and resolves the same way as the other tiers under runtime-aware profiles. |
 | `runtime` | string | `claude`, `codex`, or any string | (none) | Active runtime for [runtime-aware profile resolution](#runtime-aware-profiles-2517). When set, profile tiers (opus/sonnet/haiku) resolve to runtime-native model IDs. Today only the Codex install path emits per-agent model IDs from this resolver; other runtimes (`opencode`, `gemini`, `qwen`, `copilot`, …) consume the resolver at spawn time and gain dedicated install-path support in [#2612](https://github.com/gsd-build/get-shit-done/issues/2612). When unset (default), behavior is unchanged from prior versions. Added in v1.39 |
 | `model_profile_overrides.<runtime>.<tier>` | string \| object | per-runtime tier override | (none) | Override the runtime-aware tier mapping for a specific `(runtime, tier)`. Tier is one of `opus`, `sonnet`, `haiku`. Value is either a model ID string (e.g. `"gpt-5-pro"`) or `{ model, reasoning_effort }`. See [Runtime-Aware Profiles](#runtime-aware-profiles-2517). Added in v1.39 |
+| `models.<phase_type>` | enum | `opus`, `sonnet`, `haiku`, `inherit` | (none) | Per-phase-type model tier. Six accepted slots: `planning`, `discuss`, `research`, `execution`, `verification`, `completion`. Lets you tune at the phase level ("Opus for planning, Sonnet for the rest") without learning agent names. Resolves between `model_overrides` (higher) and `model_profile` (lower); see [Per-Phase-Type Models](#per-phase-type-models-models--added-in-v140). Added in v1.40 ([#3023](https://github.com/gsd-build/get-shit-done/pull/3030)) |
+| `dynamic_routing.enabled` | boolean | `true`, `false` | `false` | Master switch for [dynamic routing with failure-tier escalation](#dynamic-routing-with-failure-tier-escalation-dynamic_routing--added-in-v140). When `true`, agents resolve to `tier_models[default_tier]` and escalate one tier up on orchestrator-detected soft failure. Added in v1.40 ([#3024](https://github.com/gsd-build/get-shit-done/pull/3031)) |
+| `dynamic_routing.tier_models.<tier>` | enum | `opus`, `sonnet`, `haiku` | (none) | Tier alias for `light`, `standard`, or `heavy`. Used when `dynamic_routing.enabled: true`. Added in v1.40 |
+| `dynamic_routing.escalate_on_failure` | boolean | `true`, `false` | `true` | When `false`, escalation is disabled even if `enabled: true` — every attempt uses the default tier. Added in v1.40 |
+| `dynamic_routing.max_escalations` | integer | `0`, `1`, `2`, … | `1` | Hard cap on retries per agent invocation. Beyond the cap the resolver returns the cap-tier model. Added in v1.40 |
 | `project_code` | string | any short string | (none) | Prefix for phase directory names (e.g., `"ABC"` produces `ABC-01-setup/`). Added in v1.31 |
 | `response_language` | string | language code | (none) | Language for agent responses (e.g., `"pt"`, `"ko"`, `"ja"`). Propagates to all spawned agents for cross-phase language consistency. Added in v1.32 |
 | `context_window` | number | any integer | `200000` | Context window size in tokens. Set `1000000` for 1M-context models (e.g., `claude-opus-4-7[1m]`). Values `>= 500000` enable adaptive context enrichment (full-body reads of prior SUMMARY.md, deeper anti-pattern reads). Configured via `/gsd-settings-advanced`. |
@@ -642,6 +649,169 @@ into each agent's static config at install time — `spawn_agent` and
 OpenCode's `task` interface do not accept an inline `model` parameter, so
 running `gsd install <runtime>` after editing `model_overrides` is required
 for the change to take effect. See issue #2256.
+
+### Per-Phase-Type Models (`models`) — added in v1.40
+
+> Express tuning at the **phase** level (planning, research, execution, verification) without learning the agent taxonomy. Added in [#3023](https://github.com/gsd-build/get-shit-done/pull/3030).
+
+`model_overrides` is per-**agent** (precise but verbose; you have to know that `gsd-codebase-mapper` is research and `gsd-doc-writer` is execution). The `models` block lets you say "Opus for planning and execution, Sonnet for the rest" in two lines:
+
+```json
+{
+  "model_profile": "balanced",
+  "models": {
+    "planning": "opus",
+    "discuss": "opus",
+    "research": "sonnet",
+    "execution": "opus",
+    "verification": "sonnet",
+    "completion": "sonnet"
+  },
+  "model_overrides": {
+    "gsd-codebase-mapper": "haiku"
+  }
+}
+```
+
+#### Phase-type → agent mapping
+
+| Phase type | Agents |
+|---|---|
+| `planning` | `gsd-planner`, `gsd-roadmapper`, `gsd-pattern-mapper` |
+| `discuss` | (reserved — no subagent today) |
+| `research` | `gsd-phase-researcher`, `gsd-project-researcher`, `gsd-research-synthesizer`, `gsd-codebase-mapper`, `gsd-ui-researcher` |
+| `execution` | `gsd-executor`, `gsd-debugger`, `gsd-doc-writer` |
+| `verification` | `gsd-verifier`, `gsd-plan-checker`, `gsd-integration-checker`, `gsd-nyquist-auditor`, `gsd-ui-checker`, `gsd-ui-auditor`, `gsd-doc-verifier` |
+| `completion` | (reserved — no subagent today) |
+
+`discuss` and `completion` are accepted by the schema for forward compatibility; setting them today is a no-op until a subagent maps to them.
+
+#### Resolution precedence (highest → lowest)
+
+```text
+1. model_overrides[<agent>]              ← per-agent; full IDs; targeted exception
+2. dynamic_routing.tier_models[<tier>]   ← when enabled (see §Dynamic Routing)
+3. models[<phase_type>]                  ← coarse phase-level tier (this section)
+4. model_profile (per-agent col)         ← global tier strategy
+5. Runtime default                       ← when nothing else applies
+```
+
+The five layers compose top-down: `model_profile` is the base tier, `models[<phase_type>]` overrides at the phase level, `dynamic_routing` (when enabled) escalates per-attempt on soft failure, `model_overrides[<agent>]` carves per-agent exceptions at the top, and the runtime default applies when nothing else does. In the example above, all five research agents resolve to `sonnet` *except* `gsd-codebase-mapper`, which the per-agent override pins to `haiku`. `dynamic_routing` is disabled by default — when off (`enabled: false` or block omitted), this section's behavior is unchanged from today.
+
+#### Accepted values
+
+`models.<phase_type>` accepts only tier aliases:
+
+| Value | Effect |
+|---|---|
+| `"opus"` / `"sonnet"` / `"haiku"` | Standard tier — runtime resolution maps to the active runtime's model for that tier |
+| `"inherit"` | Agents in this phase follow the session model (same semantics as `model_profile: "inherit"`) |
+
+If you need a fully-qualified model ID (`"openai/gpt-5"`, `"google/gemini-2.5-pro"`), use `model_overrides` per agent instead. `models.*` is intentionally tier-only so the runtime-aware mapping stays correct on Codex / OpenCode / Gemini CLI installs.
+
+#### When to use which
+
+| You want | Use |
+|---|---|
+| One global tier strategy ("balanced everywhere") | `model_profile` |
+| Coarse phase-level tuning ("Opus for planning") | `models.<phase_type>` |
+| Per-agent precision ("force haiku on the codebase mapper") | `model_overrides[<agent>]` |
+| Full model ID for a specific agent | `model_overrides[<agent>]: "openai/gpt-5"` |
+
+Mix freely — the precedence rule above resolves any overlap deterministically.
+
+#### Validation
+
+`config-set` rejects unknown phase-types:
+
+```bash
+$ gsd config-set models.deployment opus
+Error: 'models.deployment' is not a valid config key
+
+# Valid:
+$ gsd config-set models.research sonnet
+```
+
+Direct edits to `.planning/config.json` are looser — the resolver simply ignores values it doesn't recognize and falls through to the profile tier — so a typo doesn't silently break tier resolution.
+
+### Dynamic Routing with Failure-Tier Escalation (`dynamic_routing`) — added in v1.40
+
+> Start cheap, escalate only when the agent fails the gate. Added in [#3024](https://github.com/gsd-build/get-shit-done/pull/3031).
+
+`dynamic_routing` lets you pay for the cheap tier by default and only escalate to the more expensive tier when the orchestrator detects a soft failure (verification inconclusive, plan-check FLAG, etc.).
+
+```json
+{
+  "dynamic_routing": {
+    "enabled": true,
+    "tier_models": {
+      "light":    "haiku",
+      "standard": "sonnet",
+      "heavy":    "opus"
+    },
+    "escalate_on_failure": true,
+    "max_escalations": 1
+  }
+}
+```
+
+#### Agent default tiers
+
+Each agent in `MODEL_PROFILES` declares one of three default tiers. The resolver picks `tier_models[default_tier]` for the first attempt.
+
+| Tier | Agents | Use case |
+|---|---|---|
+| `light` | gsd-codebase-mapper, gsd-pattern-mapper, gsd-research-synthesizer, gsd-plan-checker, gsd-integration-checker, gsd-nyquist-auditor, gsd-ui-checker, gsd-ui-auditor, gsd-doc-verifier | Cheap/fast — pure mappers, scanners, low-stakes audits |
+| `standard` | gsd-executor, gsd-phase-researcher, gsd-project-researcher, gsd-verifier, gsd-doc-writer, gsd-ui-researcher | Default workhorse — research, writing, primary verification |
+| `heavy` | gsd-planner, gsd-roadmapper, gsd-debugger | Deep reasoning — already at top, can't escalate further |
+
+#### Escalation flow
+
+```text
+1. Orchestrator spawns agent → resolver returns tier_models[default_tier]
+2. Soft failure?
+   ├─ no → ✓ done (cheap path)
+   └─ yes → orchestrator re-spawns at attempt+1
+            → resolver returns tier_models[next_tier_up]
+            → cap at max_escalations
+3. Hard failure (exception/crash) → bypass escalation, surface immediately
+```
+
+If `dynamic_routing.escalate_on_failure: false`, soft failures do **not** advance the tier — every respawn keeps using `tier_models[default_tier]` regardless of the attempt counter. The kill-switch overrides the soft-failure branch above.
+
+`light → standard → heavy → heavy` (heavy stays at heavy; can't go further).
+
+#### Resolution precedence (highest → lowest)
+
+1. **`model_overrides[<agent>]`** — full IDs accepted; targeted exception
+2. **`dynamic_routing.tier_models[<tier>]`** (when `enabled: true`)
+3. **`models[<phase_type>]`** — coarse phase-level (#3023)
+4. **`model_profile`** — per-agent column from active profile
+5. **Runtime default**
+
+The `dynamic_routing` block is **disabled by default** — `enabled: false` (or omitting the block) preserves today's static resolution exactly.
+
+#### Settings
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `dynamic_routing.enabled` | boolean | `false` | Master switch. When `true`, the dynamic-routing resolver is used for tier selection. |
+| `dynamic_routing.tier_models.light` | enum | (none) | Tier alias for the light tier. Typically `haiku`. |
+| `dynamic_routing.tier_models.standard` | enum | (none) | Tier alias for standard. Typically `sonnet`. |
+| `dynamic_routing.tier_models.heavy` | enum | (none) | Tier alias for heavy. Typically `opus`. |
+| `dynamic_routing.escalate_on_failure` | boolean | `true` | When false, escalation is disabled (every attempt uses the default tier). |
+| `dynamic_routing.max_escalations` | integer | `1` | Hard cap on retries per agent invocation. Prevents runaway loops. |
+
+#### When to use which
+
+| You want | Use |
+|---|---|
+| One tier strategy across all agents | `model_profile` |
+| Coarse phase-level tuning | `models.<phase_type>` |
+| Per-agent precision (full IDs) | `model_overrides` |
+| **Cheap-by-default, escalate only on failure** | **`dynamic_routing`** |
+
+`dynamic_routing` is structurally a *cost lever*: you pay Opus rates only for the hard cases that warrant Opus. Compose with `model_overrides` for per-agent exceptions (override always wins).
 
 ### Non-Claude Runtimes (Codex, OpenCode, Gemini CLI, Kilo)
 

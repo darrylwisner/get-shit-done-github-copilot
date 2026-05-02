@@ -923,6 +923,8 @@ continues. Drift detection cannot fail verification.
 | `mode` | enum | `interactive` | `interactive` or `yolo` (auto-approve) |
 | `granularity` | enum | `standard` | `coarse`, `standard`, or `fine` |
 | `model_profile` | enum | `balanced` | `quality`, `balanced`, `budget`, or `inherit` |
+| `models.<phase_type>` | enum | (none) | Per-phase-type tier override (`planning`, `discuss`, `research`, `execution`, `verification`, `completion`). Values: `opus`, `sonnet`, `haiku`, `inherit`. Coarse phase-level tuning that wins over `model_profile` but loses to per-agent `model_overrides`. See [CONFIGURATION.md](CONFIGURATION.md#per-phase-type-models-models--added-in-v140). Added in v1.40 |
+| `dynamic_routing.enabled` | boolean | `false` | Master switch for failure-tier escalation. When `true`, agents resolve to `tier_models[default_tier]` and escalate one tier on orchestrator-detected soft failure. Capped by `max_escalations`. See [CONFIGURATION.md](CONFIGURATION.md#dynamic-routing-with-failure-tier-escalation-dynamic_routing--added-in-v140). Added in v1.40 |
 | `workflow.research` | boolean | `true` | Domain research before planning |
 | `workflow.plan_check` | boolean | `true` | Plan verification loop |
 | `workflow.verifier` | boolean | `true` | Post-execution verification |
@@ -1030,13 +1032,24 @@ fix(03-01): correct auth token expiry
 - REQ-HOOK-05: All hooks MUST include 3-second stdin timeout guard
 - REQ-HOOK-06: All hooks MUST fail silently on any error
 - REQ-HOOK-07: Context usage MUST normalize for autocompact buffer (16.5% reserved)
+- REQ-HOOK-08: Update banner MUST be opt-in and silent unless an update is available (PR #2795)
 
 **Statusline Display:**
-```
+```text
 [⬆ /gsd-update │] model │ [current task │] directory [█████░░░░░ 50%]
 ```
 
 Color coding: <50% green, <65% yellow, <80% orange, ≥80% red with skull emoji
+
+**Update Banner (opt-in, when GSD statusline isn't used):**
+
+When the user declines (or keeps a non-GSD) statusline, the installer offers a SessionStart banner that surfaces update availability without occupying statusline real estate. The banner reads `~/.cache/gsd/gsd-update-check.json` (written by `gsd-check-update-worker.js`) and emits one line only when an update is available:
+
+```text
+GSD update available: 1.39.0 → 1.40.0. Run /gsd-update.
+```
+
+The banner is silent when up-to-date and rate-limits "check failed" diagnostics to once per 24 hours. Removed cleanly by `npx get-shit-done-cc --uninstall` or by deleting the SessionStart entry that references `gsd-update-banner.js`.
 
 ### 38. Developer Profiling
 
