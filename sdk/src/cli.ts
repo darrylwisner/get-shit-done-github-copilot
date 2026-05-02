@@ -85,8 +85,17 @@ function parseCliArgsQueryPermissive(argv: string[]): ParsedCliArgs {
       i += 2;
       continue;
     }
+    // #3019: do NOT consume -h / --help here unconditionally. Pushing the
+    // flag onto queryArgv lets the registered handler (or the gsd-tools.cjs
+    // fallback) render contextual subcommand help. We still set the global
+    // `help` flag when the flag appears, but only short-circuit dispatch in
+    // main() when there is no real subcommand to dispatch to (i.e. the only
+    // tokens in queryArgv are the help flags themselves). That preserves
+    // `gsd-sdk query --help` → top-level USAGE while letting
+    // `gsd-sdk query phase add --help` reach the handler.
     if (a === '-h' || a === '--help') {
       help = true;
+      queryArgv.push(a);
       i += 1;
       continue;
     }
@@ -97,6 +106,14 @@ function parseCliArgsQueryPermissive(argv: string[]): ParsedCliArgs {
     }
     queryArgv.push(a);
     i += 1;
+  }
+
+  // If the user typed a real subcommand (anything other than help flags
+  // alone in queryArgv), do NOT short-circuit to top-level USAGE on help.
+  // The handler/fallback will render contextual help.
+  const nonHelpTokens = queryArgv.filter((t) => t !== '-h' && t !== '--help');
+  if (help && nonHelpTokens.length > 0) {
+    help = false;
   }
 
   return {
@@ -430,7 +447,22 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
           args.ws,
         );
         if (stderr.trim()) console.error(stderr.trimEnd());
-        let output: unknown = await parseCliQueryJsonOutput(stdout, args.projectDir);
+        // #3026 CR (Major outside-diff): the gsd-tools.cjs fallback now
+        // emits plain-text usage on --help / -h with exit 0, instead of
+        // a JSON object. Wrap the JSON parse in a try/catch and forward
+        // non-JSON stdout verbatim so subcommand help reaches the user.
+        // (Previously this path JSON.parsed the help text and threw
+        // "Unexpected token 'U'" — exitCode=1 — a regression introduced
+        // alongside the --help passthrough fix.)
+        let output: unknown;
+        try {
+          output = await parseCliQueryJsonOutput(stdout, args.projectDir);
+        } catch {
+          if (stdout.trim()) {
+            process.stdout.write(stdout.endsWith('\n') ? stdout : stdout + '\n');
+          }
+          return;
+        }
         if (pickField) {
           output = extractField(output, pickField);
         }

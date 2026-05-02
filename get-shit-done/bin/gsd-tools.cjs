@@ -305,6 +305,18 @@ async function main() {
   const raw = rawIndex !== -1;
   if (rawIndex !== -1) args.splice(rawIndex, 1);
 
+  // --json-errors: when present, error() emits structured JSON to stderr
+  // ({ ok: false, reason: <ERROR_REASON code>, message }) instead of plain
+  // "Error: <text>". Lets test suites assert on typed reason codes per the
+  // CONTRIBUTING.md "Prohibited: Raw Text Matching on Test Outputs" rule
+  // (#2974). Default off — human operators see the original plain-text
+  // diagnostic.
+  const jsonErrorsIdx = args.indexOf('--json-errors');
+  if (jsonErrorsIdx !== -1) {
+    core.setJsonErrorMode(true);
+    args.splice(jsonErrorsIdx, 1);
+  }
+
   // --pick <name>: extract a single field from JSON output (replaces jq dependency).
   // Supports dot-notation (e.g., --pick workflow.research) and bracket notation
   // for arrays (e.g., --pick directories[-1]).
@@ -329,17 +341,50 @@ async function main() {
 
   const command = args[0];
 
+  // Top-level usage string — emitted by `gsd-tools` (no args) and by
+  // `gsd-tools --help` / any `--help` request below.
+  // CR feedback: the command list must enumerate every top-level command
+  // supported by the dispatcher so `--help` is actually useful for
+  // discovery; previously it was a partial subset that didn't include
+  // phase / roadmap / milestone / progress / etc.
+  const TOP_LEVEL_USAGE = 'Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>] [--ws <name>]\n' +
+    'Commands: agent-skills, audit-open, audit-uat, check-commit, commit, commit-to-subrepo, ' +
+    'config-ensure-section, config-get, config-new-project, config-path, config-set, ' +
+    'current-timestamp, detect-custom-files, docs-init, extract-messages, find-phase, ' +
+    'from-gsd2, frontmatter, gap-analysis, generate-claude-md, generate-claude-profile, ' +
+    'generate-dev-preferences, generate-slug, graphify, history-digest, init, intel, ' +
+    'learnings, list-todos, milestone, phase, phase-plan-index, phases, profile-questionnaire, ' +
+    'profile-sample, progress, requirements, resolve-model, roadmap, scaffold, state, ' +
+    'template, validate, verify, verify-path-exists, verify-summary, workstream\n\n' +
+    'For command-specific argument requirements, invoke the command without args ' +
+    '(e.g. `gsd-tools phase add`) — the resulting error lists what is required.';
+
   if (!command) {
-    error('Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>] [--ws <name>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, config-new-project, init, workstream, docs-init');
+    error(TOP_LEVEL_USAGE);
   }
 
-  // Reject flags that are never valid for any gsd-tools command. AI agents
-  // sometimes hallucinate --help or --version on tool invocations; silently
-  // ignoring them can cause destructive operations to proceed unchecked.
-  const NEVER_VALID_FLAGS = new Set(['-h', '--help', '-?', '--h', '--version', '-v', '--usage']);
+  // #3019: a `--help` / `-h` flag in argv must render the top-level usage
+  // and exit 0 — not error out with "Unknown flag". The previous shape
+  // erred on agent-hallucinated flags, but it also blocked humans from
+  // discovering the command surface via subcommand help requests routed
+  // here from the SDK CLI's query dispatcher (after the cli.ts fix that
+  // stops harvesting --help as a global flag). Rendering top-level usage
+  // on --help is strictly better UX than the old short-circuit, which
+  // printed the SDK-level usage that doesn't mention any of these
+  // subcommands.
+  const HELP_FLAGS = new Set(['-h', '--help', '-?', '--h', '--usage']);
+  if (args.some((a) => HELP_FLAGS.has(a))) {
+    process.stdout.write(TOP_LEVEL_USAGE + '\n');
+    return;
+  }
+
+  // Reject version flags. AI agents sometimes hallucinate --version on tool
+  // invocations; silently ignoring it can cause destructive operations to
+  // proceed unchecked. (Help flags are handled above.)
+  const NEVER_VALID_FLAGS = new Set(['--version', '-v']);
   for (const arg of args) {
     if (NEVER_VALID_FLAGS.has(arg)) {
-      error(`Unknown flag: ${arg}\ngsd-tools does not accept help or version flags. Run "gsd-tools" with no arguments for usage.`);
+      error(`Unknown flag: ${arg}\ngsd-tools does not accept version flags. Run "gsd-tools" with no arguments for usage.`);
     }
   }
 
