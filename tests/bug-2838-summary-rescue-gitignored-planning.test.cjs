@@ -24,9 +24,30 @@
 
 'use strict';
 
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Do not copy this pattern.
+// Migrated to typed-IR (#2974):
+//   - The "rescued: yes" text contract is now parsed into a typed
+//     { rescued: 'yes' | 'no' | null } record by parseRescueFooter().
+//     Tests assert on the parsed key, not on regex against raw content.
+//   - The idempotent-rescue test no longer greps stdout/stderr for
+//     "Rescued ..." prose. Instead it asserts the filesystem-level
+//     invariant: the pre-existing file's mtime is unchanged after the
+//     rescue runs (a true no-op on disk).
+
+/**
+ * Parse a SUMMARY.md's footer-style key:value lines into a typed record.
+ * The rescue script appends `rescued: yes` and similar metadata; tests
+ * assert on the parsed values rather than regex-matching the raw content.
+ *
+ * Returns: { [key: string]: string }. Unknown lines are ignored.
+ */
+function parseRescueFooter(content) {
+  const out = {};
+  for (const line of content.split('\n')) {
+    const m = line.match(/^([a-z_][\w-]*):\s*(.+?)\s*$/);
+    if (m) out[m[1]] = m[2];
+  }
+  return out;
+}
 
 const { describe, test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -155,7 +176,9 @@ describe('bug-2838: SUMMARY rescue handles gitignored .planning/', () => {
         `SUMMARY was lost — rescue did not surface the file into main repo.\nRescue output:\n${rescueOut}`
       );
       const content = fs.readFileSync(summaryFinalPath, 'utf-8');
-      assert.match(content, /rescued: yes/);
+      const footer = parseRescueFooter(content);
+      assert.equal(footer.rescued, 'yes',
+        `expected typed footer.rescued === 'yes', got ${JSON.stringify(footer)}`);
     } finally {
       cleanup(tmp);
     }
@@ -170,7 +193,9 @@ describe('bug-2838: SUMMARY rescue handles gitignored .planning/', () => {
         `SUMMARY was lost — rescue did not surface the file into main repo.\nRescue output:\n${rescueOut}`
       );
       const content = fs.readFileSync(summaryFinalPath, 'utf-8');
-      assert.match(content, /rescued: yes/);
+      const footer = parseRescueFooter(content);
+      assert.equal(footer.rescued, 'yes',
+        `expected typed footer.rescued === 'yes', got ${JSON.stringify(footer)}`);
     } finally {
       cleanup(tmp);
     }
@@ -196,7 +221,24 @@ describe('bug-2838: SUMMARY rescue handles gitignored .planning/', () => {
       // Pre-place the same content in main repo
       const mainDir = path.join(tmp, '.planning', 'quick', 'x');
       fs.mkdirSync(mainDir, { recursive: true });
-      fs.writeFileSync(path.join(mainDir, 'x-SUMMARY.md'), body);
+      const mainSummary = path.join(mainDir, 'x-SUMMARY.md');
+      fs.writeFileSync(mainSummary, body);
+      // Capture a full filesystem snapshot BEFORE the rescue runs.
+      // Idempotent contract: when content already matches, the rescue must
+      // not touch the file. Migrated from a console-output grep
+      // (`stdout+stderr` did not contain "Rescued") to a typed on-disk
+      // check. mtimeMs alone is insufficient on coarse-grained filesystems
+      // (HFS+, FAT) where two rewrites within ~1s share an mtime — CR
+      // outside-diff finding (#3016). Snapshot includes mtime, ctime,
+      // size, ino, and a sha256 of contents so a rewrite is detectable
+      // even when the timestamp aliases.
+      const crypto = require('crypto');
+      const snapshotFile = (p) => {
+        const st = fs.statSync(p);
+        const hash = crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+        return { mtimeMs: st.mtimeMs, ctimeMs: st.ctimeMs, size: st.size, ino: st.ino, hash };
+      };
+      const snapBefore = snapshotFile(mainSummary);
 
       const script = `
 set -u
@@ -211,9 +253,13 @@ ${block}
         0,
         `Rescue block failed unexpectedly.\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
       );
-      // No "Rescued" message expected because cmp -s matches.
-      assert.doesNotMatch(r.stdout + r.stderr, /Rescued .*x-SUMMARY\.md/);
-      assert.strictEqual(fs.readFileSync(path.join(mainDir, 'x-SUMMARY.md'), 'utf-8'), body);
+      // Typed-IR idempotency check (#2974): full snapshot unchanged. The
+      // sha256 hash catches rewrites that mtimeMs would miss on
+      // coarse-grained filesystems.
+      const snapAfter = snapshotFile(mainSummary);
+      assert.deepStrictEqual(snapAfter, snapBefore,
+        'rescue must not touch the file when content already matches (idempotent)');
+      assert.strictEqual(fs.readFileSync(mainSummary, 'utf-8'), body);
     } finally {
       try { sh(tmp, `git worktree remove "${wt}" --force`); } catch (_) {}
       cleanup(tmp);
