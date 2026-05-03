@@ -1,6 +1,6 @@
 /**
  * Drift guard: every `gsd-sdk query <cmd>` reference in the repo must
- * resolve to a handler registered in sdk/src/query/index.ts.
+ * resolve to a handler registered in sdk/src/query/registry-assembly.ts.
  *
  * The set of commands workflows/agents/commands call must equal the set
  * the SDK registry exposes. New references with no handler — or handlers
@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '..');
-const REGISTRY_FILE = path.join(REPO_ROOT, 'sdk', 'src', 'query', 'index.ts');
+const REGISTRY_FILE = path.join(REPO_ROOT, 'sdk', 'src', 'query', 'registry-assembly.ts');
 const COMMAND_ALIASES_FILE = path.join(REPO_ROOT, 'get-shit-done', 'bin', 'lib', 'command-aliases.generated.cjs');
 
 // Prose tokens that repeatedly appear after `gsd-sdk query` in English
@@ -43,10 +43,42 @@ function collectRegisteredNames() {
   const src = fs.readFileSync(REGISTRY_FILE, 'utf8');
   const names = new Set();
 
-  // Static registrations in index.ts
+  // Static registrations in index.ts (legacy style, may still exist)
   const re = /registry\.register\(\s*['"]([^'"]+)['"]/g;
   let m;
   while ((m = re.exec(src)) !== null) names.add(m[1]);
+
+  // Catalog-based registrations: extract handler names from registerStaticCatalog calls.
+  const catalogRe = /registerStaticCatalog\(registry, (\w+)\)/g;
+  let cm;
+  while ((cm = catalogRe.exec(src)) !== null) {
+    const catalogVarName = cm[1];
+    // Map variable names to their source files.
+    const catalogFileByVar = {
+      FOUNDATION_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+      STATE_SUPPORT_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+      MUTATION_SURFACES_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+      VERIFY_DECISION_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+      DECISION_ROUTING_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+      DOMAIN_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-domain.ts'),
+    };
+    const cf = catalogFileByVar[catalogVarName];
+    if (!cf) continue;
+    try {
+      const catSrc = fs.readFileSync(cf, 'utf8');
+      // Only extract names from the catalog matching this variable.
+      const exportRe = new RegExp(`export const ${catalogVarName}:`, 'm');
+      if (!exportRe.test(catSrc)) continue;
+      // Match: [[name, handler], ...]
+      const entryRe = /\[\s*['"]([^'"]+)['"]/g;
+      let em;
+      while ((em = entryRe.exec(catSrc)) !== null) {
+        names.add(em[1]);
+      }
+    } catch {
+      // File not found, skip.
+    }
+  }
 
   // Manifest-generated family aliases registered via loop in index.ts.
   // Keep this in sync with command-manifest-driven routing seams.
@@ -159,7 +191,7 @@ describe('gsd-sdk query registry integration', () => {
     assert.strictEqual(
       offenders.length, 0,
       'Referenced `gsd-sdk query <cmd>` tokens with no handler in ' +
-      'sdk/src/query/index.ts. Either register the handler or remove ' +
+      'sdk/src/query/registry-assembly.ts. Either register the handler or remove ' +
       'the reference.\n\n' + offenders.join('\n')
     );
   });
