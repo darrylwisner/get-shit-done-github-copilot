@@ -6,8 +6,10 @@
 
 /**
  * Bug #2524: gsd-sdk query --ws <name> silently ignores the workstream flag.
- * Tests that --ws is forwarded through the call chain:
- *   cli.ts -> registry.dispatch() -> planningPaths()
+ *
+ * This file is structural/static coverage only (source-file assertions).
+ * Runtime forwarding coverage for the query adapter path lives in:
+ *   sdk/src/query/query-cli-adapter.test.ts
  *
  * Uses static source-file text assertions (no sdk/dist/ build required in CI).
  */
@@ -88,12 +90,6 @@ describe('QueryRegistry.dispatch() workstream threading', () => {
 // ─── Layer 1: CLI forwards args.ws to registry.dispatch() ─────────────────
 
 describe('CLI forwards --ws to registry.dispatch()', () => {
-  test('cli.ts passes args.ws as the workstream argument to registry.dispatch()', () => {
-    assert.ok(
-      cliTs.includes('registry.dispatch(matched.cmd, matched.args, args.projectDir, args.ws)'),
-      'cli.ts must forward args.ws to registry.dispatch() as the workstream argument',
-    );
-  });
 
   test('cli.ts defines a ws field in ParsedCliArgs', () => {
     assert.ok(
@@ -108,4 +104,5 @@ describe('CLI forwards --ws to registry.dispatch()', () => {
       'cli.ts query permissive parser must handle the --ws flag',
     );
   });
+
 });

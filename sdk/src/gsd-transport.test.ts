@@ -174,7 +174,6 @@ describe('GSDTransport', () => {
     expect(result).toBe('');
     expect(adapters.execSubprocessRaw).not.toHaveBeenCalled();
   });
-
   it('forces subprocess when workstream present', async () => {
     const registry = new QueryRegistry();
     registry.register('state.load', async () => ({ data: { ok: true } }));
