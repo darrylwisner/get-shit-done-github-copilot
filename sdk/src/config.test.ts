@@ -181,32 +181,31 @@ describe('loadConfig', () => {
   // model aliases from MODEL_PROFILES via resolveModel even when the user
   // had `resolve_model_ids: "omit"` in ~/.gsd/defaults.json.
   //
-  // Mirrors CJS behavior in get-shit-done/bin/lib/core.cjs:421 (#1683):
-  // user-level defaults only apply when no project .planning/config.json
-  // exists (pre-project context). Once a project is initialized, its
-  // config.json is authoritative — buildNewProjectConfig baked the user
-  // defaults in at /gsd:new-project time.
+  // Mirrors current CJS parity expectations for SDK loadConfig + resolveModel:
+  // in pre-project context, loadConfig ignores ~/.gsd/defaults.json so
+  // resolveModel/MODEL_PROFILES do not emit aliases when resolve_model_ids
+  // is "omit". Once a project is initialized, config.json is authoritative,
+  // because buildNewProjectConfig bakes user defaults into project config
+  // at /gsd:new-project time.
 
-  it('pre-project: layers user defaults from ~/.gsd/defaults.json', async () => {
+  it('pre-project: ignores user defaults and uses built-in defaults', async () => {
     await writeUserDefaults({ resolve_model_ids: 'omit' });
-    // No project config.json
     const config = await loadConfig(tmpDir);
-    expect((config as Record<string, unknown>).resolve_model_ids).toBe('omit');
-    // Built-in defaults still present for keys user did not override
+    expect((config as Record<string, unknown>).resolve_model_ids).toBeUndefined();
     expect(config.model_profile).toBe('balanced');
     expect(config.workflow.plan_check).toBe(true);
   });
 
-  it('pre-project: deep-merges nested keys from user defaults', async () => {
+  it('pre-project: keeps built-in nested defaults even when user defaults exist', async () => {
     await writeUserDefaults({
       git: { branching_strategy: 'milestone' },
       agent_skills: { planner: 'user-skill' },
     });
 
     const config = await loadConfig(tmpDir);
-    expect(config.git.branching_strategy).toBe('milestone');
+    expect(config.git.branching_strategy).toBe('none');
     expect(config.git.phase_branch_template).toBe('gsd/phase-{phase}-{slug}');
-    expect(config.agent_skills).toEqual({ planner: 'user-skill' });
+    expect(config.agent_skills).toEqual({});
   });
 
   it('project config is authoritative over user defaults (CJS parity)', async () => {
