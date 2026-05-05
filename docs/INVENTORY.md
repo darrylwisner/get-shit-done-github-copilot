@@ -162,15 +162,16 @@ These six routers are descriptor-only entries that the model picks first; the bo
 
 ---
 
-## Workflows (84 shipped)
+## Workflows (85 shipped)
 
 Full roster at `get-shit-done/workflows/*.md`. Workflows are thin orchestrators that commands reference internally; most are not read directly by end users. Rows below map each workflow file to its role (derived from the `<purpose>` block) and, where applicable, to the command that invokes it.
 
 | Workflow | Role | Invoked by |
 |----------|------|------------|
+| `add-backlog.md` | Add a backlog item to ROADMAP.md using 999.x numbering. | `/gsd-capture --backlog` |
 | `add-phase.md` | Add a new integer phase to the end of the current milestone in the roadmap. | `/gsd-phase` (default) |
 | `add-tests.md` | Generate unit and E2E tests for a completed phase based on its artifacts. | `/gsd-add-tests` |
-| `add-todo.md` | Capture an idea or task that surfaces during a session as a structured todo. | `/gsd-capture` (default), `/gsd-capture --backlog` |
+| `add-todo.md` | Capture an idea or task that surfaces during a session as a structured todo. | `/gsd-capture` (default) |
 | `ai-integration-phase.md` | Orchestrate framework selection → AI research → domain research → eval planning into AI-SPEC.md. | `/gsd-ai-integration-phase` |
 | `analyze-dependencies.md` | Analyze ROADMAP.md phases for file overlap and semantic dependencies; suggest `Depends on` edges. | `/gsd-manager --analyze-deps` |
 | `audit-fix.md` | Autonomous audit-to-fix pipeline — run audit, parse, classify, fix, test, commit. | `/gsd-audit-fix` |
@@ -256,7 +257,7 @@ Full roster at `get-shit-done/workflows/*.md`. Workflows are thin orchestrators 
 
 ---
 
-## References (51 shipped)
+## References (52 shipped)
 
 Full roster at `get-shit-done/references/*.md`. References are shared knowledge documents that workflows and agents `@-reference`. The groupings below match [`docs/ARCHITECTURE.md`](ARCHITECTURE.md#references-get-shit-donereferencesmd) — core, workflow, thinking-model clusters, and the modular planner decomposition.
 
@@ -293,6 +294,7 @@ Full roster at `get-shit-done/references/*.md`. References are shared knowledge 
 | `scout-codebase.md` | Phase-type→codebase-map selection table for discuss-phase scout step (extracted via #2551). |
 | `revision-loop.md` | Plan revision iteration patterns. |
 | `universal-anti-patterns.md` | Universal anti-patterns to detect and avoid. |
+| `worktree-path-safety.md` | Worktree guard suite: HEAD assertion, cwd-drift sentinel (step 0a, #3097), and absolute-path guard (step 0b, #3099) — loaded into executor spawn prompts via `<execution_context>`. |
 | `artifact-types.md` | Planning artifact type definitions. |
 | `phase-argument-parsing.md` | Phase argument parsing conventions. |
 | `decimal-phase-calculation.md` | Decimal sub-phase numbering rules. |
@@ -342,11 +344,11 @@ The `gsd-planner` agent is decomposed into a core agent plus reference modules t
 | `planner-revision.md` | Plan revision patterns for iterative refinement. |
 | `planner-source-audit.md` | Planner source-audit and authority-limit rules. |
 
-> **Subdirectory:** `get-shit-done/references/few-shot-examples/` contains additional few-shot examples (`plan-checker.md`, `verifier.md`) that are referenced from specific agents. These are not counted in the 51 top-level references.
+> **Subdirectory:** `get-shit-done/references/few-shot-examples/` contains additional few-shot examples (`plan-checker.md`, `verifier.md`) that are referenced from specific agents. These are not counted in the 52 top-level references.
 
 ---
 
-## CLI Modules (41 shipped)
+## CLI Modules (42 shipped)
 
 Full listing: `get-shit-done/bin/lib/*.cjs`.
 
@@ -382,6 +384,7 @@ Full listing: `get-shit-done/bin/lib/*.cjs`.
 | `profile-pipeline.cjs` | User behavioral profiling data pipeline, session file scanning |
 | `roadmap-command-router.cjs` | Thin CJS subcommand router adapter for `gsd-tools roadmap` |
 | `roadmap.cjs` | ROADMAP.md parsing, phase extraction, plan progress |
+| `runtime-homes.cjs` | Canonical runtime → global config/skills directory mapping; first-class support for all 15 runtimes including Hermes nested layout and Cline rules-based exclusion (#3126) |
 | `schema-detect.cjs` | Schema-drift detection for ORM patterns (Prisma, Drizzle, etc.) |
 | `secrets.cjs` | Secret-config masking convention (`****<last-4>`) for integration keys managed by `/gsd-config --integrations` — keeps plaintext out of `config-set` output |
 | `security.cjs` | Path traversal prevention, prompt injection detection, safe JSON/shell helpers |
