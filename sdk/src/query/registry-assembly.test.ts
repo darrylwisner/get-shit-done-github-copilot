@@ -15,6 +15,7 @@ import {
   type RegistryAssemblyAliasGroup,
   type RegistryAssemblyStaticGroup,
 } from './registry-assembly-invariants.js';
+import { REGISTRY_ASSEMBLY_PLAN } from './registry-assembly-descriptor.js';
 
 const noop = async () => ({ data: null });
 
@@ -43,6 +44,11 @@ describe('registry assembly', () => {
     for (const command of QUERY_MUTATION_COMMANDS) {
       expect(registry.has(command), `missing mutation command: ${command}`).toBe(true);
     }
+  });
+
+  it('uses declarative registry assembly plan', () => {
+    expect(REGISTRY_ASSEMBLY_PLAN.length).toBeGreaterThan(0);
+    expect(REGISTRY_ASSEMBLY_PLAN[0]).toEqual({ kind: 'static', key: 'FOUNDATION_STATIC_CATALOG' });
   });
 });
 

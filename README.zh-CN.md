@@ -396,7 +396,7 @@ claude --dangerously-skip-permissions
 或者让 GSD 自动判断下一步：
 
 ```
-/gsd-next                    # 自动检测并执行下一步
+/gsd-progress --next                    # 自动检测并执行下一步
 ```
 
 循环执行 **讨论 → 规划 → 执行 → 验证 → 发布**，直到整个里程碑完成。
@@ -538,7 +538,7 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd-verify-work [N]` | 人工用户验收测试 ¹ |
 | `/gsd-ship [N] [--draft]` | 从已验证的阶段工作创建 PR，自动生成 PR 描述 |
 | `/gsd-fast <text>` | 内联处理琐碎任务——完全跳过规划，立即执行 |
-| `/gsd-next` | 自动推进到下一个逻辑工作流步骤 |
+| `/gsd-progress --next` | 自动推进到下一个逻辑工作流步骤 |
 | `/gsd-audit-milestone` | 验证里程碑是否达到完成定义 |
 | `/gsd-complete-milestone` | 归档里程碑并打 release tag |
 | `/gsd-new-milestone [name]` | 开始下一个版本：提问 → 研究 → 需求 → 路线图 |
@@ -574,7 +574,7 @@ lmn012o feat(08-02): create registration endpoint
 | 命令 | 作用 |
 |------|------|
 | `/gsd-progress` | 我现在在哪？下一步是什么？ |
-| `/gsd-next` | 自动检测状态并执行下一步 |
+| `/gsd-progress --next` | 自动检测状态并执行下一步 |
 | `/gsd-help` | 显示全部命令和使用指南 |
 | `/gsd-update` | 更新 GSD，并预览变更日志 |
 | `/gsd-join-discord` | 加入 GSD Discord 社区 |

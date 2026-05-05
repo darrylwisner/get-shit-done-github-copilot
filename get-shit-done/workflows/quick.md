@@ -128,8 +128,8 @@ If `$VALIDATE_MODE` only:
 if ! command -v gsd-sdk &>/dev/null; then
   echo "⚠ gsd-sdk not found in PATH — /gsd-quick requires it."
   echo ""
-  echo "Install the GSD SDK:"
-  echo "  npm install -g @gsd-build/sdk"
+  echo "Install the query-capable GSD SDK CLI:"
+  echo "  npm install -g get-shit-done-cc"
   echo ""
   echo "Or update GSD to get the latest packages:"
   echo "  /gsd-update"

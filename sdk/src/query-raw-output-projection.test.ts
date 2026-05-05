@@ -31,4 +31,9 @@ describe('formatQueryRawOutput', () => {
     expect(formatQueryRawOutput('state begin-phase', { updated: ['x'] })).toBe('true');
     expect(formatQueryRawOutput('state begin-phase', { updated: [] })).toBe('false');
   });
+
+  it('never returns undefined for non-JSON top-level values', () => {
+    expect(formatQueryRawOutput('commit', undefined)).toBe('undefined');
+    expect(formatQueryRawOutput('commit', Symbol('x'))).toBe('Symbol(x)');
+  });
 });

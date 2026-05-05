@@ -4,6 +4,7 @@ import {
   mapFallbackDispatchError,
   toDispatchFailure,
 } from './query-dispatch-error-mapper.js';
+import { GSDToolsError } from '../gsd-tools-error.js';
 
 describe('query dispatch error mapper', () => {
   it('maps native timeout errors', () => {
@@ -22,6 +23,25 @@ describe('query dispatch error mapper', () => {
     expect(err.kind).toBe('native_failure');
     expect(err.code).toBe(1);
     expect(err.details).toMatchObject({ command: 'state.json', args: [] });
+  });
+
+  it('maps typed timeout classification from GSDToolsError', () => {
+    const err = mapNativeDispatchError(
+      GSDToolsError.timeout('timeout', 'state', ['load'], '', 1234),
+      'state.load',
+      [],
+    );
+    expect(err.kind).toBe('native_timeout');
+    expect(err.details).toMatchObject({ timeout_ms: 1234 });
+  });
+
+  it('maps typed failure classification from GSDToolsError', () => {
+    const err = mapNativeDispatchError(
+      GSDToolsError.failure('boom', 'state', ['load'], 1),
+      'state.load',
+      [],
+    );
+    expect(err.kind).toBe('native_failure');
   });
 
   it('maps fallback errors', () => {

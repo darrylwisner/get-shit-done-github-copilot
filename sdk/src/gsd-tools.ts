@@ -13,7 +13,7 @@
 
 import type { InitNewProjectInfo, PhaseOpInfo, PhasePlanIndex, RoadmapAnalysis } from './types.js';
 import type { GSDEventStream } from './event-stream.js';
-import { toGSDToolsError } from './query-tools-error-mapper.js';
+import { toToolsErrorFromUnknown } from './query-tools-error-factory.js';
 import { GSDToolsError } from './gsd-tools-error.js';
 import { resolveQueryCommand, type QueryCommandResolution } from './query/query-command-resolution-strategy.js';
 import { QueryExecutionPolicy } from './query-execution-policy.js';
@@ -107,10 +107,6 @@ export class GSDTools {
     return resolveQueryCommand(command, args, this.registry);
   }
 
-  private toToolsError(command: string, args: string[], err: unknown): GSDToolsError {
-    return toGSDToolsError(command, args, err);
-  }
-
   private async dispatchNativeHotpath(
     legacyCommand: string,
     legacyArgs: string[],
@@ -118,17 +114,22 @@ export class GSDTools {
     registryArgs: string[],
     mode: 'json' | 'raw',
   ): Promise<unknown> {
-    try {
-      return await this.nativeHotpathAdapter.dispatch(
+    return this.executeWithToolsError(legacyCommand, legacyArgs, () =>
+      this.nativeHotpathAdapter.dispatch(
         legacyCommand,
         legacyArgs,
         registryCommand,
         registryArgs,
         mode,
-      );
+      ));
+  }
+
+  private async executeWithToolsError<T>(command: string, args: string[], work: () => Promise<T>): Promise<T> {
+    try {
+      return await work();
     } catch (err) {
       if (err instanceof GSDToolsError) throw err;
-      throw this.toToolsError(legacyCommand, legacyArgs, err);
+      throw toToolsErrorFromUnknown(command, args, err);
     }
   }
 
@@ -139,12 +140,7 @@ export class GSDTools {
    * Handles the `@file:` prefix pattern for large results.
    */
   async exec(command: string, args: string[] = []): Promise<unknown> {
-    try {
-      return await this.commandExecutor.exec(command, args, 'json');
-    } catch (err) {
-      if (err instanceof GSDToolsError) throw err;
-      throw this.toToolsError(command, args, err);
-    }
+    return this.executeWithToolsError(command, args, () => this.commandExecutor.exec(command, args, 'json'));
   }
 
   // ─── Raw exec (no JSON parsing) ───────────────────────────────────────
@@ -154,12 +150,10 @@ export class GSDTools {
    * Use for commands like `config-set` that return plain text, not JSON.
    */
   async execRaw(command: string, args: string[] = []): Promise<string> {
-    try {
-      return await this.commandExecutor.exec(command, args, 'raw') as string;
-    } catch (err) {
-      if (err instanceof GSDToolsError) throw err;
-      throw this.toToolsError(command, args, err);
-    }
+    return this.executeWithToolsError(command, args, async () => {
+      const out = await this.commandExecutor.exec(command, args, 'raw');
+      return typeof out === 'string' ? out : String(out ?? '');
+    });
   }
 
 

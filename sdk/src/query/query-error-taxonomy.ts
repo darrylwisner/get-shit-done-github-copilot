@@ -1,6 +1,6 @@
 import type { QueryDispatchError } from './query-dispatch-contract.js';
+import type { QueryFailureSignal } from '../query-failure-classification.js';
 import { fallbackErrorDetails, nativeErrorDetails, unknownCommandDetails } from './query-error-details-schema.js';
-
 export function unknownCommandError(input: {
   message: string;
   normalized: string;
@@ -95,4 +95,23 @@ export function internalError(input: {
     message: input.message,
     details: input.details,
   };
+}
+
+export function nativeDispatchErrorFromSignal(
+  signal: QueryFailureSignal,
+  command: string,
+  args: string[],
+): QueryDispatchError {
+  if (signal.kind === 'timeout') {
+    return nativeTimeoutError({ message: signal.message, command, args, timeoutMs: signal.timeoutMs });
+  }
+  return nativeFailureError({ message: signal.message, command, args });
+}
+
+export function fallbackDispatchErrorFromSignal(
+  signal: QueryFailureSignal,
+  command: string,
+  args: string[],
+): QueryDispatchError {
+  return fallbackFailureError({ message: signal.message, command, args, backend: 'cjs' });
 }

@@ -435,7 +435,7 @@ Show status, next steps, and automatically advance to the next logical workflow 
 | `--do "task description"` | Analyze freeform intent and dispatch to the most appropriate GSD command |
 | `--forensic` | Append a 6-check integrity audit after the standard report (STATE consistency, orphaned handoffs, deferred scope drift, memory-flagged pending work, blocking todos, uncommitted code) |
 
-**Auto-routing behavior (absorbed from `/gsd-next`):**
+**Auto-routing behavior (`--next`):**
 - No project → suggests `/gsd-new-project`
 - Phase needs discussion → runs `/gsd-discuss-phase`
 - Phase needs planning → runs `/gsd-plan-phase`

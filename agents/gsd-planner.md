@@ -814,7 +814,7 @@ Extract from init JSON: `planner_model`, `researcher_model`, `checker_model`, `c
 
 Also load planning state (position, decisions, blockers) via the SDK — **use `node` to invoke the CLI** (not `npx`):
 ```bash
-node ./node_modules/@gsd-build/sdk/dist/cli.js query state.load 2>/dev/null
+gsd-sdk query state.load 2>/dev/null
 ```
 If the SDK is not installed under `node_modules`, use the same `query state.load` argv with your local `gsd-sdk` CLI on `PATH`.
 

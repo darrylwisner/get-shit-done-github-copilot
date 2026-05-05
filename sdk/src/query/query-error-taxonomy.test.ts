@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+  fallbackDispatchErrorFromSignal,
   fallbackFailureError,
   internalError,
+  nativeDispatchErrorFromSignal,
   nativeFailureError,
   nativeTimeoutError,
   unknownCommandError,
@@ -27,5 +29,11 @@ describe('query-error-taxonomy', () => {
     expect(fallbackFailureError({ message: 'spawn', command: 'state', args: ['load'] }).kind).toBe('fallback_failure');
     expect(validationError({ message: 'bad', details: { r: 'x' } }).kind).toBe('validation_error');
     expect(internalError({ message: 'bad' }).kind).toBe('internal_error');
+  });
+
+  it('projects dispatch errors from failure signals', () => {
+    expect(nativeDispatchErrorFromSignal({ kind: 'failure', message: 'boom' }, 'state.load', []).kind).toBe('native_failure');
+    expect(nativeDispatchErrorFromSignal({ kind: 'timeout', message: 'timeout', timeoutMs: 1000 }, 'state.load', []).kind).toBe('native_timeout');
+    expect(fallbackDispatchErrorFromSignal({ kind: 'failure', message: 'spawn' }, 'state', ['load']).kind).toBe('fallback_failure');
   });
 });

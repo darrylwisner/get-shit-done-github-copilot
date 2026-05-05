@@ -237,6 +237,26 @@ describe('loadConfig', () => {
     expect(config).toEqual(CONFIG_DEFAULTS);
   });
 
+  it('maps legacy top-level branching_strategy into git.branching_strategy', async () => {
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ branching_strategy: 'phase' }),
+    );
+
+    const config = await loadConfig(tmpDir);
+    expect(config.git.branching_strategy).toBe('phase');
+  });
+
+  it('git.branching_strategy overrides legacy top-level branching_strategy when both are present', async () => {
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ branching_strategy: 'phase', git: { branching_strategy: 'milestone' } }),
+    );
+
+    const config = await loadConfig(tmpDir);
+    expect(config.git.branching_strategy).toBe('milestone');
+  });
+
   it('does not mutate CONFIG_DEFAULTS between calls', async () => {
     const before = structuredClone(CONFIG_DEFAULTS);
 

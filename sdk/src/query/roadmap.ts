@@ -404,6 +404,28 @@ function searchPhaseInContent(content: string, escapedPhase: string, phaseNum: s
   };
 }
 
+async function countPhasePlansAndSummaries(phaseDir: string): Promise<{ planCount: number; summaryCount: number; hasContext: boolean; hasResearch: boolean; }> {
+  const phaseFiles = await readdir(phaseDir);
+  const rootPlans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
+  const rootSummaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+
+  let nestedPlans: string[] = [];
+  let nestedSummaries: string[] = [];
+  const plansDir = join(phaseDir, 'plans');
+  if (existsSync(plansDir)) {
+    const files = await readdir(plansDir);
+    nestedPlans = files.filter(f => /^PLAN-\d+.*\.md$/i.test(f));
+    nestedSummaries = files.filter(f => /^SUMMARY-\d+.*\.md$/i.test(f));
+  }
+
+  return {
+    planCount: rootPlans.length + nestedPlans.length,
+    summaryCount: rootSummaries.length + nestedSummaries.length,
+    hasContext: phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md'),
+    hasResearch: phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md'),
+  };
+}
+
 // ─── Exported handlers ────────────────────────────────────────────────────
 
 /**
@@ -509,11 +531,11 @@ export const roadmapAnalyze: QueryHandler = async (_args, projectDir, workstream
       const dirMatch = dirs.find(d => phaseTokenMatches(d, normalized));
 
       if (dirMatch) {
-        const phaseFiles = await readdir(join(phasesDir, dirMatch));
-        planCount = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
-        summaryCount = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
-        hasContext = phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
-        hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
+        const counts = await countPhasePlansAndSummaries(join(phasesDir, dirMatch));
+        planCount = counts.planCount;
+        summaryCount = counts.summaryCount;
+        hasContext = counts.hasContext;
+        hasResearch = counts.hasResearch;
 
         if (summaryCount >= planCount && planCount > 0) diskStatus = 'complete';
         else if (summaryCount > 0) diskStatus = 'partial';

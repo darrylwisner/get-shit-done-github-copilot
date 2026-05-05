@@ -396,7 +396,7 @@ claude --dangerously-skip-permissions
 또는 GSD가 다음 단계를 자동으로 파악하게 합니다:
 
 ```
-/gsd-next                    # 다음 단계 자동 감지 및 실행
+/gsd-progress --next                    # 다음 단계 자동 감지 및 실행
 ```
 
 마일스톤이 완료될 때까지 **논의 → 기획 → 실행 → 검증 → 출시** 반복.
@@ -541,7 +541,7 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd-execute-phase <N>` | 병렬 웨이브로 모든 계획 실행, 완료 시 검증 |
 | `/gsd-verify-work [N]` | 수동 사용자 인수 테스트 ¹ |
 | `/gsd-ship [N] [--draft]` | 자동 생성된 본문으로 검증된 단계 작업에서 PR 생성 |
-| `/gsd-next` | 다음 논리적 워크플로우 단계로 자동 진행 |
+| `/gsd-progress --next` | 다음 논리적 워크플로우 단계로 자동 진행 |
 | `/gsd-fast <text>` | 인라인 사소한 작업 — 기획 완전 건너뛰고 즉시 실행 |
 | `/gsd-audit-milestone` | 마일스톤이 완료 정의를 달성했는지 검증 |
 | `/gsd-complete-milestone` | 마일스톤 아카이브, 릴리스 태그 |
@@ -578,7 +578,7 @@ lmn012o feat(08-02): create registration endpoint
 | 명령어 | 역할 |
 |---------|------------|
 | `/gsd-progress` | 지금 어디에 있나? 다음은? |
-| `/gsd-next` | 상태 자동 감지 및 다음 단계 실행 |
+| `/gsd-progress --next` | 상태 자동 감지 및 다음 단계 실행 |
 | `/gsd-help` | 모든 명령어와 사용 가이드 표시 |
 | `/gsd-update` | 변경 로그 미리보기와 함께 GSD 업데이트 |
 | `/gsd-join-discord` | GSD Discord 커뮤니티 참여 |
