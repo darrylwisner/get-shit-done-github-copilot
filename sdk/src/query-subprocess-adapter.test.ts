@@ -41,7 +41,9 @@ describe('QuerySubprocessAdapter', () => {
       projectDir: dir,
       gsdToolsPath,
       timeoutMs: 2_000,
-      createToolsError: (message, command, args, exitCode, stderr) =>
+      createTimeoutError: (message, command, args, stderr) =>
+        new FakeToolsError(message, command, args, null, stderr) as never,
+      createFailureError: (message, command, args, exitCode, stderr) =>
         new FakeToolsError(message, command, args, exitCode, stderr) as never,
     });
   }
@@ -60,6 +62,17 @@ describe('QuerySubprocessAdapter', () => {
     const adapter = createAdapter(script);
 
     await expect(adapter.execJson('state', ['load'])).resolves.toEqual({ from: 'file' });
+  });
+
+  it('execJson resolves relative @file output against projectDir', async () => {
+    const relDir = join(dir, '.planning');
+    await mkdir(relDir, { recursive: true });
+    const relFile = join(relDir, 'out.json');
+    await writeFile(relFile, JSON.stringify({ from: 'relative-file' }));
+    const script = await createScript('file-relative.cjs', `process.stdout.write('@file:.planning/out.json');`);
+    const adapter = createAdapter(script);
+
+    await expect(adapter.execJson('state', ['load'])).resolves.toEqual({ from: 'relative-file' });
   });
 
   it('execRaw returns trimmed stdout', async () => {

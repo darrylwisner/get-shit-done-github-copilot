@@ -80,6 +80,17 @@ async function getPhaseFileStats(phaseDir: string): Promise<{
  *
  * Port of searchPhaseInDir from core.cjs lines 956-1000.
  */
+function extractCanonicalPlanId(filename: string): string {
+  const base = filename.replace(/-PLAN\.md$/i, '').replace(/-SUMMARY\.md$/i, '').replace(/\.md$/i, '');
+  const parts = base.split('-').filter(Boolean);
+  const tokenRe = /^\d+[A-Z]?(?:\.\d+)*$/i;
+  const phaseIdx = parts.findIndex((p) => tokenRe.test(p));
+  if (phaseIdx >= 0 && phaseIdx + 1 < parts.length && tokenRe.test(parts[phaseIdx + 1])) {
+    return `${parts[phaseIdx]}-${parts[phaseIdx + 1]}`;
+  }
+  return base;
+}
+
 async function searchPhaseInDir(baseDir: string, relBase: string, normalized: string): Promise<PhaseInfo | null> {
   try {
     const entries = await readdir(baseDir, { withFileTypes: true });
@@ -105,11 +116,16 @@ async function searchPhaseInDir(baseDir: string, relBase: string, normalized: st
     const summaries = unsortedSummaries.sort();
 
     const completedPlanIds = new Set(
-      summaries.map(s => s.replace('-SUMMARY.md', '').replace('SUMMARY.md', ''))
+      summaries.flatMap((s) => {
+        const exact = s.replace('-SUMMARY.md', '').replace('SUMMARY.md', '');
+        const canonical = extractCanonicalPlanId(s);
+        return canonical === exact ? [exact] : [exact, canonical];
+      })
     );
-    const incompletePlans = plans.filter(p => {
+    const incompletePlans = plans.filter((p) => {
       const planId = p.replace('-PLAN.md', '').replace('PLAN.md', '');
-      return !completedPlanIds.has(planId);
+      const canonical = extractCanonicalPlanId(p);
+      return !completedPlanIds.has(planId) && !completedPlanIds.has(canonical);
     });
 
     return {
@@ -265,7 +281,11 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
 
   // Build set of plan IDs with summaries — match the planId derivation logic
   const completedPlanIds = new Set(
-    summaryFiles.map(s => s === 'SUMMARY.md' ? 'PLAN' : s.replace('-SUMMARY.md', ''))
+    summaryFiles.flatMap((s) => {
+      const exact = s === 'SUMMARY.md' ? 'PLAN' : s.replace('-SUMMARY.md', '');
+      const canonical = extractCanonicalPlanId(s);
+      return canonical === exact ? [exact] : [exact, canonical];
+    })
   );
 
   const plans: Array<Record<string, unknown>> = [];
@@ -306,7 +326,7 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
       filesModified = Array.isArray(fmFiles) ? fmFiles : [fmFiles];
     }
 
-    const hasSummary = completedPlanIds.has(planId);
+    const hasSummary = completedPlanIds.has(planId) || completedPlanIds.has(extractCanonicalPlanId(planFile));
     if (!hasSummary) {
       incomplete.push(planId);
     }

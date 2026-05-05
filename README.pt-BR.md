@@ -259,7 +259,7 @@ Validação manual orientada para confirmar que a feature realmente funciona com
 Ou deixe o GSD decidir:
 
 ```
-/gsd-next
+/gsd-progress --next
 ```
 
 ### Modo rápido
@@ -327,7 +327,7 @@ Cada tarefa gera commit próprio, facilitando `git bisect`, rollback e rastreabi
 | `/gsd-execute-phase <N>` | Executa planos em ondas paralelas |
 | `/gsd-verify-work [N]` | UAT manual |
 | `/gsd-ship [N] [--draft]` | Cria PR da fase validada |
-| `/gsd-next` | Avança automaticamente para o próximo passo |
+| `/gsd-progress --next` | Avança automaticamente para o próximo passo |
 | `/gsd-fast <text>` | Tarefas triviais sem planejamento |
 | `/gsd-complete-milestone` | Fecha o marco e marca release |
 | `/gsd-new-milestone [name]` | Inicia próximo marco |

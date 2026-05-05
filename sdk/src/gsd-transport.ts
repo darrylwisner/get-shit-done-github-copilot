@@ -1,6 +1,7 @@
 import type { QueryResult } from './query/utils.js';
 import type { QueryRegistry } from './query/registry.js';
 import type { TransportMode } from './gsd-transport-policy.js';
+import { toFailureSignal } from './query-failure-classification.js';
 
 export interface TransportRequest {
   legacyCommand: string;
@@ -24,12 +25,6 @@ export interface TransportPolicyLike {
   allowFallbackToSubprocess: boolean;
 }
 
-function isTimeoutLikeError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  if (error.name === 'TimeoutError' || error.name === 'AbortError') return true;
-  return error.message.includes('timed out after');
-}
-
 export class GSDTransport {
   constructor(
     private readonly registry: QueryRegistry,
@@ -37,31 +32,46 @@ export class GSDTransport {
   ) {}
 
   async run(request: TransportRequest, policy: TransportPolicyLike): Promise<unknown> {
-    const forceSubprocess = Boolean(request.workstream);
-
-    if (!forceSubprocess && policy.preferNative && this.registry.has(request.registryCommand)) {
+    if (this.shouldUseNative(request, policy)) {
       try {
         const native = await this.adapters.dispatchNative(request);
-        if (request.mode === 'raw') {
-          if (this.adapters.formatNativeRaw) {
-            return this.adapters.formatNativeRaw(request.registryCommand, native.data).trim();
-          }
-          return this.toRaw(native.data);
-        }
-        return native.data;
+        return this.projectNativeOutput(request, native.data);
       } catch (error) {
-        if (!policy.allowFallbackToSubprocess) throw error;
-        // Do not subprocess-fallback after a timed-out native dispatch:
-        // the timeout does not cancel the native handler, so falling through
-        // would run the same command twice (double-execution race).
-        if (isTimeoutLikeError(error)) throw error;
+        if (this.shouldRethrowNativeError(error, policy)) throw error;
       }
     }
 
+    return this.dispatchSubprocess(request);
+  }
+
+  private shouldUseNative(request: TransportRequest, policy: TransportPolicyLike): boolean {
+    const forceSubprocess = Boolean(request.workstream);
+    return !forceSubprocess && policy.preferNative && this.registry.has(request.registryCommand);
+  }
+
+  private shouldRethrowNativeError(error: unknown, policy: TransportPolicyLike): boolean {
+    if (!policy.allowFallbackToSubprocess) return true;
+    // Do not subprocess-fallback after a timed-out native dispatch:
+    // the timeout does not cancel the native handler, so falling through
+    // would run the same command twice (double-execution race).
+    return toFailureSignal(error).kind === 'timeout';
+  }
+
+  private dispatchSubprocess(request: TransportRequest): Promise<unknown> {
     if (request.mode === 'raw') {
       return this.adapters.execSubprocessRaw(request.legacyCommand, request.legacyArgs);
     }
     return this.adapters.execSubprocessJson(request.legacyCommand, request.legacyArgs);
+  }
+
+  private projectNativeOutput(request: TransportRequest, data: unknown): unknown {
+    if (request.mode === 'raw') {
+      if (this.adapters.formatNativeRaw) {
+        return this.adapters.formatNativeRaw(request.registryCommand, data).trim();
+      }
+      return this.toRaw(data);
+    }
+    return data;
   }
 
   private toRaw(data: unknown): string {

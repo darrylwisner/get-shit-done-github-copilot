@@ -3,9 +3,9 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRegistry } from './index.js';
+import { GSDToolsError } from '../gsd-tools-error.js';
 import { runQueryDispatch } from './query-dispatch.js';
 import { createCommandTopology } from './command-topology.js';
-
 describe('runQueryDispatch', () => {
   let tmpDir: string;
   let fixtureDir: string;
@@ -142,6 +142,24 @@ describe('runQueryDispatch', () => {
       cjsFallbackEnabled: true,
       resolveGsdToolsPath: () => '',
       dispatchNative: async () => { throw new Error('gsd-tools timed out after 30000ms: state load'); },
+      topology: createCommandTopology(registry),
+    }, ['state', 'load']);
+
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error('expected failure');
+    expect(out.error.kind).toBe('native_timeout');
+    expect(out.error.code).toBe(1);
+    expect(out.error.details).toMatchObject({ command: 'state.load', args: [], timeout_ms: 30000 });
+  });
+
+  it('maps typed native timeout to native_timeout kind with details', async () => {
+    const registry = createRegistry();
+    const out = await runQueryDispatch({
+      registry,
+      projectDir: tmpDir,
+      cjsFallbackEnabled: true,
+      resolveGsdToolsPath: () => '',
+      dispatchNative: async () => { throw GSDToolsError.timeout('timed out', 'state', ['load'], '', 30000); },
       topology: createCommandTopology(registry),
     }, ['state', 'load']);
 

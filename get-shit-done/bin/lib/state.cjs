@@ -1690,32 +1690,36 @@ function cmdStatePrune(cwd, options, raw) {
  * that the phase execution is finished and the project is ready for the next phase.
  * Implements the `gsd state complete-phase` subcommand (issue #2735).
  */
-function cmdStateCompletePhase(cwd, raw) {
+function resolvePhaseIdForCompletePhase(content, overridePhase) {
+  const candidate = overridePhase ||
+    stateExtractField(content, 'Current Phase') ||
+    stateExtractField(content, 'Phase') ||
+    '';
+
+  // Accept canonical phase token only (e.g. 3, 03, 3A, 3.3, 10.2)
+  const phaseMatch = String(candidate).match(/(\d+[A-Z]?(?:\.\d+)*)/i);
+  return phaseMatch ? phaseMatch[1] : null;
+}
+
+function cmdStateCompletePhase(cwd, raw, overridePhase) {
   const statePath = planningPaths(cwd).state;
   if (!fs.existsSync(statePath)) {
     output({ error: 'STATE.md not found' }, raw);
     return;
   }
 
+  const content = fs.readFileSync(statePath, 'utf-8');
+  const resolvedPhase = resolvePhaseIdForCompletePhase(content, overridePhase);
+  if (!resolvedPhase || /^phase$/i.test(resolvedPhase)) {
+    output({ error: 'Unable to resolve current phase. Pass an explicit phase: state complete-phase --phase <N>' }, raw);
+    return;
+  }
+
   const today = new Date().toISOString().split('T')[0];
   const updated = [];
-  let resolvedPhase = '?';
 
   readModifyWriteStateMd(statePath, (content) => {
-    // Read the current phase number for descriptive messages.
-    //
-    // The 'Phase' fallback can match the decorated body line under
-    // `## Current Position` (e.g. `Phase: 01 (Foo) — EXECUTING`), which would
-    // flow downstream into messy `Status: Phase 01 (Foo) — EXECUTING complete`
-    // output. Strip everything past the leading numeric/decimal token so the
-    // fallback path produces a clean phase identifier matching the canonical
-    // `Current Phase` field. CodeRabbit nitpick on PR #2761.
-    const rawPhase = stateExtractField(content, 'Current Phase') ||
-                     stateExtractField(content, 'Phase') ||
-                     '';
-    const phaseToken = rawPhase.match(/^\s*([\w.-]+)/);
-    const currentPhase = phaseToken ? phaseToken[1] : '?';
-    resolvedPhase = currentPhase;
+    const currentPhase = resolvedPhase;
 
     // Update Status field
     const statusValue = `Phase ${currentPhase} complete`;

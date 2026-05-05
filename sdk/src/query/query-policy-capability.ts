@@ -1,27 +1,26 @@
 import {
-  QUERY_MUTATION_COMMAND_LIST,
-  TRANSPORT_RAW_COMMANDS,
-  isQueryMutationCommand,
-} from './query-command-semantics.js';
+  QUERY_MUTATION_COMMANDS_FROM_DEFINITIONS,
+  TRANSPORT_RAW_COMMANDS_FROM_DEFINITIONS,
+  COMMAND_MUTATION_SET,
+  COMMAND_RAW_OUTPUT_SET,
+} from './command-definition.js';
+
+export const QUERY_MUTATION_COMMAND_LIST: readonly string[] = QUERY_MUTATION_COMMANDS_FROM_DEFINITIONS;
+export const TRANSPORT_RAW_COMMANDS: readonly string[] = TRANSPORT_RAW_COMMANDS_FROM_DEFINITIONS;
 
 export const QUERY_POLICY_SNAPSHOT = {
   mutation_commands: QUERY_MUTATION_COMMAND_LIST,
   raw_output_commands: TRANSPORT_RAW_COMMANDS,
 } as const;
 
-const MUTATION_SET = new Set(QUERY_POLICY_SNAPSHOT.mutation_commands);
-const RAW_OUTPUT_SET = new Set(QUERY_POLICY_SNAPSHOT.raw_output_commands);
-
 export function supportsMutationCommand(command: string): boolean {
-  return MUTATION_SET.has(command);
+  return COMMAND_MUTATION_SET.has(command);
 }
 
 export function supportsRawOutputCommand(command: string): boolean {
-  return RAW_OUTPUT_SET.has(command);
+  return COMMAND_RAW_OUTPUT_SET.has(command);
 }
 
-export {
-  QUERY_MUTATION_COMMAND_LIST,
-  TRANSPORT_RAW_COMMANDS,
-  isQueryMutationCommand,
-};
+export function isQueryMutationCommand(command: string): boolean {
+  return COMMAND_MUTATION_SET.has(command);
+}

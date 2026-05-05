@@ -16,7 +16,7 @@ Para detalhes completos de flags avançadas e mudanças recentes, consulte tamb�
 | `/gsd-execute-phase <N>` | Executa planos em ondas paralelas | Após planejamento aprovado |
 | `/gsd-verify-work [N]` | UAT manual com diagnóstico automático | Após execução |
 | `/gsd-ship [N]` | Cria PR da fase validada | Ao concluir a fase |
-| `/gsd-next` | Detecta e executa o próximo passo lógico | Qualquer momento |
+| `/gsd-progress --next` | Detecta e executa o próximo passo lógico | Qualquer momento |
 | `/gsd-fast <texto>` | Tarefa curta sem planejamento completo | Ajustes triviais |
 
 ## Navegação e Sessão

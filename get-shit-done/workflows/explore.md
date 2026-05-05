@@ -127,7 +127,7 @@ gsd-sdk query commit "docs: capture exploration — {topic_slug}" --files {file_
 **Outputs:** {count} artifact(s) created
 {list of created files}
 
-Continue exploring with `/gsd-explore` or start working with `/gsd-next`.
+Continue exploring with `/gsd-explore` or start working with `/gsd-progress --next`.
 ```
 
 </process>

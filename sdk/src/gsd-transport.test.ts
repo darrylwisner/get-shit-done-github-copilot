@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { GSDToolsError } from './gsd-tools-error.js';
 import { QueryRegistry } from './query/registry.js';
 import { GSDTransport } from './gsd-transport.js';
 
@@ -115,6 +116,36 @@ describe('GSDTransport', () => {
       preferNative: true,
       allowFallbackToSubprocess: true,
     })).rejects.toThrow('timed out after');
+
+    expect(adapters.execSubprocessJson).not.toHaveBeenCalled();
+  });
+
+  it('does not fallback after typed timeout native error', async () => {
+    const registry = new QueryRegistry();
+    registry.register('state.load', async () => ({ data: { ok: true } }));
+
+    const timeoutError = GSDToolsError.timeout('native timed out', 'state', ['load'], '', 500);
+    const adapters = {
+      dispatchNative: vi.fn(async () => {
+        throw timeoutError;
+      }),
+      execSubprocessJson: vi.fn(async () => ({ ok: 'fallback' })),
+      execSubprocessRaw: vi.fn(async () => 'fallback-raw'),
+    };
+
+    const transport = new GSDTransport(registry, adapters);
+
+    await expect(transport.run({
+      legacyCommand: 'state',
+      legacyArgs: ['load'],
+      registryCommand: 'state.load',
+      registryArgs: [],
+      mode: 'json',
+      projectDir: '/tmp',
+    }, {
+      preferNative: true,
+      allowFallbackToSubprocess: true,
+    })).rejects.toBe(timeoutError);
 
     expect(adapters.execSubprocessJson).not.toHaveBeenCalled();
   });

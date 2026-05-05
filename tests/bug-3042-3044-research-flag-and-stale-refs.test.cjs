@@ -302,6 +302,28 @@ describe('bug #3044: localized doc sets also scrubbed', () => {
 
 // ─── Replacement commands are documented ────────────────────────────────────
 
+describe('bug #3094: progress routing does not reference removed /gsd-list-phase-assumptions', () => {
+  test('get-shit-done/workflows/progress.md has no /gsd-list-phase-assumptions token', () => {
+    const content = read('get-shit-done/workflows/progress.md');
+    const tokens = extractSlashCommandTokens(content);
+    assert.equal(
+      tokens.has('/gsd-list-phase-assumptions'),
+      false,
+      'progress.md must not recommend removed /gsd-list-phase-assumptions'
+    );
+  });
+
+  test('progress.md pre-planning guidance uses /gsd-discuss-phase instead', () => {
+    const content = read('get-shit-done/workflows/progress.md');
+    const tokens = extractSlashCommandTokens(content);
+    assert.equal(
+      tokens.has('/gsd-discuss-phase'),
+      true,
+      'progress.md should route pre-planning assumption checks via /gsd-discuss-phase'
+    );
+  });
+});
+
 describe('replacement commands appear where the deleted ones used to live', () => {
   test('docs/issue-driven-orchestration.md uses /gsd-workspace --new (not /gsd-new-workspace)', () => {
     const content = read('docs/issue-driven-orchestration.md');

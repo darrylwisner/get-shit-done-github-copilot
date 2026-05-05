@@ -83,6 +83,26 @@ function deriveStatusFromCheckbox(
   return 'not_started';
 }
 
+function listPhasePlanAndSummaryCounts(phasePath: string): { plans: string[]; summaries: string[] } {
+  const phaseFiles = readdirSync(phasePath);
+  const rootPlans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
+  const rootSummaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+
+  const plansDir = join(phasePath, 'plans');
+  let nestedPlans: string[] = [];
+  let nestedSummaries: string[] = [];
+  if (existsSync(plansDir)) {
+    const files = readdirSync(plansDir);
+    nestedPlans = files.filter(f => /^PLAN-\d+.*\.md$/i.test(f));
+    nestedSummaries = files.filter(f => /^SUMMARY-\d+.*\.md$/i.test(f));
+  }
+
+  return {
+    plans: rootPlans.concat(nestedPlans),
+    summaries: rootSummaries.concat(nestedSummaries),
+  };
+}
+
 // ─── initNewProject ───────────────────────────────────────────────────────
 
 /**
@@ -258,8 +278,7 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
       const phasePath = join(paths.phases, dir);
       const phaseFiles = readdirSync(phasePath);
 
-      const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
-      const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+      const { plans, summaries } = listPhasePlanAndSummaryCounts(phasePath);
       const hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
 
       let status =
@@ -431,8 +450,9 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
       if (dirMatch) {
         const fullDir = join(paths.phases, dirMatch);
         const phaseFiles = readdirSync(fullDir);
-        planCount = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
-        summaryCount = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
+        const counts = listPhasePlanAndSummaryCounts(fullDir);
+        planCount = counts.plans.length;
+        summaryCount = counts.summaries.length;
         hasContext = phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
         hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
 

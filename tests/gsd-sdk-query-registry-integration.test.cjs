@@ -48,28 +48,21 @@ function collectRegisteredNames() {
   let m;
   while ((m = re.exec(src)) !== null) names.add(m[1]);
 
-  // Catalog-based registrations: extract handler names from registerStaticCatalog calls.
-  const catalogRe = /registerStaticCatalog\(registry, (\w+)\)/g;
-  let cm;
-  while ((cm = catalogRe.exec(src)) !== null) {
-    const catalogVarName = cm[1];
-    // Map variable names to their source files.
-    const catalogFileByVar = {
-      FOUNDATION_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
-      STATE_SUPPORT_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
-      MUTATION_SURFACES_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
-      VERIFY_DECISION_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
-      DECISION_ROUTING_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
-      DOMAIN_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-domain.ts'),
-    };
-    const cf = catalogFileByVar[catalogVarName];
-    if (!cf) continue;
+  // Catalog-based registrations: parse known static catalogs directly.
+  const catalogFileByVar = {
+    FOUNDATION_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+    STATE_SUPPORT_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+    MUTATION_SURFACES_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+    VERIFY_DECISION_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+    DECISION_ROUTING_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-foundation.ts'),
+    DOMAIN_STATIC_CATALOG: path.join(REPO_ROOT, 'sdk', 'src', 'query', 'command-static-catalog-domain.ts'),
+  };
+
+  for (const [catalogVarName, cf] of Object.entries(catalogFileByVar)) {
     try {
       const catSrc = fs.readFileSync(cf, 'utf8');
-      // Only extract names from the catalog matching this variable.
       const exportRe = new RegExp(`export const ${catalogVarName}:`, 'm');
       if (!exportRe.test(catSrc)) continue;
-      // Match: [[name, handler], ...]
       const entryRe = /\[\s*['"]([^'"]+)['"]/g;
       let em;
       while ((em = entryRe.exec(catSrc)) !== null) {

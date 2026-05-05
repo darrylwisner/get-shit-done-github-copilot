@@ -396,7 +396,7 @@ claude --dangerously-skip-permissions
 またはGSDに次のステップを自動判定させます：
 
 ```
-/gsd-next                    # 次のステップを自動検出して実行
+/gsd-progress --next                    # 次のステップを自動検出して実行
 ```
 
 **discuss → plan → execute → verify → ship** のループをマイルストーン完了まで繰り返します。
@@ -544,7 +544,7 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd-execute-phase <N>` | 全プランを並列ウェーブで実行し、完了時に検証 |
 | `/gsd-verify-work [N]` | 手動ユーザー受入テスト ¹ |
 | `/gsd-ship [N] [--draft]` | 検証済みのフェーズ作業から自動生成された本文付きのPRを作成 |
-| `/gsd-next` | 次の論理的なワークフローステップに自動的に進む |
+| `/gsd-progress --next` | 次の論理的なワークフローステップに自動的に進む |
 | `/gsd-fast <text>` | インラインの軽微タスク — 計画を完全にスキップし即座に実行 |
 | `/gsd-audit-milestone` | マイルストーンが完了の定義を達成したか検証 |
 | `/gsd-complete-milestone` | マイルストーンをアーカイブし、リリースをタグ付け |
@@ -581,7 +581,7 @@ lmn012o feat(08-02): create registration endpoint
 | コマンド | 説明 |
 |---------|--------------|
 | `/gsd-progress` | 今どこにいる？次は何？ |
-| `/gsd-next` | 状態を自動検出し次のステップを実行 |
+| `/gsd-progress --next` | 状態を自動検出し次のステップを実行 |
 | `/gsd-help` | 全コマンドと使い方ガイドを表示 |
 | `/gsd-update` | チェンジログプレビュー付きでGSDをアップデート |
 | `/gsd-join-discord` | GSD Discordコミュニティに参加 |

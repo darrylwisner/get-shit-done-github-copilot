@@ -198,7 +198,7 @@
 
 ---
 
-### `/gsd-next`
+### `/gsd-progress --next`
 
 다음 논리적 워크플로우 단계로 자동으로 이동합니다. 프로젝트 상태를 읽고 적절한 명령어를 실행합니다.
 
@@ -212,7 +212,7 @@
 - 모든 페이즈 완료 → `/gsd-complete-milestone` 제안
 
 ```bash
-/gsd-next                           # 다음 단계 자동 감지 및 실행
+/gsd-progress --next                           # 다음 단계 자동 감지 및 실행
 ```
 
 ---

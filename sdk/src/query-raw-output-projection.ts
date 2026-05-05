@@ -1,5 +1,10 @@
 import { formatStateLoadRawStdout } from './query/state-project-load.js';
 
+function safeStringify(value: unknown): string {
+  const out = JSON.stringify(value, null, 2);
+  return out ?? String(value);
+}
+
 /**
  * Raw output projection for native query results.
  * Owns CLI-facing string contracts for raw mode commands.
@@ -11,7 +16,7 @@ export function formatQueryRawOutput(registryCommand: string, data: unknown): st
 
   if (registryCommand === 'commit') {
     if (data == null || typeof data !== 'object' || Array.isArray(data)) {
-      return JSON.stringify(data, null, 2);
+      return safeStringify(data);
     }
     const d = data as Record<string, unknown>;
     if (d.committed === true) {
@@ -32,12 +37,12 @@ export function formatQueryRawOutput(registryCommand: string, data: unknown): st
       }
       return r || 'nothing';
     }
-    return JSON.stringify(data, null, 2);
+    return safeStringify(data);
   }
 
   if (registryCommand === 'config-set') {
     if (data == null || typeof data !== 'object' || Array.isArray(data)) {
-      return JSON.stringify(data, null, 2);
+      return safeStringify(data);
     }
     const d = data as Record<string, unknown>;
     if ((d.updated === true || d.set === true) && d.key !== undefined) {
@@ -50,12 +55,12 @@ export function formatQueryRawOutput(registryCommand: string, data: unknown): st
       }
       return `${d.key}=${String(v)}`;
     }
-    return JSON.stringify(data, null, 2);
+    return safeStringify(data);
   }
 
   if (registryCommand === 'state.begin-phase' || registryCommand === 'state begin-phase') {
     if (data == null || typeof data !== 'object' || Array.isArray(data)) {
-      return JSON.stringify(data, null, 2);
+      return safeStringify(data);
     }
     const d = data as Record<string, unknown>;
     const u = d.updated as string[] | undefined;
@@ -65,5 +70,5 @@ export function formatQueryRawOutput(registryCommand: string, data: unknown): st
   if (typeof data === 'string') {
     return data;
   }
-  return JSON.stringify(data, null, 2);
+  return safeStringify(data);
 }
