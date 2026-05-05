@@ -52,7 +52,7 @@
 
 **也可选：**
 - 执行前审查计划
-- `/gsd-list-phase-assumptions 2` — 检查假设
+- `/gsd-discuss-phase --assumptions 2` — 检查假设
 
 ---
 ```

@@ -524,7 +524,7 @@ Equivalent paths for other runtimes:
 │   ├── pending/            # Captured ideas
 │   └── done/               # Completed todos
 ├── threads/               # Persistent context threads (from /gsd-thread)
-├── seeds/                 # Forward-looking ideas (from /gsd-plant-seed)
+├── seeds/                 # Forward-looking ideas (from /gsd-capture --seed)
 ├── debug/                  # Active debug sessions
 │   ├── *.md                # Active sessions
 │   ├── resolved/           # Archived sessions

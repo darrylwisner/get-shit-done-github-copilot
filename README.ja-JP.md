@@ -80,7 +80,7 @@ GSDはそれを解決します。Claude Codeを信頼性の高いものにする
 完全なリストは [v1.39.0 リリースノート](https://github.com/gsd-build/get-shit-done/releases/tag/v1.39.0) を参照してください。
 
 - **`--minimal` インストールプロファイル** — エイリアス `--core-only`。メインループの6スキル（`new-project`、`discuss-phase`、`plan-phase`、`execute-phase`、`help`、`update`）のみをインストールし、`gsd-*` サブエージェントはゼロ。コールドスタート時のシステムプロンプトのオーバーヘッドを ~12kトークンから ~700トークンへ削減（≥94%減）。32K〜128Kコンテキストのローカル LLM やトークン課金 API に有効。
-- **`/gsd-edit-phase`** — `ROADMAP.md` 上の既存フェーズの任意フィールドをその場で編集（番号や位置は変更されない）。`--force` で確認 diff をスキップ、`depends_on` の参照を検証し、書き込み時に `STATE.md` も更新。
+- **`/gsd-phase --edit`** — `ROADMAP.md` 上の既存フェーズの任意フィールドをその場で編集（番号や位置は変更されない）。`--force` で確認 diff をスキップ、`depends_on` の参照を検証し、書き込み時に `STATE.md` も更新。
 - **マージ後ビルド & テストゲート** — `execute-phase` のステップ 5.6 が `workflow.build_command` の設定を自動検出し、無ければ Xcode（`.xcodeproj`）、Makefile、Justfile、Cargo、Go、Python、npm の順にフォールバック。Xcode/iOS プロジェクトでは `xcodebuild build` と `xcodebuild test` を自動実行。並列・直列両モードで動作。
 - **ランタイム別レビューモデル選択** — `review.models.<cli>` で各外部レビュー CLI（codex、gemini など）が使うモデルをプランナー/実行プロファイルとは独立に指定可能。
 - **ワークストリーム設定の継承** — `GSD_WORKSTREAM` が設定されている場合、ルートの `.planning/config.json` を先に読み込み、ワークストリーム設定をディープマージ（衝突時はワークストリーム側が優先）。ワークストリーム設定で明示的に `null` を指定するとルート値を上書き可能。
@@ -565,9 +565,9 @@ lmn012o feat(08-02): create registration endpoint
 
 | コマンド | 説明 |
 |---------|--------------|
-| `/gsd-new-workspace` | リポジトリのコピー（worktreeまたはクローン）で隔離されたワークスペースを作成 |
-| `/gsd-list-workspaces` | すべてのGSDワークスペースとそのステータスを表示 |
-| `/gsd-remove-workspace` | ワークスペースを削除しworktreeをクリーンアップ |
+| `/gsd-workspace --new` | リポジトリのコピー（worktreeまたはクローン）で隔離されたワークスペースを作成 |
+| `/gsd-workspace --list` | すべてのGSDワークスペースとそのステータスを表示 |
+| `/gsd-workspace --remove` | ワークスペースを削除しworktreeをクリーンアップ |
 
 ### UIデザイン
 
@@ -584,7 +584,6 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd-next` | 状態を自動検出し次のステップを実行 |
 | `/gsd-help` | 全コマンドと使い方ガイドを表示 |
 | `/gsd-update` | チェンジログプレビュー付きでGSDをアップデート |
-| `/gsd-join-discord` | GSD Discordコミュニティに参加 |
 | `/gsd-manager` | 複数フェーズ管理用のインタラクティブコマンドセンター |
 
 ### ブラウンフィールド
@@ -597,12 +596,12 @@ lmn012o feat(08-02): create registration endpoint
 
 | コマンド | 説明 |
 |---------|--------------|
-| `/gsd-add-phase` | ロードマップにフェーズを追加 |
-| `/gsd-insert-phase [N]` | フェーズ間に緊急作業を挿入 |
-| `/gsd-edit-phase [N] [--force]` | 既存フェーズの任意フィールドをその場で編集 — 番号と位置は変更されない |
-| `/gsd-remove-phase [N]` | 将来のフェーズを削除し番号を振り直し |
-| `/gsd-list-phase-assumptions [N]` | 計画前にClaudeの意図するアプローチを確認 |
-| `/gsd-plan-milestone-gaps` | 監査で見つかったギャップを埋めるフェーズを作成 |
+| `/gsd-phase` | ロードマップにフェーズを追加 |
+| `/gsd-phase --insert [N]` | フェーズ間に緊急作業を挿入 |
+| `/gsd-phase --edit [N] [--force]` | 既存フェーズの任意フィールドをその場で編集 — 番号と位置は変更されない |
+| `/gsd-phase --remove [N]` | 将来のフェーズを削除し番号を振り直し |
+| `/gsd-discuss-phase --assumptions [N]` | 計画前にClaudeの意図するアプローチを確認 |
+| `/gsd-audit-milestone --fix` | 監査で見つかったギャップを埋めるフェーズを作成 |
 
 ### セッション
 
@@ -610,7 +609,7 @@ lmn012o feat(08-02): create registration endpoint
 |---------|--------------|
 | `/gsd-pause-work` | フェーズ途中で停止する際の引き継ぎを作成（HANDOFF.jsonを書き込み） |
 | `/gsd-resume-work` | 前回のセッションから復元 |
-| `/gsd-session-report` | 実行した作業と結果のセッションサマリーを生成 |
+| `/gsd-pause-work --report` | 実行した作業と結果のセッションサマリーを生成 |
 
 ### ワークストリーム
 
@@ -630,8 +629,8 @@ lmn012o feat(08-02): create registration endpoint
 
 | コマンド | 説明 |
 |---------|--------------|
-| `/gsd-plant-seed <idea>` | トリガー条件付きの将来志向のアイデアをキャプチャ — 適切なマイルストーンで浮上 |
-| `/gsd-add-backlog <desc>` | バックログのパーキングロットにアイデアを追加（999.xナンバリング、アクティブシーケンス外） |
+| `/gsd-capture --seed <idea>` | トリガー条件付きの将来志向のアイデアをキャプチャ — 適切なマイルストーンで浮上 |
+| `/gsd-capture --backlog <desc>` | バックログのパーキングロットにアイデアを追加（999.xナンバリング、アクティブシーケンス外） |
 | `/gsd-review-backlog` | バックログ項目をレビューし、アクティブマイルストーンに昇格またはstaleエントリを削除 |
 | `/gsd-thread [name]` | 永続コンテキストスレッド — 複数セッションにまたがる作業用の軽量クロスセッション知識 |
 
@@ -640,9 +639,9 @@ lmn012o feat(08-02): create registration endpoint
 | コマンド | 説明 |
 |---------|--------------|
 | `/gsd-settings` | モデルプロファイルとワークフローエージェントを設定 |
-| `/gsd-set-profile <profile>` | モデルプロファイルを切り替え（quality/balanced/budget/inherit） |
-| `/gsd-add-todo [desc]` | 後で取り組むアイデアをキャプチャ |
-| `/gsd-check-todos` | 保留中のtodoを一覧表示 |
+| `/gsd-config --profile <profile>` | モデルプロファイルを切り替え（quality/balanced/budget/inherit） |
+| `/gsd-capture [desc]` | 後で取り組むアイデアをキャプチャ |
+| `/gsd-capture --list` | 保留中のtodoを一覧表示 |
 | `/gsd-debug [desc]` | 永続状態を持つ体系的デバッグ |
 | `/gsd-do <text>` | フリーフォームテキストを適切なGSDコマンドに自動ルーティング |
 | `/gsd-note <text>` | ゼロフリクションのアイデアキャプチャ — ノートの追加、一覧、todoへの昇格 |
@@ -679,7 +678,7 @@ GSDはプロジェクト設定を `.planning/config.json` に保存します。`
 
 プロファイルの切り替え：
 ```
-/gsd-set-profile budget
+/gsd-config --profile budget
 ```
 
 非Anthropicプロバイダー（OpenRouter、ローカルモデル）を使用する場合や、現在のランタイムのモデル選択に従う場合（例：OpenCode `/model`）は `inherit` を使用してください。

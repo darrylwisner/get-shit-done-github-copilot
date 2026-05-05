@@ -80,7 +80,7 @@ GSD가 그걸 고칩니다. Claude Code를 신뢰할 수 있게 만드는 컨텍
 전체 목록은 [v1.39.0 릴리스 노트](https://github.com/gsd-build/get-shit-done/releases/tag/v1.39.0)를 참고하세요.
 
 - **`--minimal` 설치 프로파일** — 별칭 `--core-only`. 메인 루프 6개 스킬(`new-project`, `discuss-phase`, `plan-phase`, `execute-phase`, `help`, `update`)만 설치하고 `gsd-*` 서브에이전트는 설치하지 않음. 콜드 스타트 시스템 프롬프트 오버헤드를 ~12k 토큰에서 ~700 토큰으로 축소(≥94% 감소). 32K–128K 컨텍스트의 로컬 LLM이나 토큰 과금 API에 유용.
-- **`/gsd-edit-phase`** — `ROADMAP.md`에 있는 기존 단계의 임의 필드를 그 자리에서 수정(번호와 위치는 변경되지 않음). `--force`는 확인 diff를 건너뛰고, `depends_on` 참조를 검증하며 쓰기 시 `STATE.md`도 갱신.
+- **`/gsd-phase --edit`** — `ROADMAP.md`에 있는 기존 단계의 임의 필드를 그 자리에서 수정(번호와 위치는 변경되지 않음). `--force`는 확인 diff를 건너뛰고, `depends_on` 참조를 검증하며 쓰기 시 `STATE.md`도 갱신.
 - **머지 후 빌드 & 테스트 게이트** — `execute-phase` 5.6 단계가 `workflow.build_command` 설정을 우선 자동 감지하고, 없으면 Xcode(`.xcodeproj`), Makefile, Justfile, Cargo, Go, Python, npm 순으로 폴백. Xcode/iOS 프로젝트는 `xcodebuild build` 및 `xcodebuild test`를 자동 실행. 병렬·직렬 모드 모두에서 동작.
 - **런타임별 리뷰 모델 선택** — `review.models.<cli>`로 각 외부 리뷰 CLI(codex, gemini 등)가 플래너/실행 프로파일과 독립적으로 자체 모델을 선택할 수 있음.
 - **워크스트림 설정 상속** — `GSD_WORKSTREAM`이 설정되면 루트 `.planning/config.json`을 먼저 로드한 뒤 워크스트림 설정을 딥 머지(충돌 시 워크스트림 우선). 워크스트림 설정에서 명시적 `null`은 루트 값을 덮어씀.
@@ -562,9 +562,9 @@ lmn012o feat(08-02): create registration endpoint
 
 | 명령어 | 역할 |
 |---------|------------|
-| `/gsd-new-workspace` | 저장소 복사본으로 격리된 워크스페이스 생성 (worktrees 또는 clones) |
-| `/gsd-list-workspaces` | 모든 GSD 워크스페이스와 상태 표시 |
-| `/gsd-remove-workspace` | 워크스페이스 제거 및 worktree 정리 |
+| `/gsd-workspace --new` | 저장소 복사본으로 격리된 워크스페이스 생성 (worktrees 또는 clones) |
+| `/gsd-workspace --list` | 모든 GSD 워크스페이스와 상태 표시 |
+| `/gsd-workspace --remove` | 워크스페이스 제거 및 worktree 정리 |
 
 ### UI 디자인
 
@@ -581,7 +581,6 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd-next` | 상태 자동 감지 및 다음 단계 실행 |
 | `/gsd-help` | 모든 명령어와 사용 가이드 표시 |
 | `/gsd-update` | 변경 로그 미리보기와 함께 GSD 업데이트 |
-| `/gsd-join-discord` | GSD Discord 커뮤니티 참여 |
 | `/gsd-manager` | 여러 단계 관리를 위한 대화형 커맨드 센터 |
 
 ### 브라운필드
@@ -594,12 +593,12 @@ lmn012o feat(08-02): create registration endpoint
 
 | 명령어 | 역할 |
 |---------|------------|
-| `/gsd-add-phase` | 로드맵에 단계 추가 |
-| `/gsd-insert-phase [N]` | 단계 사이에 긴급 작업 삽입 |
-| `/gsd-edit-phase [N] [--force]` | 기존 단계의 임의 필드를 그 자리에서 수정 — 번호와 위치는 그대로 |
-| `/gsd-remove-phase [N]` | 미래 단계 제거, 번호 재정렬 |
-| `/gsd-list-phase-assumptions [N]` | 기획 전 Claude의 의도된 접근 방식 확인 |
-| `/gsd-plan-milestone-gaps` | 감사에서 발견된 갭을 해소하기 위한 단계 생성 |
+| `/gsd-phase` | 로드맵에 단계 추가 |
+| `/gsd-phase --insert [N]` | 단계 사이에 긴급 작업 삽입 |
+| `/gsd-phase --edit [N] [--force]` | 기존 단계의 임의 필드를 그 자리에서 수정 — 번호와 위치는 그대로 |
+| `/gsd-phase --remove [N]` | 미래 단계 제거, 번호 재정렬 |
+| `/gsd-discuss-phase --assumptions [N]` | 기획 전 Claude의 의도된 접근 방식 확인 |
+| `/gsd-audit-milestone --fix` | 감사에서 발견된 갭을 해소하기 위한 단계 생성 |
 
 ### 세션
 
@@ -607,7 +606,7 @@ lmn012o feat(08-02): create registration endpoint
 |---------|------------|
 | `/gsd-pause-work` | 단계 중간에 멈출 때 핸드오프 생성 (HANDOFF.json 작성) |
 | `/gsd-resume-work` | 마지막 세션에서 복원 |
-| `/gsd-session-report` | 수행한 작업과 결과가 담긴 세션 요약 생성 |
+| `/gsd-pause-work --report` | 수행한 작업과 결과가 담긴 세션 요약 생성 |
 
 ### 코드 품질
 
@@ -621,8 +620,8 @@ lmn012o feat(08-02): create registration endpoint
 
 | 명령어 | 역할 |
 |---------|------------|
-| `/gsd-plant-seed <idea>` | 트리거 조건이 있는 아이디어 저장 — 때가 되면 알아서 올라옴 |
-| `/gsd-add-backlog <desc>` | 백로그 파킹 롯에 아이디어 추가 (999.x 번호 지정, 활성 시퀀스 외부) |
+| `/gsd-capture --seed <idea>` | 트리거 조건이 있는 아이디어 저장 — 때가 되면 알아서 올라옴 |
+| `/gsd-capture --backlog <desc>` | 백로그 파킹 롯에 아이디어 추가 (999.x 번호 지정, 활성 시퀀스 외부) |
 | `/gsd-review-backlog` | 백로그 항목 리뷰 및 활성 마일스톤으로 승격하거나 오래된 항목 제거 |
 | `/gsd-thread [name]` | 지속적 컨텍스트 스레드 — 여러 세션에 걸친 작업을 위한 가벼운 크로스 세션 지식 |
 
@@ -631,9 +630,9 @@ lmn012o feat(08-02): create registration endpoint
 | 명령어 | 역할 |
 |---------|------------|
 | `/gsd-settings` | 모델 프로필 및 워크플로우 에이전트 설정 |
-| `/gsd-set-profile <profile>` | 모델 프로필 전환 (quality/balanced/budget/inherit) |
-| `/gsd-add-todo [desc]` | 나중을 위한 아이디어 캡처 |
-| `/gsd-check-todos` | 대기 중인 할 일 목록 |
+| `/gsd-config --profile <profile>` | 모델 프로필 전환 (quality/balanced/budget/inherit) |
+| `/gsd-capture [desc]` | 나중을 위한 아이디어 캡처 |
+| `/gsd-capture --list` | 대기 중인 할 일 목록 |
 | `/gsd-debug [desc]` | 지속적 상태를 이용한 체계적 디버깅 |
 | `/gsd-do <text>` | 자유 형식 텍스트를 적절한 GSD 명령어로 자동 라우팅 |
 | `/gsd-note <text>` | 마찰 없는 아이디어 캡처 — 추가, 목록, 또는 할 일로 승격 |
@@ -670,7 +669,7 @@ GSD는 프로젝트 설정을 `.planning/config.json`에 저장합니다. `/gsd-
 
 프로필 전환:
 ```
-/gsd-set-profile budget
+/gsd-config --profile budget
 ```
 
 비-Anthropic 제공업체 (OpenRouter, 로컬 모델) 사용 시 또는 현재 런타임 모델 선택을 따를 때 (예: OpenCode `/model`) `inherit`를 사용하세요.

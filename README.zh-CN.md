@@ -78,7 +78,7 @@ GSD 解决的就是这个问题。它是让 Claude Code 变得可靠的上下文
 完整列表请参阅 [v1.39.0 发行说明](https://github.com/gsd-build/get-shit-done/releases/tag/v1.39.0)。
 
 - **`--minimal` 安装档** — 别名 `--core-only`。仅安装主循环的 6 个核心技能（`new-project`、`discuss-phase`、`plan-phase`、`execute-phase`、`help`、`update`），不安装任何 `gsd-*` 子代理。将冷启动系统提示开销从 ~12k token 降至 ~700 token（≥94% 减少）。适合 32K–128K 上下文的本地 LLM 和按 token 计费的 API。
-- **`/gsd-edit-phase`** — 就地修改 `ROADMAP.md` 中已有阶段的任意字段，不改变其编号或位置。`--force` 跳过确认 diff，验证 `depends_on` 引用，并在写入时更新 `STATE.md`。
+- **`/gsd-phase --edit`** — 就地修改 `ROADMAP.md` 中已有阶段的任意字段，不改变其编号或位置。`--force` 跳过确认 diff，验证 `depends_on` 引用，并在写入时更新 `STATE.md`。
 - **合并后构建与测试门** — `execute-phase` 步骤 5.6 优先自动检测 `workflow.build_command` 配置，否则按 Xcode（`.xcodeproj`）、Makefile、Justfile、Cargo、Go、Python、npm 顺序回退。Xcode/iOS 项目自动运行 `xcodebuild build` 和 `xcodebuild test`。在并行与串行模式下均生效。
 - **每运行时评审模型选择** — `review.models.<cli>` 让每个外部评审 CLI（codex、gemini 等）独立于规划/执行档选择自己的模型。
 - **工作流设置继承** — 设置 `GSD_WORKSTREAM` 后，先加载根 `.planning/config.json`，再与该工作流的配置进行深合并（冲突时工作流优先）。工作流配置中显式 `null` 会覆盖根值。
@@ -558,9 +558,9 @@ lmn012o feat(08-02): create registration endpoint
 
 | 命令 | 作用 |
 |------|------|
-| `/gsd-new-workspace` | 创建隔离工作区，包含仓库副本（worktree 或 clone） |
-| `/gsd-list-workspaces` | 显示所有 GSD 工作区及其状态 |
-| `/gsd-remove-workspace` | 移除工作区并清理 worktree |
+| `/gsd-workspace --new` | 创建隔离工作区，包含仓库副本（worktree 或 clone） |
+| `/gsd-workspace --list` | 显示所有 GSD 工作区及其状态 |
+| `/gsd-workspace --remove` | 移除工作区并清理 worktree |
 
 ### UI 设计
 
@@ -577,7 +577,6 @@ lmn012o feat(08-02): create registration endpoint
 | `/gsd-next` | 自动检测状态并执行下一步 |
 | `/gsd-help` | 显示全部命令和使用指南 |
 | `/gsd-update` | 更新 GSD，并预览变更日志 |
-| `/gsd-join-discord` | 加入 GSD Discord 社区 |
 
 ### Brownfield
 
@@ -589,12 +588,12 @@ lmn012o feat(08-02): create registration endpoint
 
 | 命令 | 作用 |
 |------|------|
-| `/gsd-add-phase` | 在路线图末尾追加 phase |
-| `/gsd-insert-phase [N]` | 在 phase 之间插入紧急工作 |
-| `/gsd-edit-phase [N] [--force]` | 就地修改已有 phase 的任意字段 — 编号与位置保持不变 |
-| `/gsd-remove-phase [N]` | 删除未来 phase，并重编号 |
-| `/gsd-list-phase-assumptions [N]` | 在规划前查看 Claude 打算采用的方案 |
-| `/gsd-plan-milestone-gaps` | 为 audit 发现的缺口创建 phase |
+| `/gsd-phase` | 在路线图末尾追加 phase |
+| `/gsd-phase --insert [N]` | 在 phase 之间插入紧急工作 |
+| `/gsd-phase --edit [N] [--force]` | 就地修改已有 phase 的任意字段 — 编号与位置保持不变 |
+| `/gsd-phase --remove [N]` | 删除未来 phase，并重编号 |
+| `/gsd-discuss-phase --assumptions [N]` | 在规划前查看 Claude 打算采用的方案 |
+| `/gsd-audit-milestone --fix` | 为 audit 发现的缺口创建 phase |
 
 ### 代码质量
 
@@ -608,7 +607,7 @@ lmn012o feat(08-02): create registration endpoint
 
 | 命令 | 作用 |
 |------|------|
-| `/gsd-plant-seed <idea>` | 将想法存入积压停车场，留待未来里程碑 |
+| `/gsd-capture --seed <idea>` | 将想法存入积压停车场，留待未来里程碑 |
 
 ### 会话
 
@@ -616,16 +615,16 @@ lmn012o feat(08-02): create registration endpoint
 |------|------|
 | `/gsd-pause-work` | 在中途暂停时创建交接上下文（写入 HANDOFF.json） |
 | `/gsd-resume-work` | 从上一次会话恢复 |
-| `/gsd-session-report` | 生成会话摘要，包含已完成工作和结果 |
+| `/gsd-pause-work --report` | 生成会话摘要，包含已完成工作和结果 |
 
 ### 工具
 
 | 命令 | 作用 |
 |------|------|
 | `/gsd-settings` | 配置模型 profile 和工作流代理 |
-| `/gsd-set-profile <profile>` | 切换模型 profile（quality / balanced / budget / inherit） |
-| `/gsd-add-todo [desc]` | 记录一个待办想法 |
-| `/gsd-check-todos` | 查看待办列表 |
+| `/gsd-config --profile <profile>` | 切换模型 profile（quality / balanced / budget / inherit） |
+| `/gsd-capture [desc]` | 记录一个待办想法 |
+| `/gsd-capture --list` | 查看待办列表 |
 | `/gsd-debug [desc]` | 使用持久状态进行系统化调试 |
 | `/gsd-do <text>` | 将自由文本自动路由到正确的 GSD 命令 |
 | `/gsd-note <text>` | 零摩擦想法捕捉——追加、列出或提升为待办 |
@@ -662,7 +661,7 @@ GSD 将项目设置保存在 `.planning/config.json`。你可以在 `/gsd-new-pr
 
 切换方式：
 ```
-/gsd-set-profile budget
+/gsd-config --profile budget
 ```
 
 使用非 Anthropic 提供商（OpenRouter、本地模型）时，或想跟随当前运行时的模型选择时（如 OpenCode 的 `/model`），可用 `inherit`。

@@ -16,7 +16,7 @@ Para detalhes completos de flags avançadas e mudanças recentes, consulte tamb�
 | `/gsd-execute-phase <N>` | Executa planos em ondas paralelas | Após planejamento aprovado |
 | `/gsd-verify-work [N]` | UAT manual com diagnóstico automático | Após execução |
 | `/gsd-ship [N]` | Cria PR da fase validada | Ao concluir a fase |
-| `/gsd-next` | Detecta e executa o próximo passo lógico | Qualquer momento |
+| `/gsd-progress --next` | Detecta e executa o próximo passo lógico | Qualquer momento |
 | `/gsd-fast <texto>` | Tarefa curta sem planejamento completo | Ajustes triviais |
 
 ## Navegação e Sessão
@@ -26,7 +26,7 @@ Para detalhes completos de flags avançadas e mudanças recentes, consulte tamb�
 | `/gsd-progress` | Mostra status atual e próximos passos |
 | `/gsd-resume-work` | Retoma contexto da sessão anterior |
 | `/gsd-pause-work` | Salva handoff estruturado |
-| `/gsd-session-report` | Gera resumo da sessão |
+| `/gsd-pause-work --report` | Gera resumo da sessão |
 | `/gsd-autonomous` | Executa todas as fases restantes de forma autônoma (`--from N`, `--to N`, `--only N`) |
 | `/gsd-help` | Lista comandos e uso |
 | `/gsd-update` | Atualiza o GSD |
@@ -35,10 +35,10 @@ Para detalhes completos de flags avançadas e mudanças recentes, consulte tamb�
 
 | Comando | Finalidade |
 |---------|------------|
-| `/gsd-add-phase` | Adiciona fase no roadmap |
-| `/gsd-insert-phase [N]` | Insere trabalho urgente entre fases |
-| `/gsd-remove-phase [N]` | Remove fase futura e reenumera |
-| `/gsd-list-phase-assumptions [N]` | Mostra abordagem assumida pelo Claude |
+| `/gsd-phase` | Adiciona fase no roadmap |
+| `/gsd-phase --insert [N]` | Insere trabalho urgente entre fases |
+| `/gsd-phase --remove [N]` | Remove fase futura e reenumera |
+| `/gsd-discuss-phase --assumptions [N]` | Mostra abordagem assumida pelo Claude |
 
 ## Brownfield e Utilidades
 
@@ -47,10 +47,10 @@ Para detalhes completos de flags avançadas e mudanças recentes, consulte tamb�
 | `/gsd-map-codebase` | Mapeia base existente antes de novo projeto |
 | `/gsd-quick` | Tarefas ad-hoc com garantias do GSD |
 | `/gsd-debug [desc]` | Debug sistemático com estado persistente (`--diagnose` para modo diagnóstico) |
-| `/gsd-analyze-dependencies` | Detecta dependências entre fases e sugere `Depends on` no ROADMAP.md (v1.32) |
+| `/gsd-manager --analyze-deps` | Detecta dependências entre fases e sugere `Depends on` no ROADMAP.md (v1.32) |
 | `/gsd-forensics` | Diagnóstico de falhas no workflow |
 | `/gsd-settings` | Configuração de agentes, perfil e toggles |
-| `/gsd-set-profile <perfil>` | Troca rápida de perfil de modelo |
+| `/gsd-config --profile <perfil>` | Troca rápida de perfil de modelo |
 
 ## Qualidade de Código
 
@@ -64,9 +64,9 @@ Para detalhes completos de flags avançadas e mudanças recentes, consulte tamb�
 
 | Comando | Finalidade |
 |---------|------------|
-| `/gsd-add-backlog <desc>` | Adiciona item no backlog (999.x) |
+| `/gsd-capture --backlog <desc>` | Adiciona item no backlog (999.x) |
 | `/gsd-review-backlog` | Promove, mantém ou remove itens |
-| `/gsd-plant-seed <ideia>` | Registra ideia com gatilho futuro |
+| `/gsd-capture --seed <ideia>` | Registra ideia com gatilho futuro |
 | `/gsd-thread [nome]` | Gerencia threads persistentes |
 
 ## Gerenciamento de Estado

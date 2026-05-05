@@ -53,7 +53,7 @@ Symphony docs, blog posts, or third-party orchestration write-ups.
 | Proof-of-work / test evidence | `/gsd-verify-work` (UAT.md persisted across `/clear`) |
 | Adversarial review | `/gsd-review` (cross-AI peer review of plans) |
 | Human merge gate | `/gsd-ship` (creates PR, optional code review, prepares merge) |
-| Follow-up capture | `/gsd-note`, `/gsd-plant-seed`, `/gsd-new-milestone`, or a manually opened tracker issue |
+| Follow-up capture | `/gsd-note`, `/gsd-capture --seed`, `/gsd-new-milestone`, or a manually opened tracker issue |
 | Concurrency control | Manager / background-agent semantics (no always-on poller) |
 
 The mapping is one-way: GSD owns the safety gates (verification, human
@@ -72,8 +72,8 @@ tracker issue end-to-end. Replace bracketed placeholders before running.
    dependencies that block execution.
 2. **Map to a GSD phase.** If the issue maps onto an existing phase in
    `ROADMAP.md`, select it. If not, run `/gsd-new-milestone` (for a new
-   milestone of related issues) or open a phase via `/gsd-add-phase` /
-   `/gsd-insert-phase`. Capture the tracker issue URL in the phase's
+   milestone of related issues) or open a phase via `/gsd-phase` /
+   `/gsd-phase --insert`. Capture the tracker issue URL in the phase's
    `CONTEXT.md` so traceability survives compaction.
 3. **Create an isolated workspace.** Run
    `/gsd-workspace --new --strategy worktree <slug>` to spin up a git
@@ -98,7 +98,7 @@ tracker issue end-to-end. Replace bracketed placeholders before running.
    rich body assembled from the planning artifacts. Both gates require a
    human decision before anything reaches the remote.
 7. **Capture follow-up work explicitly.** Use `/gsd-note` for inline
-   notes, `/gsd-plant-seed` for ideas worth a future phase, or
+   notes, `/gsd-capture --seed` for ideas worth a future phase, or
    `/gsd-new-milestone` for a coherent group of follow-ups. Creating a
    tracker issue from a discovered follow-up requires explicit user
    confirmation — GSD does not post to remote trackers automatically.
@@ -165,7 +165,7 @@ approved-enhancement could later add a *minimal* tracker bridge:
 
 - Importing one GitHub or Linear issue into a GSD workspace / phase.
 - Exporting `UAT.md` evidence as a comment on the source issue.
-- Generating follow-up tracker issues from `/gsd-plant-seed` output.
+- Generating follow-up tracker issues from `/gsd-capture --seed` output.
 
 Each of those would be its own enhancement proposal because each adds
 integration surface and ongoing maintenance burden. They are out of
