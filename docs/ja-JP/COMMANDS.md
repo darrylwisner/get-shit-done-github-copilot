@@ -217,7 +217,7 @@
 
 ---
 
-### `/gsd-session-report`
+### `/gsd-pause-work --report`
 
 作業サマリー、成果、推定リソース使用量を含むセッションレポートを生成します。
 
@@ -225,7 +225,7 @@
 **生成物:** `.planning/reports/SESSION_REPORT.md`
 
 ```bash
-/gsd-session-report                 # セッション後のサマリーを生成
+/gsd-pause-work --report                 # セッション後のサマリーを生成
 ```
 
 **レポートに含まれる内容:**
@@ -400,7 +400,7 @@
 /gsd-remove-phase 7                 # フェーズ7を削除、8→7、9→8等に番号振り直し
 ```
 
-### `/gsd-list-phase-assumptions`
+### `/gsd-discuss-phase --assumptions`
 
 計画前にClaudeの意図するアプローチをプレビューします。
 
@@ -409,7 +409,7 @@
 | `N` | いいえ | フェーズ番号 |
 
 ```bash
-/gsd-list-phase-assumptions 2       # フェーズ2の前提を確認
+/gsd-discuss-phase --assumptions 2       # フェーズ2の前提を確認
 ```
 
 
@@ -482,7 +482,7 @@
 
 ---
 
-### `/gsd-analyze-dependencies`
+### `/gsd-manager --analyze-deps`
 
 フェーズ依存関係を検出し、ROADMAP.md に `Depends on` エントリを提案します。(v1.32)
 
@@ -491,7 +491,7 @@
 **動作:** 依存関係提案テーブルを表示し、ユーザー確認後に ROADMAP.md の `Depends on` フィールドを更新します。
 
 ```bash
-/gsd-analyze-dependencies            # 依存関係の分析と提案
+/gsd-manager --analyze-deps            # 依存関係の分析と提案
 ```
 
 ---
@@ -948,10 +948,3 @@ GSDアップデート後にローカルの変更を復元します。
 
 ## コミュニティコマンド
 
-### `/gsd-join-discord`
-
-Discordコミュニティの招待を開きます。
-
-```bash
-/gsd-join-discord
-```

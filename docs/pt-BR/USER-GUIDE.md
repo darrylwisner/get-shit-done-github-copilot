@@ -171,7 +171,7 @@ Para arquivos sensíveis, use deny list no Claude Code.
 | `/gsd-progress` | Ver status atual |
 | `/gsd-resume-work` | Retomar sessão |
 | `/gsd-pause-work` | Pausar com handoff |
-| `/gsd-session-report` | Resumo da sessão |
+| `/gsd-pause-work --report` | Resumo da sessão |
 | `/gsd-quick` | Tarefa ad-hoc com garantias GSD |
 | `/gsd-debug [desc]` | Debug sistemático |
 | `/gsd-forensics` | Diagnóstico de workflow quebrado |
@@ -268,7 +268,7 @@ Use `/clear` entre etapas grandes e retome com `/gsd-resume-work` ou `/gsd-progr
 
 ### Plano desalinhado
 
-Rode `/gsd-discuss-phase [N]` antes do plano e valide suposições com `/gsd-list-phase-assumptions [N]`.
+Rode `/gsd-discuss-phase [N]` antes do plano e valide suposições com `/gsd-discuss-phase --assumptions [N]`.
 
 ### Execução falhou ou saiu com stubs
 

@@ -134,12 +134,12 @@ describe('absorbed skills are removed', () => {
 describe('outright deleted dead skills are removed', () => {
   const deleted = [
     'join-discord',
-    'research-phase',
-    'session-report',
-    'from-gsd2',
-    'analyze-dependencies',
-    'list-phase-assumptions',
-    'plan-milestone-gaps',
+    // research-phase     → plan-phase --research-phase (PR #3045, already absorbed)
+    // plan-milestone-gaps → inline in audit-milestone (PR #3038, already absorbed)
+    // list-phase-assumptions → discuss-phase --assumptions (pending #3131)
+    // session-report     → pause-work --report (pending #3131)
+    // analyze-dependencies → manager --analyze-deps (pending #3131)
+    // from-gsd2          → import --from-gsd2 (pending #3131)
   ];
 
   for (const name of deleted) {
@@ -150,6 +150,96 @@ describe('outright deleted dead skills are removed', () => {
       );
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Group: #3131 — re-wired workflows absorbed as flags
+// ---------------------------------------------------------------------------
+describe('#3131 re-wired workflows: standalone command files must not exist', () => {
+  const rewired = [
+    ['list-phase-assumptions', 'absorbed into discuss-phase.md --assumptions'],
+    ['session-report',         'absorbed into pause-work.md --report'],
+    ['analyze-dependencies',   'absorbed into manager.md --analyze-deps'],
+    ['from-gsd2',              'absorbed into import.md --from-gsd2'],
+  ];
+
+  for (const [name, reason] of rewired) {
+    test(`commands/gsd/${name}.md does NOT exist (${reason})`, () => {
+      assert.ok(
+        !fs.existsSync(skillPath(name)),
+        `${name}.md still exists as a standalone command but should be absorbed (${reason})`,
+      );
+    });
+  }
+});
+
+describe('#3131 re-wired workflows: parent command argument-hints advertise the new flags', () => {
+  test('discuss-phase.md argument-hint contains --assumptions', () => {
+    const fm = parseFrontmatter(skillPath('discuss-phase'));
+    assert.ok(
+      (fm['argument-hint'] || '').includes('--assumptions'),
+      'discuss-phase.md argument-hint does not contain --assumptions. got: ' + (fm['argument-hint'] || '(none)'),
+    );
+  });
+
+  test('pause-work.md argument-hint contains --report', () => {
+    const fm = parseFrontmatter(skillPath('pause-work'));
+    assert.ok(
+      (fm['argument-hint'] || '').includes('--report'),
+      'pause-work.md argument-hint does not contain --report. got: ' + (fm['argument-hint'] || '(none)'),
+    );
+  });
+
+  test('manager.md argument-hint contains --analyze-deps', () => {
+    const fm = parseFrontmatter(skillPath('manager'));
+    assert.ok(
+      (fm['argument-hint'] || '').includes('--analyze-deps'),
+      'manager.md argument-hint does not contain --analyze-deps. got: ' + (fm['argument-hint'] || '(none)'),
+    );
+  });
+
+  test('import.md argument-hint contains --from-gsd2', () => {
+    const fm = parseFrontmatter(skillPath('import'));
+    assert.ok(
+      (fm['argument-hint'] || '').includes('--from-gsd2'),
+      'import.md argument-hint does not contain --from-gsd2. got: ' + (fm['argument-hint'] || '(none)'),
+    );
+  });
+});
+
+describe('#3131 re-wired workflows: parent command bodies dispatch to workflow files', () => {
+  function bodyContains(name, substring) {
+    const raw = fs.readFileSync(skillPath(name), 'utf8');
+    return raw.includes(substring);
+  }
+
+  test('discuss-phase.md body references list-phase-assumptions.md', () => {
+    assert.ok(
+      bodyContains('discuss-phase', 'list-phase-assumptions.md'),
+      'discuss-phase.md body does not reference list-phase-assumptions.md — --assumptions flag dispatch is missing',
+    );
+  });
+
+  test('pause-work.md body references session-report.md', () => {
+    assert.ok(
+      bodyContains('pause-work', 'session-report.md'),
+      'pause-work.md body does not reference session-report.md — --report flag dispatch is missing',
+    );
+  });
+
+  test('manager.md body references analyze-dependencies.md', () => {
+    assert.ok(
+      bodyContains('manager', 'analyze-dependencies.md'),
+      'manager.md body does not reference analyze-dependencies.md — --analyze-deps flag dispatch is missing',
+    );
+  });
+
+  test('import.md body references from-gsd2', () => {
+    assert.ok(
+      bodyContains('import', 'from-gsd2'),
+      'import.md body does not reference from-gsd2 — --from-gsd2 flag dispatch is missing',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

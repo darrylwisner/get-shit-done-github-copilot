@@ -217,7 +217,7 @@
 
 ---
 
-### `/gsd-session-report`
+### `/gsd-pause-work --report`
 
 작업 요약, 결과, 예상 리소스 사용량을 포함한 세션 보고서를 생성합니다.
 
@@ -225,7 +225,7 @@
 **생성 파일:** `.planning/reports/SESSION_REPORT.md`
 
 ```bash
-/gsd-session-report                 # 세션 종료 후 요약 생성
+/gsd-pause-work --report                 # 세션 종료 후 요약 생성
 ```
 
 **보고서 포함 내용.**
@@ -400,7 +400,7 @@
 /gsd-remove-phase 7                 # 페이즈 7 제거, 8→7, 9→8 등으로 재번호
 ```
 
-### `/gsd-list-phase-assumptions`
+### `/gsd-discuss-phase --assumptions`
 
 계획 수립 전 Claude의 예상 접근 방식을 미리 확인합니다.
 
@@ -409,7 +409,7 @@
 | `N` | 아니오 | 페이즈 번호 |
 
 ```bash
-/gsd-list-phase-assumptions 2       # 페이즈 2 가정 사항 확인
+/gsd-discuss-phase --assumptions 2       # 페이즈 2 가정 사항 확인
 ```
 
 
@@ -482,7 +482,7 @@ Nyquist 검증 갭을 소급하여 감사하고 보완합니다.
 
 ---
 
-### `/gsd-analyze-dependencies`
+### `/gsd-manager --analyze-deps`
 
 페이즈 의존성을 감지하고 ROADMAP.md에 `Depends on` 항목을 제안합니다. (v1.32)
 
@@ -491,7 +491,7 @@ Nyquist 검증 갭을 소급하여 감사하고 보완합니다.
 **동작 방식:** 의존성 제안 테이블을 표시하고 사용자 확인 후 ROADMAP.md의 `Depends on` 필드를 업데이트합니다.
 
 ```bash
-/gsd-analyze-dependencies            # 의존성 분석 및 제안
+/gsd-manager --analyze-deps            # 의존성 분석 및 제안
 ```
 
 ---
@@ -948,10 +948,3 @@ GSD 업데이트 후 로컬 수정사항을 복원합니다.
 
 ## 커뮤니티 명령어
 
-### `/gsd-join-discord`
-
-Discord 커뮤니티 초대 링크를 엽니다.
-
-```bash
-/gsd-join-discord
-```

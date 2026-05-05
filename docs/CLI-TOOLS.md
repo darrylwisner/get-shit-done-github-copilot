@@ -472,7 +472,7 @@ User-facing entry point: `/gsd-graphify` (see [Command Reference](COMMANDS.md#gs
 | Learnings | `lib/learnings.cjs` | Extract learnings from phases/SUMMARY artifacts (backs `/gsd-extract-learnings`) |
 | Audit | `lib/audit.cjs` | Phase/milestone audit queue handlers; `audit-open` helper |
 | GSD2 Import | `lib/gsd2-import.cjs` | Reverse-migration importer from GSD-2 projects (backs `/gsd-from-gsd2`) |
-| Intel | `lib/intel.cjs` | Queryable codebase intelligence index (backs `/gsd-intel`) |
+| Intel | `lib/intel.cjs` | Queryable codebase intelligence index (backs `/gsd-map-codebase --query`) |
 
 ---
 

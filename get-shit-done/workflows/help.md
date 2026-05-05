@@ -64,12 +64,13 @@ Usage: `/gsd-map-codebase`
 
 ### Phase Planning
 
-**`/gsd-discuss-phase <number> [--chain | --analyze | --power] [--batch[=N]]`**
+**`/gsd-discuss-phase <number> [--chain | --analyze | --power | --assumptions] [--batch[=N]]`**
 Help articulate your vision for a phase before planning.
 
 - `--chain` — chained-prompt discuss flow
 - `--analyze` — deep assumption analysis pass
 - `--power` — power-user mode with extended question set
+- `--assumptions` — surface Claude's implementation assumptions about the phase without an interactive session
 
 - Captures how you imagine this phase working
 - Creates CONTEXT.md with your vision, essentials, and boundaries
@@ -271,9 +272,10 @@ Resume work from previous session with full context restoration.
 
 Usage: `/gsd-resume-work`
 
-**`/gsd-pause-work`**
+**`/gsd-pause-work [--report]`**
 Create context handoff when pausing work mid-phase.
 
+- `--report` — generate a post-session summary in `.planning/reports/` capturing commits, file changes, and phase progress
 - Creates .continue-here file with current state
 - Updates STATE.md session continuity section
 - Captures in-progress work context
@@ -543,7 +545,7 @@ The commands above cover the most common day-to-day flows. Every command listed 
 - **`/gsd-spec-phase <phase> [--auto] [--text]`** — Clarify WHAT a phase delivers with ambiguity scoring; produces a SPEC.md before discuss-phase.
 - **`/gsd-ai-integration-phase [phase]`** — Generate an AI-SPEC.md design contract for phases that involve building AI systems.
 - **`/gsd-ui-phase [phase]`** — Generate UI design contract (UI-SPEC.md) for frontend phases.
-- **`/gsd-import --from <filepath>`** — Ingest external plans with conflict detection against project decisions before writing anything.
+- **`/gsd-import --from <filepath> | --from-gsd2`** — Ingest external plans with conflict detection, or reverse-migrate a GSD-2 (`.gsd/`) project back to GSD v1 (`.planning/`) format.
 - **`/gsd-ingest-docs [path] [--mode new|merge] [--manifest <file>] [--resolve auto|interactive]`** — Bootstrap or merge a `.planning/` setup from existing ADRs, PRDs, SPECs, and docs in a repo.
 
 ### Planning & Execution
@@ -579,7 +581,7 @@ The commands above cover the most common day-to-day flows. Every command listed 
 
 ### Workflow & Orchestration
 
-- **`/gsd-manager`** — Interactive command center for managing multiple phases from one terminal.
+- **`/gsd-manager [--analyze-deps]`** — Interactive command center for managing multiple phases from one terminal. `--analyze-deps` scans ROADMAP phases for dependency relationships before parallel execution.
 - **`/gsd-workspace [--new | --list | --remove] [name]`** — Manage GSD workspaces: create, list, or remove isolated workspace environments.
 - **`/gsd-workstreams`** — Manage parallel workstreams: list, create, switch, status, progress, complete, and resume.
 - **`/gsd-review-backlog`** — Review and promote backlog items to active milestone.
