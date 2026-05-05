@@ -8,6 +8,4 @@ export interface CommandManifestEntry {
   aliases: string[];
   mutation: boolean;
   outputMode: OutputMode;
-  /** Optional explicit handler key (defaults to canonical). */
-  handlerKey?: string;
 }

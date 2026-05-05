@@ -21,24 +21,6 @@ function getPruneOrphanedWorktrees() {
 }
 
 // Create a minimal git repo with an initial commit on main.
-function canonicalPath(p) {
-  try {
-    return fs.realpathSync.native(path.resolve(p));
-  } catch {
-    return path.resolve(p);
-  }
-}
-
-function listedWorktreePaths(repoDir) {
-  const out = execSync('git worktree list --porcelain', { cwd: repoDir, encoding: 'utf8' });
-  return new Set(
-    out
-      .split('\n')
-      .filter((line) => line.startsWith('worktree '))
-      .map((line) => canonicalPath(line.slice('worktree '.length).trim()))
-  );
-}
-
 function createGitRepo(dir) {
   fs.mkdirSync(dir, { recursive: true });
   execSync('git init', { cwd: dir, stdio: 'pipe' });
@@ -67,8 +49,8 @@ describe('pruneOrphanedWorktrees', () => {
     cleanup(tmpBase);
   });
 
-  // Test 1: keeps a merged worktree (destructive removal disabled by default)
-  test('keeps a worktree whose branch is merged into main', () => {
+  // Test 1: removes a worktree whose branch is merged into main
+  test('removes a worktree whose branch is merged into main', () => {
     const repoDir = path.join(tmpBase, 'repo');
     const worktreeDir = path.join(tmpBase, 'wt-merged');
 
@@ -90,17 +72,17 @@ describe('pruneOrphanedWorktrees', () => {
     const pruneOrphanedWorktrees = getPruneOrphanedWorktrees();
     pruneOrphanedWorktrees(repoDir);
 
-    // Assert: worktree directory still exists
+    // Assert: worktree directory no longer exists
     assert.ok(
-      fs.existsSync(worktreeDir),
-      'merged worktree should not be removed by default: ' + worktreeDir
+      !fs.existsSync(worktreeDir),
+      'worktree directory should have been removed but still exists: ' + worktreeDir
     );
 
-    // Assert: git worktree list still shows it
-    const listed = listedWorktreePaths(repoDir);
+    // Assert: git worktree list no longer shows it
+    const listOut = execSync('git worktree list', { cwd: repoDir, encoding: 'utf8' });
     assert.ok(
-      listed.has(canonicalPath(worktreeDir)),
-      'git worktree list should still reference merged worktree'
+      !listOut.includes(worktreeDir),
+      'git worktree list still references removed worktree:\n' + listOut
     );
   });
 
@@ -150,8 +132,11 @@ describe('pruneOrphanedWorktrees', () => {
     const pruneOrphanedWorktrees = getPruneOrphanedWorktrees();
     const pruned = pruneOrphanedWorktrees(repoDir);
 
-    // No destructive removals are performed by default
-    assert.deepStrictEqual(pruned, []);
+    // process.cwd() must not appear in pruned paths
+    assert.ok(
+      !pruned.includes(process.cwd()),
+      'process.cwd() should never be pruned, but found in: ' + JSON.stringify(pruned)
+    );
 
     // The main worktree (repoDir) itself must still exist
     assert.ok(

@@ -80,7 +80,7 @@ Esta versão resume os parâmetros principais em Português. Para schema complet
 Troca rápida:
 
 ```bash
-/gsd-config --profile budget
+/gsd-set-profile budget
 ```
 
 ## Novidades de configuração v1.31--v1.32

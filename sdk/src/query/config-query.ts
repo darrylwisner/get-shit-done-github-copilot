@@ -16,7 +16,6 @@
  * ```
  */
 
-import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { loadConfig } from '../config.js';
@@ -175,8 +174,6 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
     throw new GSDError('agent-type required', ErrorClassification.Validation);
   }
 
-  const configFilePath = planningPaths(projectDir, workstream).config;
-  const configExists = existsSync(configFilePath);
   const config = await loadConfig(projectDir, workstream);
   const profile = String(config.model_profile || 'balanced').toLowerCase();
 
@@ -191,9 +188,9 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
     return { data: result };
   }
 
-  // No project config (or explicit omit policy) -> return empty model id (CJS parity)
+  // resolve_model_ids: "omit" -- return empty string
   const resolveModelIds = (config as Record<string, unknown>).resolve_model_ids;
-  if (!configExists || resolveModelIds === 'omit') {
+  if (resolveModelIds === 'omit') {
     const agentModels = MODEL_PROFILES[agentType];
     const result = agentModels
       ? { model: '', profile }
