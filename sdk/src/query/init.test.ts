@@ -330,20 +330,6 @@ describe('initExecutePhase', () => {
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
-
-  it('honors legacy top-level branching_strategy in config for execute-phase init (#3055)', async () => {
-    await writeFile(join(tmpDir, '.planning', 'config.json'), JSON.stringify({
-      model_profile: 'balanced',
-      commit_docs: false,
-      branching_strategy: 'phase',
-      workflow: { research: true, plan_check: true, verifier: true, nyquist_validation: true },
-    }));
-
-    const result = await initExecutePhase(['9'], tmpDir);
-    const data = result.data as Record<string, unknown>;
-    expect(data.branching_strategy).toBe('phase');
-    expect(typeof data.branch_name).toBe('string');
-  });
 });
 
 describe('initPlanPhase', () => {

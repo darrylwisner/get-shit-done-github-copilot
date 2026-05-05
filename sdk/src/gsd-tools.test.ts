@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GSDTools, GSDToolsError, resolveGsdToolsPath } from './gsd-tools.js';
-import { setTransportPolicy, clearTransportPolicy } from './gsd-transport-policy.js';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,7 +22,6 @@ describe('GSDTools', () => {
   });
 
   afterEach(async () => {
-    clearTransportPolicy();
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -164,41 +162,6 @@ describe('GSDTools', () => {
         expect(gsdErr.message).toContain('timed out');
       }
     }, 10_000);
-
-    it('uses subprocess fallback when native handler throws and policy allows fallback', async () => {
-      const scriptPath = await createScript(
-        'fallback-ok.cjs',
-        `process.stdout.write(JSON.stringify({ from: 'subprocess-fallback' }));`,
-      );
-
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
-      setTransportPolicy('verify.path-exists', { allowFallbackToSubprocess: true });
-
-      const result = await tools.exec('verify.path-exists', []);
-      expect(result).toEqual({ from: 'subprocess-fallback' });
-    });
-
-    it('preserves GSDToolsError contract when native handler throws and fallback disabled', async () => {
-      const scriptPath = await createScript(
-        'should-not-run.cjs',
-        `process.stdout.write(JSON.stringify({ should: 'not-run' }));`,
-      );
-
-      const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath });
-      setTransportPolicy('verify.path-exists', { allowFallbackToSubprocess: false });
-
-      try {
-        await tools.exec('verify.path-exists', []);
-        expect.fail('Should have thrown');
-      } catch (err) {
-        expect(err).toBeInstanceOf(GSDToolsError);
-        const gsdErr = err as GSDToolsError;
-        expect(gsdErr.command).toBe('verify.path-exists');
-        expect(gsdErr.args).toEqual([]);
-        expect(gsdErr.stderr).toBe('');
-        expect(typeof gsdErr.exitCode === 'number').toBe(true);
-      }
-    });
   });
 
   // ─── Typed method tests ────────────────────────────────────────────────
@@ -209,9 +172,9 @@ describe('GSDTools', () => {
         'state-load.cjs',
         `
         const args = process.argv.slice(2);
-        // Script receives: state load (no --raw when policy is json)
-        if (args[0] === 'state' && args[1] === 'load') {
-          process.stdout.write(JSON.stringify({ phase: '3', status: 'executing' }));
+        // Script receives: state load --raw
+        if (args[0] === 'state' && args[1] === 'load' && args.includes('--raw')) {
+          process.stdout.write('phase=3\\nstatus=executing');
         } else {
           process.stderr.write('unexpected args: ' + args.join(' '));
           process.exit(1);
@@ -222,7 +185,7 @@ describe('GSDTools', () => {
       const tools = new GSDTools({ projectDir: tmpDir, gsdToolsPath: scriptPath, preferNativeQuery: false });
       const result = await tools.stateLoad();
 
-      expect(result).toEqual({ phase: '3', status: 'executing' });
+      expect(result).toBe('phase=3\nstatus=executing');
     });
 
     it('commit() passes message and optional files', async () => {

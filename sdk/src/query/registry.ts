@@ -22,7 +22,6 @@
 
 import type { QueryResult, QueryHandler } from './utils.js';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { resolveQueryTokens } from './query-command-resolution-strategy.js';
 
 // ─── extractField ──────────────────────────────────────────────────────────
 
@@ -128,6 +127,48 @@ export class QueryRegistry {
 }
 
 /**
+ * If the first token contains a dot (e.g. `init.execute-phase`), split it into
+ * segments and prepend those segments in place of the original token. Args that
+ * follow the dotted token are preserved.
+ *
+ * Examples:
+ *   ['init.new-project']               -> ['init', 'new-project']
+ *   ['init.execute-phase', '1']        -> ['init', 'execute-phase', '1']
+ *   ['state.update', 'status', 'X']    -> ['state', 'update', 'status', 'X']
+ *
+ * Returns the original array (by reference) when no expansion applies so callers
+ * can detect "nothing changed" via identity comparison.
+ */
+function expandFirstDottedToken(tokens: string[]): string[] {
+  if (tokens.length === 0) {
+    return tokens;
+  }
+  const first = tokens[0];
+  if (first.startsWith('--') || !first.includes('.')) {
+    return tokens;
+  }
+  return [...first.split('.'), ...tokens.slice(1)];
+}
+
+function matchRegisteredPrefix(
+  tokens: string[],
+  registry: QueryRegistry,
+): { cmd: string; args: string[] } | null {
+  for (let i = tokens.length; i >= 1; i--) {
+    const head = tokens.slice(0, i);
+    const dotted = head.join('.');
+    const spaced = head.join(' ');
+    if (registry.has(dotted)) {
+      return { cmd: dotted, args: tokens.slice(i) };
+    }
+    if (registry.has(spaced)) {
+      return { cmd: spaced, args: tokens.slice(i) };
+    }
+  }
+  return null;
+}
+
+/**
  * Map argv after `gsd-sdk query` to a registered handler key and remaining args.
  * Longest-prefix match on dotted (`a.b.c`) and spaced (`a b c`) keys; if no match,
  * expands a single dotted token (`state.validate` → `state`, `validate`) and retries.
@@ -136,7 +177,12 @@ export function resolveQueryArgv(
   tokens: string[],
   registry: QueryRegistry,
 ): { cmd: string; args: string[] } | null {
-  const resolved = resolveQueryTokens(tokens, registry);
-  if (!resolved) return null;
-  return { cmd: resolved.cmd, args: resolved.args };
+  let matched = matchRegisteredPrefix(tokens, registry);
+  if (!matched) {
+    const expanded = expandFirstDottedToken(tokens);
+    if (expanded !== tokens) {
+      matched = matchRegisteredPrefix(expanded, registry);
+    }
+  }
+  return matched;
 }

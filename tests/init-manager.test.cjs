@@ -131,27 +131,6 @@ describe('init manager', () => {
     assert.strictEqual(output.phases[4].disk_status, 'no_directory');
   });
 
-  test('treats plans/PLAN-NN.md layout as planned/complete counts (#3053)', () => {
-    writeState(tmpDir);
-    writeRoadmap(tmpDir, [
-      { number: '1', name: 'Nested Plans' },
-    ]);
-
-    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-nested-plans');
-    fs.mkdirSync(path.join(phaseDir, 'plans'), { recursive: true });
-    fs.writeFileSync(path.join(phaseDir, 'plans', 'PLAN-01.md'), '# Plan 1');
-    fs.writeFileSync(path.join(phaseDir, 'plans', 'PLAN-02.md'), '# Plan 2');
-    fs.writeFileSync(path.join(phaseDir, 'plans', 'SUMMARY-01.md'), '# Summary 1');
-
-    const result = runGsdTools('init manager', tmpDir);
-    assert.ok(result.success, `Command failed: ${result.error}`);
-
-    const output = JSON.parse(result.output);
-    assert.strictEqual(output.phases[0].plan_count, 2);
-    assert.strictEqual(output.phases[0].summary_count, 1);
-    assert.strictEqual(output.phases[0].disk_status, 'partial');
-  });
-
   test('dependency satisfaction: deps on complete phases = satisfied', () => {
     writeState(tmpDir);
     writeRoadmap(tmpDir, [

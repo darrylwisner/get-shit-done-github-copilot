@@ -486,15 +486,10 @@ const path = require('path');
 for (const relPath of custom_files) {
   const src = path.join(runtimeDir, relPath);
   const dst = path.join(backupDir, relPath);
-  if (!fs.existsSync(src)) continue;
-
-  try {
+  if (fs.existsSync(src)) {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(src, dst);
     console.log('  Backed up: ' + relPath);
-  } catch (err) {
-    const code = err && err.code ? String(err.code) : 'ERROR';
-    console.log('  Skipped (non-fatal): ' + relPath + ' [' + code + ']');
   }
 }
 JSEOF

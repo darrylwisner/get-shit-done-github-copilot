@@ -50,17 +50,6 @@ function describeNonCanonicalPlans(dirFiles, matchedFiles) {
   );
 }
 
-function extractCanonicalPlanId(filename) {
-  const base = filename.replace(/-PLAN\.md$/i, '').replace(/-SUMMARY\.md$/i, '').replace(/\.md$/i, '');
-  const parts = base.split('-').filter(Boolean);
-  const tokenRe = /^\d+[A-Z]?(?:\.\d+)*$/i;
-  const phaseIdx = parts.findIndex(p => tokenRe.test(p));
-  if (phaseIdx >= 0 && phaseIdx + 1 < parts.length && tokenRe.test(parts[phaseIdx + 1])) {
-    return `${parts[phaseIdx]}-${parts[phaseIdx + 1]}`;
-  }
-  return base;
-}
-
 function cmdPhasesList(cwd, options, raw) {
   const phasesDir = path.join(planningDir(cwd), 'phases');
   const { type, phase, includeArchived } = options;
@@ -299,11 +288,7 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
 
   // Build set of plan IDs with summaries
   const completedPlanIds = new Set(
-    summaryFiles.flatMap(s => {
-      const exact = s.replace('-SUMMARY.md', '').replace('SUMMARY.md', '');
-      const canonical = extractCanonicalPlanId(s);
-      return canonical === exact ? [exact] : [exact, canonical];
-    })
+    summaryFiles.map(s => s.replace('-SUMMARY.md', '').replace('SUMMARY.md', ''))
   );
 
   const plans = [];
@@ -342,7 +327,7 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
       filesModified = Array.isArray(fmFiles) ? fmFiles : [fmFiles];
     }
 
-    const hasSummary = completedPlanIds.has(planId) || completedPlanIds.has(extractCanonicalPlanId(planFile));
+    const hasSummary = completedPlanIds.has(planId);
     if (!hasSummary) {
       incomplete.push(planId);
     }
@@ -571,10 +556,6 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
     const afterPhaseEscaped = unpadded.replace(/\./g, '\\.');
     const targetPattern = new RegExp(`#{2,4}\\s*Phase\\s+0*${afterPhaseEscaped}:`, 'i');
     if (!targetPattern.test(content)) {
-      const checklistPattern = new RegExp(`-\\s*\\[[ x]\\]\\s*\\*\\*Phase\\s+0*${afterPhaseEscaped}:`, 'i');
-      if (checklistPattern.test(content)) {
-        error(`Phase ${afterPhase} exists in roadmap summary but is missing a detail section (### Phase ${afterPhase}: ...).`);
-      }
       error(`Phase ${afterPhase} not found in ROADMAP.md`);
     }
 

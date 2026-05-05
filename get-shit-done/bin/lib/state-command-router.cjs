@@ -71,8 +71,7 @@ function routeStateCommand({ state, args, cwd, raw, parseNamedArgs, error }) {
     const { 'keep-recent': keepRecent, 'dry-run': dryRun } = parseNamedArgs(args, ['keep-recent'], ['dry-run']);
     state.cmdStatePrune(cwd, { keepRecent: keepRecent || '3', dryRun: !!dryRun }, raw);
   } else if (subcommand === 'complete-phase') {
-    const { phase: p } = parseNamedArgs(args, ['phase']);
-    state.cmdStateCompletePhase(cwd, raw, p || args[2]);
+    state.cmdStateCompletePhase(cwd, raw);
   } else if (subcommand === 'milestone-switch') {
     const { milestone, name } = parseNamedArgs(args, ['milestone', 'name']);
     state.cmdStateMilestoneSwitch(cwd, milestone, name, raw);

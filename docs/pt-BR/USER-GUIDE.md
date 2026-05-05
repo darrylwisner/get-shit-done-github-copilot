@@ -39,7 +39,7 @@ Para iniciar projeto novo:
 Para seguir automaticamente o próximo passo:
 
 ```bash
-/gsd-progress --next
+/gsd-next
 ```
 
 ### Nyquist Validation
@@ -92,8 +92,8 @@ Com `workflow.discuss_mode: "assumptions"`, o GSD analisa o código antes de per
 Ideias fora da sequência ativa vão para backlog:
 
 ```bash
-/gsd-capture --backlog "Camada GraphQL"
-/gsd-capture --backlog "Responsividade mobile"
+/gsd-add-backlog "Camada GraphQL"
+/gsd-add-backlog "Responsividade mobile"
 ```
 
 Promover/revisar:
@@ -107,7 +107,7 @@ Promover/revisar:
 Seeds guardam ideias futuras com condição de gatilho:
 
 ```bash
-/gsd-capture --seed "Adicionar colaboração real-time quando infra de WebSocket estiver pronta"
+/gsd-plant-seed "Adicionar colaboração real-time quando infra de WebSocket estiver pronta"
 ```
 
 ### Threads persistentes
@@ -162,7 +162,7 @@ Para arquivos sensíveis, use deny list no Claude Code.
 | `/gsd-execute-phase [N]` | Executar planos em ondas |
 | `/gsd-verify-work [N]` | UAT manual |
 | `/gsd-ship [N]` | Gerar PR da fase |
-| `/gsd-progress --next` | Próximo passo automático |
+| `/gsd-next` | Próximo passo automático |
 
 ### Gestão e utilidades
 
@@ -176,7 +176,7 @@ Para arquivos sensíveis, use deny list no Claude Code.
 | `/gsd-debug [desc]` | Debug sistemático |
 | `/gsd-forensics` | Diagnóstico de workflow quebrado |
 | `/gsd-settings` | Ajustar workflow/modelos |
-| `/gsd-config --profile <profile>` | Troca rápida de perfil |
+| `/gsd-set-profile <profile>` | Troca rápida de perfil |
 
 Para lista completa e flags avançadas, consulte [Command Reference](../COMMANDS.md).
 
@@ -279,7 +279,7 @@ Replaneje com escopo menor (tarefas menores por plano).
 Use perfil budget:
 
 ```bash
-/gsd-config --profile budget
+/gsd-set-profile budget
 ```
 
 ### Runtime não-Claude (Codex/OpenCode/Gemini/Kilo)
@@ -294,11 +294,11 @@ Use `resolve_model_ids: "omit"` para deixar o runtime resolver modelos padrão.
 |---------|---------|
 | Perdeu contexto | `/gsd-resume-work` ou `/gsd-progress` |
 | Fase deu errado | `git revert` + replanejar |
-| Precisa alterar escopo | `/gsd-phase`, `/gsd-phase --insert`, `/gsd-phase --remove` |
+| Precisa alterar escopo | `/gsd-add-phase`, `/gsd-insert-phase`, `/gsd-remove-phase` |
 | Bug em workflow | `/gsd-forensics` |
 | Correção pontual | `/gsd-quick` |
-| Custo alto | `/gsd-config --profile budget` |
-| Não sabe próximo passo | `/gsd-progress --next` |
+| Custo alto | `/gsd-set-profile budget` |
+| Não sabe próximo passo | `/gsd-next` |
 
 ---
 

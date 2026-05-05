@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeQueryCommand } from './query-command-resolution-strategy.js';
+import { normalizeQueryCommand } from './normalize-query-command.js';
 
 describe('normalizeQueryCommand', () => {
   it('merges nested gsd-tools-style state + subcommand', () => {

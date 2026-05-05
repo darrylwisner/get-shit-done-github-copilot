@@ -655,11 +655,11 @@ Extract from init JSON: `phase_dir`, `phase_number`, `has_plans`, `plan_count`.
 Orchestrator provides CONTEXT.md content in the verification prompt. If provided, parse for locked decisions, discretion areas, deferred ideas.
 
 ```bash
-gsd-sdk query phase.list-plans "$phase_number"
+node ./node_modules/@gsd-build/sdk/dist/cli.js query phase.list-plans "$phase_number"
 # Research / brief artifacts (deterministic listing)
-gsd-sdk query phase.list-artifacts "$phase_number" --type research
-gsd-sdk query roadmap.get-phase "$phase_number"
-gsd-sdk query phase.list-artifacts "$phase_number" --type summary
+node ./node_modules/@gsd-build/sdk/dist/cli.js query phase.list-artifacts "$phase_number" --type research
+node ./node_modules/@gsd-build/sdk/dist/cli.js query roadmap.get-phase "$phase_number"
+node ./node_modules/@gsd-build/sdk/dist/cli.js query phase.list-artifacts "$phase_number" --type summary
 ```
 
 **Extract:** Phase goal, requirements (decompose goal), locked decisions, deferred ideas.
@@ -747,7 +747,7 @@ The `tasks` array in the result shows each task's completeness:
 
 **For manual validation of specificity** (`verify.plan-structure` checks structure, not content quality), use structured extraction instead of grepping raw XML:
 ```bash
-gsd-sdk query plan.task-structure "$PLAN_PATH"
+node ./node_modules/@gsd-build/sdk/dist/cli.js query plan.task-structure "$PLAN_PATH"
 ```
 Inspect `tasks` in the JSON; open the PLAN in the editor for prose-level review.
 
@@ -774,8 +774,8 @@ Missing: No mention of fetch/API call → Issue: Key link not planned
 ## Step 8: Assess Scope
 
 ```bash
-gsd-sdk query plan.task-structure "$PHASE_DIR/$PHASE-01-PLAN.md"
-gsd-sdk query frontmatter.get "$PHASE_DIR/$PHASE-01-PLAN.md" files_modified
+node ./node_modules/@gsd-build/sdk/dist/cli.js query plan.task-structure "$PHASE_DIR/$PHASE-01-PLAN.md"
+node ./node_modules/@gsd-build/sdk/dist/cli.js query frontmatter.get "$PHASE_DIR/$PHASE-01-PLAN.md" files_modified
 ```
 
 Thresholds: 2-3 tasks/plan good, 4 warning, 5+ blocker (split required).

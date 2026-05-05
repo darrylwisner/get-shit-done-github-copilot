@@ -2,8 +2,8 @@
  * E2E integration test — proves full SDK pipeline:
  * parse → prompt → query() → SUMMARY.md
  *
- * Requires Claude Code CLI (`claude`) installed and authenticated, plus
- * opt-in env `GSD_ENABLE_E2E=1`. Skips if env unset or CLI unavailable.
+ * Requires Claude Code CLI (`claude`) installed and authenticated.
+ * Skips gracefully if CLI is unavailable.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -26,15 +26,12 @@ try {
   cliAvailable = false;
 }
 
-const e2eEnabled = process.env.GSD_ENABLE_E2E === '1';
-const canRunE2E = cliAvailable && e2eEnabled;
-
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const fixturesDir = join(__dirname, '..', 'test-fixtures');
 
 // ─── Test suite ──────────────────────────────────────────────────────────────
 
-describe.skipIf(!canRunE2E)('E2E: Single plan execution', () => {
+describe.skipIf(!cliAvailable)('E2E: Single plan execution', () => {
   let tmpDir: string;
 
   beforeAll(async () => {
@@ -112,7 +109,7 @@ describe('E2E: Fixture validation (no CLI required)', () => {
   });
 });
 
-describe.skipIf(!canRunE2E)('E2E: Event stream during plan execution (R007)', () => {
+describe.skipIf(!cliAvailable)('E2E: Event stream during plan execution (R007)', () => {
   let tmpDir: string;
 
   beforeAll(async () => {
