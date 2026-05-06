@@ -234,6 +234,32 @@ describe('GSDTransport', () => {
     expect(adapters.execSubprocessJson).toHaveBeenCalledOnce();
   });
 
+  it('fails when command is unregistered and subprocess fallback is disabled', async () => {
+    const registry = new QueryRegistry();
+
+    const adapters = {
+      dispatchNative: vi.fn(async () => ({ data: { ok: true } })),
+      execSubprocessJson: vi.fn(async () => ({ ok: 'fallback' })),
+      execSubprocessRaw: vi.fn(async () => 'fallback-raw'),
+    };
+
+    const transport = new GSDTransport(registry, adapters);
+
+    await expect(transport.run({
+      legacyCommand: 'unknown',
+      legacyArgs: [],
+      registryCommand: 'unknown',
+      registryArgs: [],
+      mode: 'json',
+      projectDir: '/tmp',
+    }, {
+      preferNative: true,
+      allowFallbackToSubprocess: false,
+    })).rejects.toThrow("Subprocess fallback disabled");
+
+    expect(adapters.execSubprocessJson).not.toHaveBeenCalled();
+  });
+
   it('forces raw subprocess path when workstream present and mode is raw', async () => {
     const registry = new QueryRegistry();
     registry.register('commit', async () => ({ data: { hash: 'abc' } }));

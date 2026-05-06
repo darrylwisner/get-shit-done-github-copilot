@@ -24,6 +24,15 @@ These families are sourced from `command-manifest.*.ts` files and expanded into 
 
 CJS routing seams mirror these families with thin adapters (`state/verify/init/phase/phases/validate/roadmap-command-router.cjs`) so `gsd-tools.cjs` stays orchestration-only.
 
+## SDK Runtime Bridge Module (`GSDTools` path)
+
+`GSDTools` dispatch routes through `sdk/src/query-runtime-bridge.ts`.
+
+- Native registry dispatch is preferred at the bridge seam.
+- Subprocess fallback is explicit (`allowFallbackToSubprocess`), not implicit.
+- `strictSdk` can fail fast when a command has no native adapter.
+- `onDispatchEvent` emits structured dispatch observability (`query_dispatch` / `query_hotpath_dispatch`) with dispatch mode, fallback reason, latency, outcome, and error kind.
+
 ## `gsd-sdk query` routing
 
 1. **`normalizeQueryCommand()`** (`normalize-query-command.ts`) — maps the first argv tokens to the same **command + subcommand** patterns as `gsd-tools` `runCommand()` where needed (e.g. `state json` → `state.json`, `init execute-phase 9` → `init.execute-phase` with args `['9']`, `scaffold …` → `phase.scaffold`). Re-exported from **`@gsd-build/sdk`** and **`createRegistry`’s module** (`sdk/src/query/index.ts`) so programmatic callers can mirror CLI tokenization without importing a deep path.
