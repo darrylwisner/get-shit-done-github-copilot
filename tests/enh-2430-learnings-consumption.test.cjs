@@ -200,20 +200,20 @@ describe('enh-2430 Part B — graduation.md helper workflow', () => {
   });
 });
 
-describe('enh-2430 — extract_learnings.md graduated: field', () => {
-  test('extract_learnings.md documents optional graduated: annotation', () => {
-    const content = readWorkflow('extract_learnings.md');
+describe('enh-2430 — extract-learnings.md graduated: field', () => {
+  test('extract-learnings.md documents optional graduated: annotation', () => {
+    const content = readWorkflow('extract-learnings.md');
     assert.ok(
       content.includes('graduated:') || content.includes('Graduated:'),
-      'extract_learnings.md must document optional graduated: field'
+      'extract-learnings.md must document optional graduated: field'
     );
   });
 
-  test('extract_learnings.md clarifies graduated: is written only by graduation workflow', () => {
-    const content = readWorkflow('extract_learnings.md');
+  test('extract-learnings.md clarifies graduated: is written only by graduation workflow', () => {
+    const content = readWorkflow('extract-learnings.md');
     assert.ok(
       content.includes('graduation workflow') || content.includes('graduation.md'),
-      'extract_learnings.md must clarify that graduated: is written only by graduation.md'
+      'extract-learnings.md must clarify that graduated: is written only by graduation.md'
     );
   });
 });

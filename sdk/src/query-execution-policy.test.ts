@@ -28,4 +28,25 @@ describe('QueryExecutionPolicy', () => {
     expect(policyArg).toEqual({ preferNative: true, allowFallbackToSubprocess: false });
 
   });
+
+  it('allows runtime override for allowFallbackToSubprocess', async () => {
+    const run = vi.fn().mockResolvedValue({ ok: true });
+    const policy = new QueryExecutionPolicy({ run } as never);
+
+    setTransportPolicy('verify.path-exists', { preferNative: true, allowFallbackToSubprocess: true });
+
+    await policy.execute({
+      legacyCommand: 'verify.path-exists',
+      legacyArgs: [],
+      registryCommand: 'verify.path-exists',
+      registryArgs: [],
+      mode: 'json',
+      projectDir: '/tmp/project',
+      preferNativeQuery: true,
+      allowFallbackToSubprocess: false,
+    });
+
+    const [, policyArg] = run.mock.calls[0];
+    expect(policyArg).toEqual({ preferNative: true, allowFallbackToSubprocess: false });
+  });
 });

@@ -125,6 +125,21 @@ describe('parseStateMd', () => {
     assert.equal(s.status, undefined);
     assert.equal(s.phaseNum, undefined);
   });
+
+  test('parses next_phases from YAML block-list form (#3153)', () => {
+    const content = [
+      '---',
+      'next_action: execute',
+      'next_phases:',
+      '  - 4.5',
+      '  - 4.6',
+      '---',
+    ].join('\n');
+
+    const s = parseStateMd(content);
+    assert.equal(s.nextAction, 'execute');
+    assert.deepEqual(s.nextPhases, ['4.5', '4.6']);
+  });
 });
 
 // ─── formatGsdState ─────────────────────────────────────────────────────────
@@ -183,6 +198,14 @@ describe('formatGsdState', () => {
       status: 'planning',
     });
     assert.equal(out, 'Foundations · planning');
+  });
+
+  test('treats numeric 100 percent as milestone complete (#3153)', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      percent: 100,
+    });
+    assert.equal(out, 'v2.0 [██████████] 100% · milestone complete');
   });
 
   test('returns empty string for empty state', () => {

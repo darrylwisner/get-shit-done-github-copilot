@@ -45,7 +45,10 @@ Use this when authoring workflows, not when you only need the command list below
 
 **2. TypeScript — `@gsd-build/sdk` (`GSDTools`, `createRegistry`)**
 
-- `GSDTools` (used by `PhaseRunner`, `InitRunner`, and `GSD.createTools()`) always shells out to `gsd-tools.cjs` via `execFile` — there is no in-process registry path on this class. For typed, in-process dispatch use `createRegistry()` from `sdk/src/query/index.ts`, or invoke `gsd-sdk query` (see [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md)).
+- `GSDTools` now routes through the **SDK Runtime Bridge Module** (`sdk/src/query-runtime-bridge.ts`). Native registry dispatch is preferred; subprocess fallback is explicit policy (`allowFallbackToSubprocess`) and can be disabled for strict SDK-only execution.
+- `strictSdk` mode fails fast when a command has no native adapter, making SDK publish/readiness checks deterministic.
+- Structured bridge observability is available via `onDispatchEvent` (dispatch mode, fallback reason, duration, outcome, error kind).
+- For direct typed dispatch without `GSDTools`, use `createRegistry()` from `sdk/src/query/index.ts`, or invoke `gsd-sdk query` (see [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md)).
 - Conventions: mutation event wiring, `GSDError` vs `{ data: { error } }`, locks, and stubs — [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md).
 
 **CJS → SDK examples (same project directory):**
@@ -59,7 +62,7 @@ Use this when authoring workflows, not when you only need the command list below
 | `node gsd-tools.cjs roadmap analyze`     | `gsd-sdk query roadmap analyze`      |
 
 
-**SDK state reads:** `gsd-sdk query state json` / `state.json` and `gsd-sdk query state load` / `state.load` currently share one native handler (rebuilt STATE.md frontmatter — CJS `cmdStateJson`). The legacy CJS `state load` payload (`config`, `state_raw`, existence flags) is still **CLI-only** via `node …/gsd-tools.cjs state load` until a separate registry handler exists. Full routing and golden rules: [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md).
+**SDK state reads:** `state.json` and `state.load` are both registered query handlers with parity coverage. You can invoke them through `gsd-sdk query …` and through the SDK Runtime Bridge (`GSDTools` → `sdk/src/query-runtime-bridge.ts`), honoring `allowFallbackToSubprocess` / `strictSdk` and emitting `onDispatchEvent` observability. For direct typed dispatch, use `createRegistry()` from `sdk/src/query/index.ts`. Full routing and golden rules: [QUERY-HANDLERS.md](../sdk/src/query/QUERY-HANDLERS.md).
 
 **CLI-only (not in registry):** e.g. **graphify**, **from-gsd2** / **gsd2-import** — call `gsd-tools.cjs` until registered.
 

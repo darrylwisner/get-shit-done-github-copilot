@@ -138,3 +138,44 @@ All workflow file names use hyphens; `<step name="...">` attributes inside those
 
 ### "Follow the X workflow" prose fragments are non-standard — use "Execute end-to-end."
 After stripping prose @-refs, some command `<process>` blocks retained bolded "**Follow the X workflow**" fragments. ADR-0002 standard is `Execute end-to-end.` for single-workflow commands. Routing commands with flag dispatch use `execute the X workflow end-to-end.` in routing bullets (no bold, no redundant path).
+
+---
+
+## Recurring CodeRabbit review patterns (2026-05-05, PRs #3152/#3154/#3155)
+
+### Changeset metadata drift (`pr:` points at issue instead of PR)
+- In `.changeset/*.md`, reviewers repeatedly flag `pr:` values that accidentally reference issue ids.
+- **Rule**: `pr:` must equal the GitHub PR number carrying the change.
+- **Pre-flight check**: before push, verify each new changeset file against current branch PR number.
+
+### Test diagnostics quality for command-output parsing
+- Even when behavior is correct, CR requests clearer failure surfaces before `.map()` on parsed output.
+- **Rule**: after `JSON.parse`, assert output object shape (e.g., `Array.isArray(output.phases)`) with raw-output-prefix diagnostics.
+- This prevents opaque `TypeError` failures and shortens triage loops when CLI output shape changes.
+
+### Merge gate discipline: CodeRabbit pass is necessary but not sufficient
+- CI/checks can be green while unresolved review threads still block clean merge policy.
+- **Rule**: always gate on all three together: required checks green, CodeRabbit pass, unresolved thread count = 0.
+- Keep using GraphQL `reviewThreads` as authoritative unresolved state, not summary comments/check badge alone.
+
+---
+
+## SDK Runtime Bridge review synthesis (PR #3158, 2026-05-05)
+
+### What we fixed
+- Deepened one **SDK Runtime Bridge Module** seam (`sdk/src/query-runtime-bridge.ts`) for dispatch routing and observability.
+- Replaced orphan event typing with a canonical union (`RuntimeBridgeEvent`).
+- Made bridge observability non-intrusive: `onDispatchEvent` now runs behind a safe emitter so callback failures cannot alter dispatch outcomes.
+- Corrected strict-mode event semantics: strict native-adapter rejection now reports `dispatchMode: 'native'` (no fake subprocess attempt).
+- Preserved execution policy defaults by passing `allowFallbackToSubprocess` through as `undefined` when unset (no forced override in `GSDTools`).
+- Fixed transport decision ordering: fallback-disabled guard now throws before emitting subprocess decision events.
+- Added explicit invariant in `subprocessReason` for impossible states (fail loud on contract drift).
+- Updated user-facing docs (`README.md`, `docs/CLI-TOOLS.md`, `docs/ARCHITECTURE.md`) and ADR narrative consistency.
+
+### What we should not do again
+- Do not let observability callbacks sit on the critical path without isolation.
+- Do not emit structured events that claim a transport mode that never happened.
+- Do not force option defaults at call sites when policy Modules already define defaults.
+- Do not keep duplicate/inert exported types; expose one canonical union Interface.
+- Do not emit decision events before guard checks that may reject the path.
+- Do not leave architectural docs with ambiguous seam ownership between CLI and SDK paths.
