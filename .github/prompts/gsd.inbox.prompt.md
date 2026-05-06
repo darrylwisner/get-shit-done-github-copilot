@@ -57,6 +57,6 @@ and optionally applies labels or closes non-compliant submissions.
 </context>
 
 <process>
-Execute the inbox workflow from @./.claude/get-shit-done/workflows/inbox.md end-to-end.
+Execute end-to-end.
 Parse flags from arguments and pass to workflow.
 </process>
