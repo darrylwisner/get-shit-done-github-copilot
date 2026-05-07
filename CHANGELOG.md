@@ -4,10 +4,14 @@ All notable changes to GSD will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.39.1...HEAD)
+## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.41.0...HEAD)
+
+## [1.41.0](https://github.com/gsd-build/get-shit-done/compare/v1.40.0...v1.41.0) - 2026-05-07
 
 ### Fixed
 
+- **Atomic writes in `scripts/build-hooks.js` to fix flaky release CI** — nine test files invoke `build-hooks.js` from their `before()` hooks, and `scripts/run-tests.cjs` runs test files with `--test-concurrency=4`, so multiple builders raced to rewrite the same files in `hooks/dist/`. `fs.copyFileSync(src, dest)` truncates `dest` then writes it; a parallel `bin/install.js` subprocess (spawned by another install test) could `fs.readFileSync` between the truncate and the write and observe an empty file. install.js then wrote that empty content into the install target, so installed `.sh` hooks lacked their `# gsd-hook-version:` header. This surfaced as the release-blocking failure in `tests/bug-2136-sh-hook-version.test.cjs` part 4 even though the same SHA passed on every other Node-22/Node-24 install-smoke matrix run. `build-hooks.js` now stages each output to a sibling `hooks/.dist-staging/` directory (same filesystem as `hooks/dist/`) and uses `fs.renameSync` to swap into place — POSIX `rename(2)` is atomic, so concurrent readers always observe a complete file. (Failing run: https://github.com/gsd-build/get-shit-done/actions/runs/25472202941/job/74738276687)
+- **Stable node path on Homebrew** — `resolveNodeRunner()` now maps versioned Homebrew Cellar paths (e.g. `/usr/local/Cellar/node/25.8.1/bin/node`) to the stable Homebrew symlinks (`/usr/local/bin/node` on Intel, `/opt/homebrew/bin/node` on Apple Silicon). `rewriteLegacyManagedNodeHookCommands()` applies the same normalization to baked Cellar paths in existing hook commands. This prevents `dyld: Library not loaded` errors after `brew upgrade node`. (#3181)
 - **Milestone-archive layout support** — `validate consistency`, `validate health`, and `find-phase` now scan `.planning/milestones/v*-phases/` directories in addition to the flat `.planning/phases/` layout. Projects that have graduated to milestone-archive layout no longer receive spurious W006 "Phase N in ROADMAP.md but no directory on disk" warnings for every active phase. (#3164)
 
 ### Feature

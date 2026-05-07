@@ -1117,6 +1117,21 @@ If "adjust": Return to scoping.
 gsd-sdk query commit "docs: define v1 requirements" --files .planning/REQUIREMENTS.md
 ```
 
+## 7.5. Project Structure Mode
+
+**If auto mode:** Set `PROJECT_MODE=mvp` and skip this prompt.
+
+**Mode prompt: Vertical MVP vs Horizontal Layers.**
+
+Ask the user how they want to structure the project. Use `AskUserQuestion` with two options:
+
+- **Vertical MVP** — get a working app fast, add features slice by slice. Each phase delivers an end-to-end user capability. *(Recommended for new products and rapid-iteration MVPs.)*
+- **Horizontal Layers** — build complete technical layers (DB → API → UI → wiring) and assemble at the end. *(Better for infrastructure-heavy projects with multiple developers.)*
+
+Set `PROJECT_MODE=mvp` if the user picks Vertical MVP, otherwise `PROJECT_MODE=standard`.
+
+When `TEXT_MODE=true` (per the workflow's existing TEXT_MODE handling for non-Claude runtimes), present the same two options as a plain-text numbered list and ask the user to type their choice number.
+
 ## 8. Create Roadmap
 
 Display stage banner:
@@ -1128,6 +1143,23 @@ Display stage banner:
 
 ◆ Spawning roadmapper...
 ```
+
+**ROADMAP.md template — mode-aware emit.** When generating the initial ROADMAP.md:
+
+- If `PROJECT_MODE=mvp`: under each `### Phase N:` header, emit `**Mode:** mvp` on the line immediately following `**Goal:**`. This sets every initial phase to MVP mode (per Phase-4-Persistence decision: per-phase mode, not project-wide config).
+- If `PROJECT_MODE=standard`: emit the standard ROADMAP.md template with no `**Mode:**` lines (Horizontal Layers standard template — no behavioral change for users who pick Horizontal Layers).
+
+Example MVP-mode emit for Phase 1:
+
+```markdown
+### Phase 1: [Name]
+**Goal:** [Goal]
+**Mode:** mvp
+**Success Criteria**:
+1. [Criterion]
+```
+
+Pass `PROJECT_MODE` to the roadmapper so it applies the correct template.
 
 Spawn gsd-roadmapper agent with path references:
 

@@ -782,10 +782,10 @@ export const initTodos: QueryHandler = async (args, projectDir) => {
  * Init handler for complete-milestone and audit-milestone workflows.
  * Port of cmdInitMilestoneOp from init.cjs lines 758-817.
  */
-export const initMilestoneOp: QueryHandler = async (_args, projectDir) => {
+export const initMilestoneOp: QueryHandler = async (_args, projectDir, workstream) => {
   const config = await loadConfig(projectDir);
-  const planningDir = join(projectDir, '.planning');
-  const milestone = await getMilestoneInfo(projectDir);
+  const planningDir = join(projectDir, relPlanningPath(workstream));
+  const milestone = await getMilestoneInfo(projectDir, workstream);
 
   const phasesDir = join(planningDir, 'phases');
   let phaseCount = 0;
@@ -801,7 +801,7 @@ export const initMilestoneOp: QueryHandler = async (_args, projectDir) => {
   try {
     const { readFile } = await import('node:fs/promises');
     const roadmapRaw = await readFile(join(planningDir, 'ROADMAP.md'), 'utf-8');
-    const currentSection = await extractCurrentMilestone(roadmapRaw, projectDir);
+    const currentSection = await extractCurrentMilestone(roadmapRaw, projectDir, workstream);
     roadmapPhaseNumbers = extractPhasesFromSection(currentSection).map(p => p.number);
   } catch { /* intentionally empty */ }
 
@@ -857,7 +857,7 @@ export const initMilestoneOp: QueryHandler = async (_args, projectDir) => {
     } catch { /* intentionally empty */ }
   }
 
-  const archiveDir = join(projectDir, '.planning', 'archive');
+  const archiveDir = join(planningDir, 'archive');
   let archivedMilestones: string[] = [];
   try {
     archivedMilestones = readdirSync(archiveDir, { withFileTypes: true })
