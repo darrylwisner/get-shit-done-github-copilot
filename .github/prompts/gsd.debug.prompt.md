@@ -2,11 +2,12 @@
 name: gsd.debug
 description: "Systematic debugging with persistent state across context resets"
 argument-hint: "[list | status <slug> | continue <slug> | --diagnose] [issue description]"
-tools: ['agent', 'edit', 'execute', 'read', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Task","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Agent","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

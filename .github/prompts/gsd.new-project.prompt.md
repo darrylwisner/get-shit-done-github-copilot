@@ -2,11 +2,12 @@
 name: gsd.new-project
 description: "Initialize a new project with deep context gathering and PROJECT.md"
 argument-hint: "[--auto]"
-tools: ['agent', 'edit', 'execute', 'read', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Bash","Write","Task","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Bash","Write","Agent","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

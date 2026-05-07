@@ -2,11 +2,12 @@
 name: gsd.map-codebase
 description: "Analyze codebase with parallel mapper agents to produce .planning/codebase/ documents"
 argument-hint: "[--fast [--focus tech|arch|quality|concerns]] [--query <term>|status|diff|refresh] [area]"
-tools: ['agent', 'edit', 'execute', 'read', 'search']
+tools: ['edit', 'execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Bash","Glob","Grep","Write","Task"] -->
+<!-- upstream-tools: ["Read","Bash","Glob","Grep","Write","Agent"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

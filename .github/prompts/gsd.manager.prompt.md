@@ -2,12 +2,12 @@
 name: gsd.manager
 description: "Interactive command center for managing multiple phases from one terminal"
 argument-hint: "[--analyze-deps]"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Skill","Task"] -->
-<!-- omitted-tools: ["skill"] — no Copilot equivalent found -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Skill","Agent"] -->
+<!-- omitted-tools: ["skill","agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

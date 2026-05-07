@@ -2,11 +2,12 @@
 name: gsd.ui-phase
 description: "Generate UI design contract (UI-SPEC.md) for frontend phases"
 argument-hint: "[phase]"
-tools: ['agent', 'edit', 'execute', 'mcp__context7__*', 'read', 'search', 'vscode/askQuestions', 'web']
+tools: ['edit', 'execute', 'mcp__context7__*', 'read', 'search', 'vscode/askQuestions', 'web']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Task","WebFetch","AskUserQuestion","mcp__context7__*"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Agent","WebFetch","AskUserQuestion","mcp__context7__*"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

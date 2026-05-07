@@ -2,11 +2,12 @@
 name: gsd.new-milestone
 description: "Start a new milestone cycle — update PROJECT.md and route to requirements"
 argument-hint: "[milestone name, e.g., 'v1.1 Notifications']"
-tools: ['agent', 'edit', 'execute', 'read', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Task","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Agent","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

@@ -2,11 +2,12 @@
 name: gsd.execute-phase
 description: "Execute all plans in a phase with wave-based parallelization"
 argument-hint: "<phase-number> [--wave N] [--gaps-only] [--interactive] [--tdd]"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'todo', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'search', 'todo', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Task","TodoWrite","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Agent","TodoWrite","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

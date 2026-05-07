@@ -2,11 +2,12 @@
 name: gsd.ingest-docs
 description: "Bootstrap or merge a .planning/ setup from existing ADRs, PRDs, SPECs, and docs in a repo."
 argument-hint: "[path] [--mode new|merge] [--manifest <file>] [--resolve auto|interactive]"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","AskUserQuestion","Task"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","AskUserQuestion","Agent"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

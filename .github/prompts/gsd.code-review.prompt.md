@@ -2,11 +2,12 @@
 name: gsd.code-review
 description: "Review source files changed during a phase for bugs, security issues, and code quality problems"
 argument-hint: "<phase-number> [--depth=quick|standard|deep] [--files file1,file2,...] [--fix [--all] [--auto]]"
-tools: ['agent', 'edit', 'execute', 'read', 'search']
+tools: ['edit', 'execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Bash","Glob","Grep","Write","Task"] -->
+<!-- upstream-tools: ["Read","Bash","Glob","Grep","Write","Agent"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 
