@@ -188,26 +188,24 @@ describe('loadConfig', () => {
   // because buildNewProjectConfig bakes user defaults into project config
   // at /gsd-new-project time.
 
-  it('pre-project: layers user defaults from ~/.gsd/defaults.json', async () => {
+  it('pre-project: ignores user defaults and uses built-in defaults', async () => {
     await writeUserDefaults({ resolve_model_ids: 'omit' });
-    // No project config.json
     const config = await loadConfig(tmpDir);
-    expect((config as Record<string, unknown>).resolve_model_ids).toBe('omit');
-    // Built-in defaults still present for keys user did not override
+    expect((config as Record<string, unknown>).resolve_model_ids).toBeUndefined();
     expect(config.model_profile).toBe('balanced');
     expect(config.workflow.plan_check).toBe(true);
   });
 
-  it('pre-project: deep-merges nested keys from user defaults', async () => {
+  it('pre-project: keeps built-in nested defaults even when user defaults exist', async () => {
     await writeUserDefaults({
       git: { branching_strategy: 'milestone' },
       agent_skills: { planner: 'user-skill' },
     });
 
     const config = await loadConfig(tmpDir);
-    expect(config.git.branching_strategy).toBe('milestone');
+    expect(config.git.branching_strategy).toBe('none');
     expect(config.git.phase_branch_template).toBe('gsd/phase-{phase}-{slug}');
-    expect(config.agent_skills).toEqual({ planner: 'user-skill' });
+    expect(config.agent_skills).toEqual({});
   });
 
   it('project config is authoritative over user defaults (CJS parity)', async () => {
@@ -237,6 +235,26 @@ describe('loadConfig', () => {
     const config = await loadConfig(tmpDir);
     // Falls back to built-in defaults
     expect(config).toEqual(CONFIG_DEFAULTS);
+  });
+
+  it('maps legacy top-level branching_strategy into git.branching_strategy', async () => {
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ branching_strategy: 'phase' }),
+    );
+
+    const config = await loadConfig(tmpDir);
+    expect(config.git.branching_strategy).toBe('phase');
+  });
+
+  it('git.branching_strategy overrides legacy top-level branching_strategy when both are present', async () => {
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ branching_strategy: 'phase', git: { branching_strategy: 'milestone' } }),
+    );
+
+    const config = await loadConfig(tmpDir);
+    expect(config.git.branching_strategy).toBe('milestone');
   });
 
   it('does not mutate CONFIG_DEFAULTS between calls', async () => {

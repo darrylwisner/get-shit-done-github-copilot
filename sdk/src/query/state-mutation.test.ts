@@ -318,7 +318,7 @@ describe('stateBeginPhase', () => {
 
     // Must return the actual values, not the flag names
     expect(data.phase).toBe('99');
-    expect(data.name).toBe('probe-test');
+    expect(data.phase_name).toBe('probe-test');
     expect(data.plan_count).toBe(1);
 
     // STATE.md must contain clean output, not literal "--phase"
@@ -336,7 +336,7 @@ describe('stateBeginPhase', () => {
     const result = await stateBeginPhase(['42', 'Positional Test', '5'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase).toBe('42');
-    expect(data.name).toBe('Positional Test');
+    expect(data.phase_name).toBe('Positional Test');
     expect(data.plan_count).toBe(5);
   });
 
@@ -346,6 +346,14 @@ describe('stateBeginPhase', () => {
     // --phase has no value — next token is --name, which is itself a flag.
     await expect(
       stateBeginPhase(['--phase', '--name', 'Title', '--plans', '1'], tmpDir)
+    ).rejects.toThrow('missing value for --phase');
+  });
+
+  it('bug-2420: flag parser throws when a flag is last token with no value', async () => {
+    const { stateBeginPhase } = await import('./state-mutation.js');
+
+    await expect(
+      stateBeginPhase(['--name', 'Title', '--plans', '1', '--phase'], tmpDir)
     ).rejects.toThrow('missing value for --phase');
   });
 

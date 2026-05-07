@@ -462,6 +462,21 @@ objective: API routes
     assert.deepStrictEqual(output.incomplete, ['03-02'], 'incomplete list correct');
   });
 
+  test('phase-plan-index matches descriptive plan with prefix summary (#3101)', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    fs.writeFileSync(path.join(phaseDir, '03-01-auth-hardening-PLAN.md'), `---\nwave: 1\n---\n## Task 1`);
+    fs.writeFileSync(path.join(phaseDir, '03-01-SUMMARY.md'), `# Summary`);
+
+    const result = runGsdTools('phase-plan-index 03', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.plans[0].has_summary, true, 'descriptive plan should match prefix summary');
+    assert.deepStrictEqual(output.incomplete, [], 'plan should not be marked incomplete');
+  });
+
   test('detects checkpoints (autonomous: false)', () => {
     const phaseDir = path.join(tmpDir, '.planning', 'phases', '03-api');
     fs.mkdirSync(phaseDir, { recursive: true });
@@ -1235,6 +1250,28 @@ describe('phase insert command', () => {
 
     const roadmap = fs.readFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
     assert.ok(roadmap.includes('**Requirements**: TBD'), 'inserted phase entry should include Requirements TBD');
+  });
+
+  test('reports actionable error for summary-only placeholder phase without detail section (#3098)', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n- [ ] **Phase 5: Placeholder**\n`
+    );
+
+    const result = runGsdTools('phase insert 5 Hotfix', tmpDir);
+    assert.ok(!result.success, 'should fail when phase is summary-only placeholder');
+    assert.ok(result.error.includes('missing a detail section'));
+  });
+
+  test('phase insert rejects unsupported --dry-run flag explicitly (#3098)', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n### Phase 1: Foundation\n**Goal:** Setup\n`
+    );
+
+    const result = runGsdTools('phase insert 1 Hotfix --dry-run', tmpDir);
+    assert.ok(!result.success, 'phase insert should reject unsupported --dry-run');
+    assert.ok(result.error.includes('does not support --dry-run'));
   });
 
   test('handles #### heading depth from multi-milestone roadmaps', () => {
