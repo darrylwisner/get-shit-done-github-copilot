@@ -1,0 +1,108 @@
+name: Dismiss Unauthorized PR Approvals
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dismiss-unauthorized-pr-approvals-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  dismiss-unauthorized-approval:
+    if: github.event.review.state == 'approved' && github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Dismiss blocked/non-collaborator approvals
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Any login here is always blocked, even if they are a collaborator.
+            const blockedReviewers = new Set(['ari4ka']);
+
+            // Any collaborator role is allowed unless explicitly blocked above.
+            const allowedRoles = new Set(['read', 'triage', 'write', 'maintain', 'admin']);
+
+            function norm(v) {
+              return (v || '').trim().toLowerCase();
+            }
+
+            async function resolveRole(login) {
+              try {
+                const resp = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner,
+                  repo,
+                  username: login,
+                });
+                return norm(resp.data.role_name) || 'unknown';
+              } catch (error) {
+                if (error.status === 404) return 'none'; // not a collaborator
+                core.warning(`Could not resolve reviewer role for ${login}: ${error.message}`);
+                return 'unknown';
+              }
+            }
+
+            function shouldDismissReviewer(login, roleName) {
+              const reviewer = norm(login);
+              const isBlocked = blockedReviewers.has(reviewer);
+              const isAllowedRole = allowedRoles.has(roleName);
+
+              const reasons = [];
+              if (isBlocked) {
+                reasons.push(`reviewer is blocked (${reviewer})`);
+              }
+              if (!isAllowedRole) {
+                reasons.push(`reviewer is not a collaborator or higher (detected role: ${roleName})`);
+              }
+
+              return {
+                dismiss: isBlocked || !isAllowedRole,
+                message: `Auto-dismissed approval: ${reasons.join('; ')}.`,
+              };
+            }
+
+            async function dismissReview(pull_number, review_id, reviewer, message) {
+              try {
+                await github.rest.pulls.dismissReview({
+                  owner,
+                  repo,
+                  pull_number,
+                  review_id,
+                  message,
+                });
+                core.info(`Dismissed approval from ${reviewer} on PR #${pull_number}. Reason: ${message}`);
+                return true;
+              } catch (error) {
+                if (error.status === 422) {
+                  core.warning(`Could not dismiss review ${review_id} on PR #${pull_number}: ${error.message}`);
+                  return false;
+                }
+                throw error;
+              }
+            }
+
+            const review = context.payload.review;
+            const reviewer = review.user.login;
+            const roleName = await resolveRole(reviewer);
+            const verdict = shouldDismissReviewer(reviewer, roleName);
+
+            if (!verdict.dismiss) {
+              core.info(`Approval from ${reviewer} kept (role: ${roleName}).`);
+              return;
+            }
+
+            await dismissReview(
+              context.payload.pull_request.number,
+              review.id,
+              reviewer,
+              verdict.message
+            );
