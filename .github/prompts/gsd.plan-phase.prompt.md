@@ -2,11 +2,12 @@
 name: gsd.plan-phase
 description: "Create detailed phase plan (PLAN.md) with verification loop"
 argument-hint: "[phase] [--auto] [--research] [--skip-research] [--research-phase <N>] [--view] [--gaps] [--skip-verify] [--prd <file>] [--reviews] [--text] [--tdd] [--mvp]"
-tools: ['agent', 'edit', 'execute', 'mcp__context7__*', 'read', 'search', 'vscode/askQuestions', 'web']
+tools: ['edit', 'execute', 'mcp__context7__*', 'read', 'search', 'vscode/askQuestions', 'web']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Task","AskUserQuestion","WebFetch","mcp__context7__*"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Agent","AskUserQuestion","WebFetch","mcp__context7__*"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

@@ -2,11 +2,12 @@
 name: gsd.verify-work
 description: "Validate built features through conversational UAT"
 argument-hint: "[phase number, e.g., '4']"
-tools: ['agent', 'edit', 'execute', 'read', 'search']
+tools: ['edit', 'execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Bash","Glob","Grep","Edit","Write","Task"] -->
+<!-- upstream-tools: ["Read","Bash","Glob","Grep","Edit","Write","Agent"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

@@ -1,11 +1,12 @@
 ---
 name: gsd.explore
 description: "Socratic ideation and idea routing — think through ideas before committing to plans"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Grep","Glob","Task","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Grep","Glob","Agent","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

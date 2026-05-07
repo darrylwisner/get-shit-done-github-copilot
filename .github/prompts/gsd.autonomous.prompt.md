@@ -2,11 +2,11 @@
 name: gsd.autonomous
 description: "Run all remaining phases autonomously — discuss→plan→execute per phase"
 argument-hint: "[--from N] [--to N] [--only N] [--interactive]"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Task","Agent"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Agent"] -->
 <!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 

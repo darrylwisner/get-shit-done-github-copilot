@@ -402,7 +402,7 @@ Display banner:
 Spawn a single focused researcher (not 4 parallel researchers like full phases — quick tasks need targeted research, not broad domain surveys):
 
 ```
-Task(
+Agent(
   prompt="
 <research_context>
 
@@ -443,7 +443,7 @@ Return: ## RESEARCH COMPLETE with file path
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After researcher returns:
 1. Verify research exists at `${QUICK_DIR}/${quick_id}-RESEARCH.md`
@@ -460,7 +460,7 @@ If research file not found, warn but continue: "Research agent did not produce o
 **If NOT `$VALIDATE_MODE`:** Use standard `quick` mode.
 
 ```
-Task(
+Agent(
   prompt="
 <planning_context>
 
@@ -501,7 +501,7 @@ Return: ## PLANNING COMPLETE with plan path
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After planner returns:
 1. Verify plan exists at `${QUICK_DIR}/${quick_id}-PLAN.md`
@@ -559,7 +559,7 @@ ${DISCUSS_MODE ? '- Context compliance: Does the plan honor locked decisions fro
 ```
 
 ```
-Task(
+Agent(
   prompt=checker_prompt,
   subagent_type="gsd-plan-checker",
   model="{checker_model}",
@@ -567,7 +567,7 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 **Handle checker return:**
 
@@ -606,7 +606,7 @@ Return what changed.
 ```
 
 ```
-Task(
+Agent(
   prompt=revision_prompt,
   subagent_type="gsd-planner",
   model="{planner_model}",
@@ -614,7 +614,7 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After planner returns → spawn checker again, increment iteration_count.
 
@@ -668,7 +668,7 @@ EXPECTED_BASE=$(git rev-parse HEAD)
 Spawn gsd-executor with plan reference:
 
 ```
-Task(
+Agent(
   prompt="
 Execute quick task ${quick_id}.
 
@@ -761,7 +761,7 @@ SUMMARY.md and stop — the user must rerun with worktrees disabled.
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After executor returns:
 1. **Worktree cleanup:** If the executor ran with `isolation="worktree"`, merge the worktree branch back and clean up:
@@ -907,7 +907,7 @@ If `CHANGED_FILES` is empty, skip with "No source files changed — skipping cod
 
 **Invoke review:**
 ```
-Task(
+Agent(
   prompt="Review these files for bugs, security issues, and code quality.
   Files: ${CHANGED_FILES}
   Output: ${QUICK_DIR}/${quick_id}-REVIEW.md
@@ -917,7 +917,7 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 If review produces findings, display advisory message. **Error handling:** Failures are non-blocking — catch and proceed.
 
@@ -937,7 +937,7 @@ Display banner:
 ```
 
 ```
-Task(
+Agent(
   prompt="Verify quick task goal achievement.
 Task directory: ${QUICK_DIR}
 Task goal: ${DESCRIPTION}
@@ -955,7 +955,7 @@ Check must_haves against actual codebase. Create VERIFICATION.md at ${QUICK_DIR}
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 Read verification status:
 ```bash

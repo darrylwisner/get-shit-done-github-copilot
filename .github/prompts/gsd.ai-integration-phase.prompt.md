@@ -2,11 +2,12 @@
 name: gsd.ai-integration-phase
 description: "Generate an AI-SPEC.md design contract for phases that involve building AI systems."
 argument-hint: "[phase number]"
-tools: ['agent', 'edit', 'execute', 'mcp__context7__*', 'read', 'search', 'vscode/askQuestions', 'web']
+tools: ['edit', 'execute', 'mcp__context7__*', 'read', 'search', 'vscode/askQuestions', 'web']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Task","WebFetch","WebSearch","AskUserQuestion","mcp__context7__*"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","Agent","WebFetch","WebSearch","AskUserQuestion","mcp__context7__*"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

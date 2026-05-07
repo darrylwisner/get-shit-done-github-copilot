@@ -2,11 +2,12 @@
 name: gsd.audit-milestone
 description: "Audit milestone completion against original intent before archiving"
 argument-hint: "[version]"
-tools: ['agent', 'edit', 'execute', 'read', 'search']
+tools: ['edit', 'execute', 'read', 'search']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Glob","Grep","Bash","Task","Write"] -->
+<!-- upstream-tools: ["Read","Glob","Grep","Bash","Agent","Write"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

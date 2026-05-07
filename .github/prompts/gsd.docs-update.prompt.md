@@ -2,11 +2,12 @@
 name: gsd.docs-update
 description: "Generate or update project documentation verified against the codebase"
 argument-hint: "[--force] [--verify-only]"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","Task","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Bash","Glob","Grep","Agent","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

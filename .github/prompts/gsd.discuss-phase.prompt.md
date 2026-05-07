@@ -2,11 +2,12 @@
 name: gsd.discuss-phase
 description: "Gather phase context through adaptive questioning before planning."
 argument-hint: "<phase> [--all] [--auto] [--chain] [--batch] [--analyze] [--text] [--power] [--assumptions]"
-tools: ['agent', 'edit', 'execute', 'mcp__context7__query-docs', 'mcp__context7__resolve-library-id', 'read', 'search', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'mcp__context7__query-docs', 'mcp__context7__resolve-library-id', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Task","mcp__context7__resolve-library-id","mcp__context7__query-docs"] -->
+<!-- upstream-tools: ["Read","Write","Bash","Glob","Grep","AskUserQuestion","Agent","mcp__context7__resolve-library-id","mcp__context7__query-docs"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 

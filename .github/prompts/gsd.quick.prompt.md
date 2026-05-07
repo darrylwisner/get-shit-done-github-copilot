@@ -2,11 +2,12 @@
 name: gsd.quick
 description: "Execute a quick task with GSD guarantees (atomic commits, state tracking) but skip optional agents"
 argument-hint: "[list | status <slug> | resume <slug> | --full] [--validate] [--discuss] [--research] [task description]"
-tools: ['agent', 'edit', 'execute', 'read', 'search', 'vscode/askQuestions']
+tools: ['edit', 'execute', 'read', 'search', 'vscode/askQuestions']
 agent: agent
 ---
 
-<!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Task","AskUserQuestion"] -->
+<!-- upstream-tools: ["Read","Write","Edit","Glob","Grep","Bash","Agent","AskUserQuestion"] -->
+<!-- omitted-tools: ["agent"] — no Copilot equivalent found -->
 
 ## Path Resolution 
 
