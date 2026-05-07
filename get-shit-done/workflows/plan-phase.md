@@ -423,7 +423,7 @@ Write to: {phase_dir}/{phase_num}-RESEARCH.md
 ```
 
 ```
-Task(
+Agent(
   prompt=research_prompt,
   subagent_type="gsd-phase-researcher",
   model="{researcher_model}",
@@ -431,7 +431,7 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 ### Handle Researcher Return
 
@@ -738,14 +738,14 @@ Extract the list of files to be created/modified from CONTEXT.md and RESEARCH.md
 
 Spawn with:
 ```
-Task(
+Agent(
   prompt="{above}",
   subagent_type="gsd-pattern-mapper",
   model="{researcher_model}",
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 **Handle return:**
 - **`## PATTERN MAPPING COMPLETE`:** Update `PATTERNS_PATH` to the created file path, continue to step 8.
@@ -866,10 +866,10 @@ Every task MUST include these fields — they are NOT optional:
 </quality_gate>
 ```
 
-**If `CHUNKED_MODE` is `false` (default):** Spawn the planner as a single long-lived Task:
+**If `CHUNKED_MODE` is `false` (default):** Spawn the planner as a single long-lived Agent:
 
-```
-Task(
+```text
+Agent(
   prompt=filled_prompt,
   subagent_type="gsd-planner",
   model="{planner_model}",
@@ -877,17 +877,17 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
-**If `CHUNKED_MODE` is `true`:** Skip the Task() call above — proceed to step 8.5 instead.
+**If `CHUNKED_MODE` is `true`:** Skip the Agent() call above — proceed to step 8.5 instead.
 
 ## 8.5. Chunked Planning Mode
 
 **Skip if `CHUNKED_MODE` is `false`.**
 
-Chunked mode splits the single long-lived planner Task into a short outline Task followed by
-N short per-plan Tasks. Each Task is bounded to ~3–5 min; each plan is committed individually
-for crash resilience. If any Task hangs and the terminal is force-killed, rerunning
+Chunked mode splits the single long-lived planner Agent run into a short outline Agent run followed by
+N short per-plan Agent runs. Each run is bounded to ~3–5 min; each plan is committed individually
+for crash resilience. If any run hangs and the terminal is force-killed, rerunning
 `/gsd-plan-phase {N} --chunked` resumes from the last successfully committed plan.
 
 **Intended for new or in-progress chunked runs.** To recover plans already written by a prior
@@ -916,7 +916,7 @@ Spawn the planner in **outline-only** mode — it must write only the outline ma
 PLAN.md files:
 
 ```javascript
-Task(
+Agent(
   prompt="{same planning_context as step 8, plus:}
 
   **Chunked mode: outline-only.**
@@ -933,7 +933,7 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 Handle return:
 - **`## OUTLINE COMPLETE`:** Read `PLAN-OUTLINE.md`, extract plan list. Continue to 8.5.2.
@@ -961,7 +961,7 @@ For each plan entry extracted from `PLAN-OUTLINE.md`:
 
 3. Spawn the planner in **single-plan** mode — it must write exactly one PLAN.md file:
    ```javascript
-   Task(
+   Agent(
      prompt="{same planning_context as step 8, plus:}
 
      **Chunked mode: single-plan.**
@@ -977,7 +977,7 @@ For each plan entry extracted from `PLAN-OUTLINE.md`:
    )
    ```
 
-   > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+   > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 4. **Verify disk:** Check `${PHASE_DIR}/{plan_id}-PLAN.md` exists. If missing: offer 1) Retry, 2) Stop.
 
@@ -1000,13 +1000,13 @@ to step 9.
 
 ## 9a. Filesystem Fallback (Planner)
 
-**Triggered when:** Task() returns but the return contains no recognized marker (`## PLANNING COMPLETE`, `## PHASE SPLIT RECOMMENDED`, `## ⚠ Source Audit`, `## CHECKPOINT REACHED`, `## PLANNING INCONCLUSIVE`).
+**Triggered when:** Agent() returns but the return contains no recognized marker (`## PLANNING COMPLETE`, `## PHASE SPLIT RECOMMENDED`, `## ⚠ Source Audit`, `## CHECKPOINT REACHED`, `## PLANNING INCONCLUSIVE`).
 
 ```bash
 DISK_PLANS=$(ls "${PHASE_DIR}"/*-PLAN.md 2>/dev/null | wc -l | tr -d ' ')
 ```
 
-**If `DISK_PLANS` > 0:** The planner wrote plans to disk but the Task() return was empty or
+**If `DISK_PLANS` > 0:** The planner wrote plans to disk but the Agent() return was empty or
 truncated (the Windows stdio hang pattern — the subagent finished but the return never
 arrived). Display:
 
@@ -1127,7 +1127,7 @@ ${AGENT_SKILLS_CHECKER}
 ```
 
 ```
-Task(
+Agent(
   prompt=checker_prompt,
   subagent_type="gsd-plan-checker",
   model="{checker_model}",
@@ -1135,7 +1135,7 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 ## 11. Handle Checker Return
 
@@ -1164,7 +1164,7 @@ If thinking_partner disabled: skip this block entirely.
 
 ## 11a. Filesystem Fallback (Checker)
 
-**Triggered when:** Checker Task() returns but the return contains neither `## VERIFICATION PASSED` nor `## ISSUES FOUND`.
+**Triggered when:** Checker Agent() returns but the return contains neither `## VERIFICATION PASSED` nor `## ISSUES FOUND`.
 
 ```bash
 DISK_PLANS=$(ls "${PHASE_DIR}"/*-PLAN.md 2>/dev/null | wc -l | tr -d ' ')
@@ -1242,7 +1242,7 @@ Return what changed.
 ```
 
 ```
-Task(
+Agent(
   prompt=revision_prompt,
   subagent_type="gsd-planner",
   model="{planner_model}",
@@ -1250,7 +1250,7 @@ Task(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After planner returns -> spawn checker again (step 10), increment iteration_count.
 
