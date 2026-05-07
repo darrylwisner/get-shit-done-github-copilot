@@ -14,6 +14,30 @@ const { maskIfSecret } = require('./secrets.cjs');
 // same in markdown but differ textually.
 const REQUIREMENTS_HEADER_RE = /^\*\*Requirements:?\*\*[^\S\n]*:?[^\S\n]*([^\n]*)$/m;
 
+function listPhaseSummaryFiles(phaseDir) {
+  const phaseFiles = fs.readdirSync(phaseDir);
+  const rootSummaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+  const plansDir = path.join(phaseDir, 'plans');
+  let nestedSummaries = [];
+  if (fs.existsSync(plansDir)) {
+    const files = fs.readdirSync(plansDir);
+    nestedSummaries = files.filter(f => /^SUMMARY-\d+.*\.md$/i.test(f));
+  }
+  return rootSummaries.concat(nestedSummaries);
+}
+
+function listPhasePlanFiles(phaseDir) {
+  const phaseFiles = fs.readdirSync(phaseDir);
+  const rootPlans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
+  const plansDir = path.join(phaseDir, 'plans');
+  let nestedPlans = [];
+  if (fs.existsSync(plansDir)) {
+    const files = fs.readdirSync(plansDir);
+    nestedPlans = files.filter(f => /^PLAN-\d+.*\.md$/i.test(f));
+  }
+  return rootPlans.concat(nestedPlans);
+}
+
 function getLatestCompletedMilestone(cwd) {
   const milestonesPath = path.join(planningRoot(cwd), 'MILESTONES.md');
   if (!fs.existsSync(milestonesPath)) return null;
@@ -901,8 +925,7 @@ function cmdInitMilestoneOp(cwd, raw) {
       const dirName = diskPhaseDirs.get(canonicalizePhase(num));
       if (!dirName) continue;
       try {
-        const phaseFiles = fs.readdirSync(path.join(phasesDir, dirName));
-        const hasSummary = phaseFiles.some(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+        const hasSummary = listPhaseSummaryFiles(path.join(phasesDir, dirName)).length > 0;
         if (hasSummary) completedPhases++;
       } catch { /* intentionally empty */ }
     }
@@ -914,8 +937,7 @@ function cmdInitMilestoneOp(cwd, raw) {
       phaseCount = dirs.length;
       for (const dir of dirs) {
         try {
-          const phaseFiles = fs.readdirSync(path.join(phasesDir, dir));
-          const hasSummary = phaseFiles.some(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+          const hasSummary = listPhaseSummaryFiles(path.join(phasesDir, dir)).length > 0;
           if (hasSummary) completedPhases++;
         } catch { /* intentionally empty */ }
       }
@@ -1072,8 +1094,8 @@ function cmdInitManager(cwd, raw) {
       if (dirMatch) {
         const fullDir = path.join(phasesDir, dirMatch);
         const phaseFiles = fs.readdirSync(fullDir);
-        planCount = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
-        summaryCount = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
+        planCount = listPhasePlanFiles(fullDir).length;
+        summaryCount = listPhaseSummaryFiles(fullDir).length;
         hasContext = phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
         hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
 
@@ -1353,8 +1375,8 @@ function cmdInitProgress(cwd, raw) {
       const phasePath = path.join(phasesDir, dir);
       const phaseFiles = fs.readdirSync(phasePath);
 
-      const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
-      const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+      const plans = listPhasePlanFiles(phasePath);
+      const summaries = listPhaseSummaryFiles(phasePath);
       const hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
 
       const status = summaries.length >= plans.length && plans.length > 0 ? 'complete' :

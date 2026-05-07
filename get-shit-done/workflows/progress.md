@@ -300,7 +300,7 @@ PHASE_HAS_UI=$(echo "$PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" ||
 **Also available:**
 - `/gsd-ui-phase {phase}` — generate UI design contract (recommended for frontend phases)
 - `/gsd-plan-phase {phase}` — skip discussion, plan directly
-- `/gsd-list-phase-assumptions {phase}` — see Claude's assumptions
+- `/gsd-discuss-phase {phase}` — include assumptions check before planning
 
 ---
 ```
@@ -322,7 +322,7 @@ PHASE_HAS_UI=$(echo "$PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" ||
 
 **Also available:**
 - `/gsd-plan-phase {phase} ${GSD_WS}` — skip discussion, plan directly
-- `/gsd-list-phase-assumptions {phase} ${GSD_WS}` — see Claude's assumptions
+- `/gsd-discuss-phase {phase} ${GSD_WS}` — include assumptions check before planning
 
 ---
 ```

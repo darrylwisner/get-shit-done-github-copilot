@@ -869,6 +869,16 @@ describe('searchPhaseInDir', () => {
     assert.ok(result.incomplete_plans.includes('01-02-PLAN.md'));
   });
 
+  test('treats prefix summary as complete for descriptive plan filename (#3101)', () => {
+    const phaseDir = path.join(phasesDir, '01-foundation');
+    fs.mkdirSync(phaseDir);
+    fs.writeFileSync(path.join(phaseDir, '01-01-auth-hardening-PLAN.md'), '# Plan 1');
+    fs.writeFileSync(path.join(phaseDir, '01-01-SUMMARY.md'), '# Summary 1');
+
+    const result = searchPhaseInDir(phasesDir, '.planning/phases', '01');
+    assert.strictEqual(result.incomplete_plans.length, 0);
+  });
+
   test('detects research and context files', () => {
     const phaseDir = path.join(phasesDir, '01-foundation');
     fs.mkdirSync(phaseDir);
