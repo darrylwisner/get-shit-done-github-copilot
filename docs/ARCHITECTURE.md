@@ -433,7 +433,11 @@ ui-phase → UI-SPEC.md (design contract, optional)
 plan-phase
     ├── Research gate (blocks if RESEARCH.md has unresolved open questions)
     ├── Phase Researcher → RESEARCH.md
+    │       └── Package Legitimacy Gate: slopcheck on every package; [SLOP] removed,
+    │           [SUS]/[ASSUMED] flagged; Audit table written to RESEARCH.md
     ├── Planner (with reachability check) → PLAN.md files
+    │       └── checkpoint:human-verify injected before [ASSUMED]/[SUS] installs;
+    │           T-{phase}-SC STRIDE row added for install-bearing plans
     ├── Plan Checker → Verify loop (max 3x)
     ├── Requirements coverage gate (REQ-IDs → plans)
     └── Decision coverage gate (CONTEXT.md `<decisions>` → plans, BLOCKING — #2492)
@@ -652,6 +656,30 @@ Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→
 - Stale metrics (>60s old) are ignored
 - Missing bridge files handled gracefully (subagents, fresh sessions)
 - Context monitor is advisory — never issues imperative commands that override user preferences
+
+### Package Legitimacy Gate (v1.51)
+
+The researcher → planner → executor pipeline includes a supply-chain gate against slopsquatting (AI-hallucinated package names pre-registered with malicious post-install scripts).
+
+**Threat model:** GSD automates the full path from "researcher names a package" to "executor runs `npm install`". A hallucinated name that passes `npm view` (proving only registration, not legitimacy) would previously flow through undetected. ~20% of AI-generated package references are hallucinated; ~43% of those names recur consistently across prompts, making pre-registration economically viable for attackers.
+
+**Gate layers:**
+
+| Layer | Component | Action |
+|-------|-----------|--------|
+| Research | `gsd-phase-researcher` | Runs `slopcheck install <pkgs> --json`; writes `## Package Legitimacy Audit` table to RESEARCH.md; strips `[SLOP]` packages before RESEARCH.md is written |
+| Planning | `gsd-planner` | Reads Audit table; inserts `checkpoint:human-verify` before any `[ASSUMED]` or `[SUS]` install task; adds `T-{phase}-SC` STRIDE supply-chain row to `<threat_model>` |
+| Execution | `gsd-executor` | RULE 3 excludes package installation from auto-fix scope; failed installs surface as checkpoints, never silent substitutions |
+
+**Claim provenance integration:** Package names discovered via WebSearch are tagged `[ASSUMED]` (not `[VERIFIED]`) regardless of `npm view` result. This extends the existing `[ASSUMED]` / `[VERIFIED]` / `[CITED]` provenance system by enforcing the provenance tag as a hard gate at the install boundary — `[ASSUMED]` always generates a `checkpoint:human-verify` in PLAN.md.
+
+**Ecosystem coverage:** The researcher uses registry-specific verification commands — `npm view` (Node), `pip index versions` (Python), `cargo search` (Rust) — rather than a single generic check. This catches cross-ecosystem hallucination (~9% rate documented in 2025 USENIX research).
+
+**Graceful degradation:** If `slopcheck` is unavailable, every recommended package is tagged `[ASSUMED]` and gated with a checkpoint. Research and planning proceed; the system never hard-fails on a missing tool dependency.
+
+**External dependency:** `slopcheck` (MIT, pip-installable). If abandoned, the `[ASSUMED]`-gate fallback maintains human-checkpoint coverage.
+
+---
 
 ### Security Hooks (v1.27)
 

@@ -121,6 +121,59 @@ export function resolveAgentsDir(runtime: Runtime = 'claude'): string {
   return join(getRuntimeConfigDir(runtime), 'agents');
 }
 
+/**
+ * Resolve the runtime-global skills base directory.
+ *
+ * Most runtimes store global skills under `<configDir>/skills`.
+ * `cline` is rules-based and has no global skills directory.
+ */
+export function resolveGlobalSkillsBase(runtime: Runtime): string | null {
+  if (runtime === 'cline') return null;
+  return join(getRuntimeConfigDir(runtime), 'skills');
+}
+
+/**
+ * Render a human-readable runtime-global skills base path.
+ * Uses `~` when the path lives under the current home dir.
+ * Returns a displayable string for unsupported runtimes (never null).
+ */
+export function renderGlobalSkillsBaseDisplayPath(runtime: Runtime): string {
+  const base = resolveGlobalSkillsBase(runtime);
+  if (!base) return `(${runtime} does not use a skills directory)`;
+  const home = homedir();
+  const homeWithSep = home.endsWith(pathSep) ? home : `${home}${pathSep}`;
+  return (base === home || base.startsWith(homeWithSep)) ? `~${base.slice(home.length)}` : base;
+}
+
+/** Resolve one runtime-global skill directory, or `null` when unsupported. */
+export function resolveGlobalSkillDir(runtime: Runtime, skillName: string): string | null {
+  const base = resolveGlobalSkillsBase(runtime);
+  if (base === null) return null;
+  const candidate = resolve(base, skillName);
+  const rel = relative(base, candidate);
+  if (!skillName || rel.startsWith('..') || isAbsolute(rel)) return null;
+  return candidate;
+}
+
+/** Resolve the canonical SKILL.md path for one runtime-global skill. */
+export function resolveGlobalSkillMarkdownPath(runtime: Runtime, skillName: string): string | null {
+  const dir = resolveGlobalSkillDir(runtime, skillName);
+  if (dir === null) return null;
+  return join(dir, 'SKILL.md');
+}
+
+/**
+ * Render a human-readable global skill path for warnings.
+ * Uses `~` when the path lives under the current home dir.
+ */
+export function renderGlobalSkillDisplayPath(runtime: Runtime, skillName: string): string {
+  const dir = resolveGlobalSkillDir(runtime, skillName);
+  if (!dir) return `(${runtime} does not use a skills directory)`;
+  const home = homedir();
+  const homeWithSep = home.endsWith(pathSep) ? home : `${home}${pathSep}`;
+  return (dir === home || dir.startsWith(homeWithSep)) ? `~${dir.slice(home.length)}` : dir;
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Paths to common .planning files. */

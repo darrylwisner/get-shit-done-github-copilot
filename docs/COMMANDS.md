@@ -162,6 +162,17 @@ Research, plan, and verify a phase.
 - With `--research`: force-refresh — re-spawn researcher unconditionally, no prompt.
 - With `--view`: print existing RESEARCH.md to stdout, no spawn. Errors if RESEARCH.md missing.
 
+**Package Legitimacy Gate (v1.51):**
+When the researcher recommends external packages, it runs `slopcheck install <pkg> --json` on each one and writes a `## Package Legitimacy Audit` table to RESEARCH.md recording Registry, Age, Downloads, Source Repo, and slopcheck verdict. Verdicts:
+
+- `[SLOP]` — package removed from RESEARCH.md entirely; never reaches the planner
+- `[SUS]` — package flagged; planner inserts `checkpoint:human-verify` before the install task
+- `[OK]` — package approved; no checkpoint added
+
+Packages sourced from WebSearch are tagged `[ASSUMED]` (not `[VERIFIED]`) and treated the same as `[SUS]` — they get a human checkpoint before install. If `slopcheck` cannot be installed, every recommended package is tagged `[ASSUMED]` and gated.
+
+See [Package Legitimacy Gate in the User Guide](USER-GUIDE.md#package-legitimacy-gate-v151) for the full checkpoint format, verdict table, and troubleshooting.
+
 ```bash
 /gsd-plan-phase 1                              # Research + plan + verify phase 1
 /gsd-plan-phase 3 --skip-research              # Plan without research (familiar domain)
@@ -226,6 +237,8 @@ Execute all plans in a phase with wave-based parallelization, or run a specific 
 
 **Prerequisites:** Phase has PLAN.md files
 **Produces:** per-plan `{phase}-{N}-SUMMARY.md`, git commits, and `{phase}-VERIFICATION.md` when the phase is fully complete
+
+**Package install failures (v1.51):** If a plan's install step fails, the executor surfaces a `checkpoint:human-verify` and stops. It does not auto-install a similarly-named alternative. This is intentional — silently substituting package names is how slopsquatting spreads. Respond to the checkpoint after verifying the package on its registry page.
 
 ```bash
 /gsd-execute-phase 1                # Execute phase 1

@@ -21,6 +21,11 @@ import {
   resolveAgentsDir,
   getRuntimeConfigDir,
   detectRuntime,
+  resolveGlobalSkillsBase,
+  resolveGlobalSkillDir,
+  resolveGlobalSkillMarkdownPath,
+  renderGlobalSkillsBaseDisplayPath,
+  renderGlobalSkillDisplayPath,
   findProjectRoot,
   SUPPORTED_RUNTIMES,
   type Runtime,
@@ -427,6 +432,55 @@ describe('resolveAgentsDir (runtime-aware)', () => {
 });
 
 // ─── findProjectRoot (issue #2623) ─────────────────────────────────────────
+
+describe('runtime-global skills directory helpers', () => {
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of RUNTIME_ENV_VARS) { saved[k] = process.env[k]; delete process.env[k]; }
+  });
+  afterEach(() => {
+    for (const k of RUNTIME_ENV_VARS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('appends /skills for runtimes with a global skills directory', () => {
+    process.env.CODEX_HOME = '/codex';
+    expect(resolveGlobalSkillsBase('codex')).toBe(join('/codex', 'skills'));
+    expect(resolveGlobalSkillDir('codex', 'demo')).toBe(join('/codex', 'skills', 'demo'));
+    expect(resolveGlobalSkillMarkdownPath('codex', 'demo')).toBe(join('/codex', 'skills', 'demo', 'SKILL.md'));
+  });
+
+  it('returns null for cline and renders unsupported display path', () => {
+    expect(resolveGlobalSkillsBase('cline')).toBeNull();
+    expect(renderGlobalSkillsBaseDisplayPath('cline')).toBe('(cline does not use a skills directory)');
+    expect(resolveGlobalSkillDir('cline', 'demo')).toBeNull();
+    expect(resolveGlobalSkillMarkdownPath('cline', 'demo')).toBeNull();
+    expect(renderGlobalSkillDisplayPath('cline', 'demo')).toBe('(cline does not use a skills directory)');
+  });
+
+  it('renders home-relative display paths with ~ for warnings', () => {
+    expect(renderGlobalSkillsBaseDisplayPath('claude')).toBe('~/.claude/skills');
+    expect(renderGlobalSkillDisplayPath('claude', 'demo')).toBe(join('~/.claude/skills', 'demo'));
+  });
+
+  it('rejects path-traversal segments — resolveGlobalSkillDir returns null for ../../foo', () => {
+    process.env.CODEX_HOME = '/codex';
+    expect(resolveGlobalSkillDir('codex', '../../foo')).toBeNull();
+    expect(resolveGlobalSkillDir('codex', '../escape')).toBeNull();
+    expect(resolveGlobalSkillDir('codex', '')).toBeNull();
+    // Absolute path as skillName is also rejected
+    expect(resolveGlobalSkillDir('codex', '/abs/path')).toBeNull();
+    // Legitimate name still works
+    expect(resolveGlobalSkillDir('codex', 'demo')).toBe(join('/codex', 'skills', 'demo'));
+    // resolveGlobalSkillMarkdownPath must also propagate the null for unsafe inputs
+    expect(resolveGlobalSkillMarkdownPath('codex', '../../foo')).toBeNull();
+    expect(resolveGlobalSkillMarkdownPath('codex', '../escape')).toBeNull();
+    expect(resolveGlobalSkillMarkdownPath('codex', '')).toBeNull();
+    expect(resolveGlobalSkillMarkdownPath('codex', '/abs/path')).toBeNull();
+  });
+});
 
 describe('findProjectRoot (multi-repo .planning resolution)', () => {
   let workspace: string;
