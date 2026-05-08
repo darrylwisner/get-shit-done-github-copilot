@@ -815,10 +815,36 @@ function buildStateFrontmatter(bodyContent, cwd) {
           let diskTotalSummaries = 0;
           let diskCompletedPhases = 0;
 
+          // Regex constants mirror roadmap.cjs:countPhasePlansAndSummaries (#3257).
+          const PLAN_OUTLINE_RE = /-PLAN-OUTLINE\.md$/i;
+          const PLAN_PRE_BOUNCE_RE = /\.pre-bounce\.md$/i;
           for (const dir of phaseDirs) {
-            const files = fs.readdirSync(path.join(phasesDir, dir));
-            const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-            const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+            const phaseDir = path.join(phasesDir, dir);
+            const topFiles = fs.readdirSync(phaseDir);
+            // Canonical flat-layout plan files in phase root.
+            let plans = topFiles.filter(f =>
+              (f.endsWith('-PLAN.md') || f === 'PLAN.md') &&
+              !PLAN_OUTLINE_RE.test(f) && !PLAN_PRE_BOUNCE_RE.test(f)
+            ).length;
+            let summaries = topFiles.filter(f =>
+              f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md'
+            ).length;
+            // Nested layout (post-#3139): phases/<N>/plans/<N>-PLAN-<NN>-<slug>.md
+            // Mirrors roadmap.cjs:countPhasePlansAndSummaries — do NOT extract here
+            // (shared helper is tracked as follow-on for k014).
+            const nestedPlansDir = path.join(phaseDir, 'plans');
+            if (fs.existsSync(nestedPlansDir)) {
+              try {
+                const nested = fs.readdirSync(nestedPlansDir);
+                plans += nested.filter(f =>
+                  (/^PLAN-\d+.*\.md$/i.test(f) || /-PLAN-\d+.*\.md$/i.test(f)) &&
+                  !PLAN_OUTLINE_RE.test(f) && !PLAN_PRE_BOUNCE_RE.test(f)
+                ).length;
+                summaries += nested.filter(f =>
+                  /^SUMMARY-\d+.*\.md$/i.test(f) || /-SUMMARY-\d+.*\.md$/i.test(f)
+                ).length;
+              } catch { /* ignore if plans/ is not a readable directory */ }
+            }
             diskTotalPlans += plans;
             diskTotalSummaries += summaries;
             if (plans > 0 && summaries >= plans) diskCompletedPhases++;
@@ -1433,8 +1459,32 @@ function cmdStateValidate(cwd, raw) {
       if (phaseDir) {
         const phaseDirPath = path.join(phasesDir, phaseDir.name);
         const files = fs.readdirSync(phaseDirPath);
-        const diskPlans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-        const diskSummaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+        // Regex constants mirror roadmap.cjs:countPhasePlansAndSummaries (#3257).
+        const PLAN_OUTLINE_RE_V = /-PLAN-OUTLINE\.md$/i;
+        const PLAN_PRE_BOUNCE_RE_V = /\.pre-bounce\.md$/i;
+        let diskPlans = files.filter(f =>
+          (f.endsWith('-PLAN.md') || f === 'PLAN.md') &&
+          !PLAN_OUTLINE_RE_V.test(f) && !PLAN_PRE_BOUNCE_RE_V.test(f)
+        ).length;
+        let diskSummaries = files.filter(f =>
+          f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md'
+        ).length;
+        // Nested layout (post-#3139): phases/<N>/plans/<N>-PLAN-<NN>-<slug>.md
+        // Mirrors roadmap.cjs:countPhasePlansAndSummaries — do NOT extract here
+        // (shared helper is tracked as follow-on for k014).
+        const nestedPlansDirV = path.join(phaseDirPath, 'plans');
+        if (fs.existsSync(nestedPlansDirV)) {
+          try {
+            const nested = fs.readdirSync(nestedPlansDirV);
+            diskPlans += nested.filter(f =>
+              (/^PLAN-\d+.*\.md$/i.test(f) || /-PLAN-\d+.*\.md$/i.test(f)) &&
+              !PLAN_OUTLINE_RE_V.test(f) && !PLAN_PRE_BOUNCE_RE_V.test(f)
+            ).length;
+            diskSummaries += nested.filter(f =>
+              /^SUMMARY-\d+.*\.md$/i.test(f) || /-SUMMARY-\d+.*\.md$/i.test(f)
+            ).length;
+          } catch { /* ignore if plans/ is not a readable directory */ }
+        }
 
         // Check plan count mismatch
         if (totalPlansInPhase !== null && diskPlans !== totalPlansInPhase) {
@@ -1513,11 +1563,37 @@ function cmdStateSync(cwd, options, raw) {
   let highestIncompletePhaseplanCount = 0;
   let highestIncompletePhaseSummaryCount = 0;
 
+  // Regex constants mirror roadmap.cjs:countPhasePlansAndSummaries (#3257).
+  const PLAN_OUTLINE_RE_S = /-PLAN-OUTLINE\.md$/i;
+  const PLAN_PRE_BOUNCE_RE_S = /\.pre-bounce\.md$/i;
+
   for (const dir of entries) {
     const dirPath = path.join(phasesDir, dir);
     const files = fs.readdirSync(dirPath);
-    const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-    const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+    // Canonical flat-layout plan files in phase root.
+    let plans = files.filter(f =>
+      (f.endsWith('-PLAN.md') || f === 'PLAN.md') &&
+      !PLAN_OUTLINE_RE_S.test(f) && !PLAN_PRE_BOUNCE_RE_S.test(f)
+    ).length;
+    let summaries = files.filter(f =>
+      f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md'
+    ).length;
+    // Nested layout (post-#3139): phases/<N>/plans/<N>-PLAN-<NN>-<slug>.md
+    // Mirrors roadmap.cjs:countPhasePlansAndSummaries — do NOT extract here
+    // (shared helper is tracked as follow-on for k014).
+    const nestedPlansDirS = path.join(dirPath, 'plans');
+    if (fs.existsSync(nestedPlansDirS)) {
+      try {
+        const nested = fs.readdirSync(nestedPlansDirS);
+        plans += nested.filter(f =>
+          (/^PLAN-\d+.*\.md$/i.test(f) || /-PLAN-\d+.*\.md$/i.test(f)) &&
+          !PLAN_OUTLINE_RE_S.test(f) && !PLAN_PRE_BOUNCE_RE_S.test(f)
+        ).length;
+        summaries += nested.filter(f =>
+          /^SUMMARY-\d+.*\.md$/i.test(f) || /-SUMMARY-\d+.*\.md$/i.test(f)
+        ).length;
+      } catch { /* ignore if plans/ is not a readable directory */ }
+    }
     totalDiskPlans += plans;
     totalDiskSummaries += summaries;
     if (plans > 0 && summaries >= plans) diskCompletedPhases++;
