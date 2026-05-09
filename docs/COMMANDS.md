@@ -20,12 +20,12 @@ Six namespace routers ship as the first-stage entry points in v1.40. They keep t
 
 | Command | Routes to |
 |---------|-----------|
-| `/gsd-workflow` | Phase pipeline — discuss / plan / execute / verify / phase / progress |
-| `/gsd-project` | Project lifecycle — milestones, audits, summary |
-| `/gsd-quality` | Quality gates — code review, debug, audit, security, eval, ui |
-| `/gsd-context` | Codebase intelligence — map, graphify, docs, learnings |
-| `/gsd-manage` | Management — config, workspace, workstreams, thread, update, ship, inbox |
-| `/gsd-ideate` | Exploration & capture — explore, sketch, spike, spec, capture |
+| `/gsd-ns-workflow` | Phase pipeline — discuss / plan / execute / verify / phase / progress |
+| `/gsd-ns-project` | Project lifecycle — milestones, audits, summary |
+| `/gsd-ns-review` | Quality gates — code review, debug, audit, security, eval, ui |
+| `/gsd-ns-context` | Codebase intelligence — map, graphify, docs, learnings |
+| `/gsd-ns-manage` | Management — config, workspace, workstreams, thread, update, ship, inbox |
+| `/gsd-ns-ideate` | Exploration & capture — explore, sketch, spike, spec, capture |
 
 The namespace skills are **additive** — every existing concrete command (e.g. `/gsd-plan-phase`, `/gsd-code-review --fix`) is still invocable directly.
 
@@ -719,6 +719,7 @@ Generate a developer behavioral profile from Claude Code session analysis across
 
 **Generated artifacts:**
 - `USER-PROFILE.md` — Full behavioral profile
+- `/gsd-dev-preferences` command — Load preferences in any session
 - `CLAUDE.md` profile section — Auto-discovered by Claude Code
 
 ```bash

@@ -282,7 +282,6 @@
       "phase-command-router.cjs",
       "phase.cjs",
       "phases-command-router.cjs",
-      "plan-scan.cjs",
       "planning-workspace.cjs",
       "profile-output.cjs",
       "profile-pipeline.cjs",

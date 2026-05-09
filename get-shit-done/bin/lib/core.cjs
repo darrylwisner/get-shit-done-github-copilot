@@ -8,13 +8,6 @@ const path = require('path');
 const { execSync, execFileSync, spawnSync } = require('child_process');
 const { MODEL_PROFILES, AGENT_TO_PHASE_TYPE, VALID_PHASE_TYPES, AGENT_DEFAULT_TIERS, VALID_AGENT_TIERS, nextTier } = require('./model-profiles.cjs');
 const { MODEL_ALIAS_MAP, RUNTIME_PROFILE_MAP, KNOWN_RUNTIMES, RUNTIMES_WITH_REASONING_EFFORT } = require('./model-catalog.cjs');
-const {
-  resolveWorktreeContext,
-  parseWorktreePorcelain: parseWorktreePorcelainPolicy,
-  planWorktreePrune,
-  executeWorktreePrunePlan,
-  inspectWorktreeHealth,
-} = require('./worktree-safety.cjs');
 // Compatibility shim: new imports should use planning-workspace.cjs directly.
 const {
   planningDir,
@@ -339,14 +332,11 @@ function _deepMergeConfig(base, overlay) {
   return result;
 }
 
-function loadConfig(cwd, options = {}) {
-  const activeWorkstream = Object.prototype.hasOwnProperty.call(options, 'workstream')
-    ? options.workstream
-    : (process.env.GSD_WORKSTREAM || null);
+function loadConfig(cwd) {
   // When GSD_WORKSTREAM is set, load root config first so workstream config
   // can inherit from it. This prevents users from duplicating model_overrides,
   // workflow.*, etc. across every workstream config (#2714).
-  const ws = activeWorkstream;
+  const ws = process.env.GSD_WORKSTREAM || null;
   let rootParsed = null;
   if (ws) {
     const rootConfigPath = path.join(planningRoot(cwd), 'config.json');
@@ -358,7 +348,7 @@ function loadConfig(cwd, options = {}) {
     }
   }
 
-  const configPath = path.join(planningDir(cwd, ws), 'config.json');
+  const configPath = path.join(planningDir(cwd), 'config.json');
   const defaults = CONFIG_DEFAULTS;
 
   try {
@@ -545,11 +535,18 @@ function loadConfig(cwd, options = {}) {
     // If .planning/ exists, the project is initialized — just missing config.json.
     // When GSD_WORKSTREAM is set and root config was loaded, the workstream config
     // doesn't exist — treat root config as the effective config for this workstream.
-    if (fs.existsSync(planningDir(cwd, ws))) {
+    if (fs.existsSync(planningDir(cwd))) {
       if (rootParsed) {
         // Workstream has no config.json: re-parse using root config as the sole source.
-        // Keep env immutable by explicitly reloading with workstream context cleared.
-        return loadConfig(cwd, { workstream: null });
+        // Temporarily clear GSD_WORKSTREAM so planningDir() returns root .planning/,
+        // then reload. This is safe: rootParsed is already the root config object.
+        const savedWs = process.env.GSD_WORKSTREAM;
+        delete process.env.GSD_WORKSTREAM;
+        try {
+          return loadConfig(cwd);
+        } finally {
+          process.env.GSD_WORKSTREAM = savedWs;
+        }
       }
       return defaults;
     }
@@ -722,38 +719,16 @@ function normalizeMd(content) {
   return text;
 }
 
-// Default timeout for worktree-related git subprocess calls (matches worktree-safety.cjs).
-// Prevents `git worktree list --porcelain` and similar calls from blocking the parent
-// process indefinitely when git is stalled (locked index, hung remote, NFS mount freeze).
-// Callers can override via an options bag if needed.
-const DEFAULT_GIT_TIMEOUT_MS = 10000;
-
-/**
- * Execute a git command with a bounded timeout.
- *
- * Return shape: { exitCode, stdout, stderr, timedOut, error }
- *   - timedOut: true when spawnSync reports SIGTERM + ETIMEDOUT — callers must
- *               branch on this to surface a structured warning (PRED.k302).
- *   - error:    spawnSync error object or null
- *
- * Backward-compatible: existing callers that only read exitCode/stdout/stderr
- * continue to work unchanged.
- */
-function execGit(cwd, args, options = {}) {
-  const timeout = options.timeout ?? DEFAULT_GIT_TIMEOUT_MS;
+function execGit(cwd, args) {
   const result = spawnSync('git', args, {
     cwd,
     stdio: 'pipe',
     encoding: 'utf-8',
-    timeout,
   });
-  const timedOut = result.signal === 'SIGTERM' && result.error?.code === 'ETIMEDOUT';
   return {
     exitCode: result.status ?? 1,
     stdout: (result.stdout ?? '').toString().trim(),
     stderr: (result.stderr ?? '').toString().trim(),
-    timedOut,
-    error: result.error ?? null,
   };
 }
 
@@ -765,11 +740,30 @@ function execGit(cwd, args, options = {}) {
  * Returns the main worktree path, or cwd if not in a worktree.
  */
 function resolveWorktreeRoot(cwd) {
-  const context = resolveWorktreeContext(cwd, {
-    execGit,
-    existsSync: fs.existsSync,
-  });
-  return context.effectiveRoot;
+  // If the current directory already has its own .planning/, respect it.
+  // This handles linked worktrees with independent planning state (e.g., Conductor workspaces).
+  if (fs.existsSync(path.join(cwd, '.planning'))) {
+    return cwd;
+  }
+
+  // Check if we're in a linked worktree
+  const gitDir = execGit(cwd, ['rev-parse', '--git-dir']);
+  const commonDir = execGit(cwd, ['rev-parse', '--git-common-dir']);
+
+  if (gitDir.exitCode !== 0 || commonDir.exitCode !== 0) return cwd;
+
+  // In a linked worktree, .git is a file pointing to .git/worktrees/<name>
+  // and git-common-dir points to the main repo's .git directory
+  const gitDirResolved = path.resolve(cwd, gitDir.stdout);
+  const commonDirResolved = path.resolve(cwd, commonDir.stdout);
+
+  if (gitDirResolved !== commonDirResolved) {
+    // We're in a linked worktree — resolve main worktree root
+    // The common dir is the main repo's .git, so its parent is the main worktree root
+    return path.dirname(commonDirResolved);
+  }
+
+  return cwd;
 }
 
 /**
@@ -781,7 +775,21 @@ function resolveWorktreeRoot(cwd) {
  * @returns {{ path: string, branch: string }[]}
  */
 function parseWorktreePorcelain(porcelain) {
-  return parseWorktreePorcelainPolicy(porcelain);
+  const entries = [];
+  let current = null;
+  for (const line of porcelain.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      current = { path: line.slice('worktree '.length).trim(), branch: null };
+    } else if (line.startsWith('branch refs/heads/') && current) {
+      current.branch = line.slice('branch refs/heads/'.length).trim();
+    } else if (line === '' && current) {
+      if (current.branch) entries.push(current);
+      current = null;
+    }
+  }
+  // flush last entry if file doesn't end with blank line
+  if (current && current.branch) entries.push(current);
+  return entries;
 }
 
 /**
@@ -794,24 +802,31 @@ function parseWorktreePorcelain(porcelain) {
  * @returns {string[]} list of worktree paths that were removed (always empty)
  */
 function pruneOrphanedWorktrees(repoRoot) {
+  const pruned = [];
+  const cwd = process.cwd();
+
   try {
-    const plan = planWorktreePrune(
-      repoRoot,
-      { allowDestructive: false },
-      { execGit, parseWorktreePorcelain }
-    );
-    const pruneResult = executeWorktreePrunePlan(plan, { execGit });
-    if (pruneResult && pruneResult.timedOut) {
-      // AC2: surface structured warning instead of silently swallowing the timeout.
-      // Uses process.stderr.write to match the [gsd-tools] WARNING prefix style.
-      process.stderr.write(
-        '[gsd-tools] WARNING: worktree health check degraded' +
-        ' — git worktree prune timed out after 10s.' +
-        ' Orphaned worktree metadata may remain until the next successful run.\n'
-      );
+    // 1. Get all worktrees in porcelain format
+    const listResult = execGit(repoRoot, ['worktree', 'list', '--porcelain']);
+    if (listResult.exitCode !== 0) return pruned;
+
+    const worktrees = parseWorktreePorcelain(listResult.stdout);
+    if (worktrees.length === 0) {
+      execGit(repoRoot, ['worktree', 'prune']);
+      return pruned;
     }
+
+    // Destructive removal of linked worktrees is intentionally disabled.
+    // Keep metadata cleanup only (git worktree prune), which clears stale refs
+    // for manually-deleted directories without removing active sibling worktrees.
+    void cwd;
+    void worktrees;
   } catch { /* never crash the caller */ }
-  return [];
+
+  // Always run prune to clear stale references (e.g. manually-deleted dirs)
+  execGit(repoRoot, ['worktree', 'prune']);
+
+  return pruned;
 }
 
 // ─── Planning workspace (pathing + active workstream + lock) moved to planning-workspace.cjs ───
@@ -2032,5 +2047,4 @@ module.exports = {
   atomicWriteFileSync,
   timeAgo,
   pruneOrphanedWorktrees,
-  inspectWorktreeHealth,
 };

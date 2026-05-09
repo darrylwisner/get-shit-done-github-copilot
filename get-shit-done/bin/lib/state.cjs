@@ -7,7 +7,6 @@ const path = require('path');
 const { escapeRegex, loadConfig, getMilestoneInfo, getMilestonePhaseFilter, normalizeMd, output, error, atomicWriteFileSync } = require('./core.cjs');
 const { planningDir, planningPaths } = require('./planning-workspace.cjs');
 const { extractFrontmatter, reconstructFrontmatter } = require('./frontmatter.cjs');
-const scanPhasePlans = require('./plan-scan.cjs');
 
 // Cache disk scan results from buildStateFrontmatter per cwd per process (#1967).
 // Avoids re-reading N+1 directories on every state write when the phase structure
@@ -401,16 +400,14 @@ function cmdStateRecordMetric(cwd, options, raw) {
   }
 
   let recorded = false;
-  let created = false;
   readModifyWriteStateMd(statePath, (content) => {
     // Find Performance Metrics section and its table
     const metricsPattern = /(##\s*Performance Metrics[\s\S]*?\n\|[^\n]+\n\|[-|\s]+\n)([\s\S]*?)(?=\n##|\n$|$)/i;
     const metricsMatch = content.match(metricsPattern);
 
-    const newRow = `| Phase ${phase} P${plan} | ${duration} | ${tasks || '-'} tasks | ${files || '-'} files |`;
-
     if (metricsMatch) {
       let tableBody = metricsMatch[2].trimEnd();
+      const newRow = `| Phase ${phase} P${plan} | ${duration} | ${tasks || '-'} tasks | ${files || '-'} files |`;
 
       if (tableBody.trim() === '' || tableBody.includes('None yet')) {
         tableBody = newRow;
@@ -421,27 +418,14 @@ function cmdStateRecordMetric(cwd, options, raw) {
       recorded = true;
       return content.replace(metricsPattern, (_match, header) => `${header}${tableBody}\n`);
     }
-
-    // Section absent — DWIM: auto-create canonical ## Performance Metrics scaffold,
-    // then append the row. Matches state begin-phase / advance-plan DWIM behavior.
-    const scaffold = [
-      '',
-      '## Performance Metrics',
-      '',
-      '| Phase | Plan | Duration | Notes |',
-      '|-------|------|----------|-------|',
-      newRow,
-      '',
-    ].join('\n');
-    recorded = true;
-    created = true;
-    return content.trimEnd() + '\n' + scaffold;
+    return content;
   }, cwd);
 
-  // Auto-create fallback guarantees recorded === true; no else branch needed.
-  const result = { recorded: true, phase, plan, duration };
-  if (created) result.created = true;
-  output(result, raw, 'true');
+  if (recorded) {
+    output({ recorded: true, phase, plan, duration }, raw, 'true');
+  } else {
+    output({ recorded: false, reason: 'Performance Metrics section not found in STATE.md' }, raw, 'false');
+  }
 }
 
 function cmdStateUpdateProgress(cwd, raw) {
@@ -459,9 +443,9 @@ function cmdStateUpdateProgress(cwd, raw) {
       .filter(e => e.isDirectory()).map(e => e.name)
       .filter(isDirInMilestone);
     for (const dir of phaseDirs) {
-      const { planCount, summaryCount } = scanPhasePlans(path.join(phasesDir, dir));
-      totalPlans += planCount;
-      totalSummaries += summaryCount;
+      const files = fs.readdirSync(path.join(phasesDir, dir));
+      totalPlans += files.filter(f => f.match(/-PLAN\.md$/i)).length;
+      totalSummaries += files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
     }
   }
 
@@ -516,7 +500,6 @@ function cmdStateAddDecision(cwd, options, raw) {
 
   const entry = `- [Phase ${phase || '?'}]: ${summaryText}${rationaleText ? ` — ${rationaleText}` : ''}`;
   let added = false;
-  let created = false;
 
   readModifyWriteStateMd(statePath, (content) => {
     // Find Decisions section (various heading patterns)
@@ -531,25 +514,14 @@ function cmdStateAddDecision(cwd, options, raw) {
       added = true;
       return content.replace(sectionPattern, (_match, header) => `${header}${sectionBody}`);
     }
-
-    // Section absent — DWIM: auto-create canonical ## Decisions scaffold,
-    // then append the entry. Matches state begin-phase / advance-plan DWIM behavior.
-    const scaffold = [
-      '',
-      '## Decisions',
-      '',
-      entry,
-      '',
-    ].join('\n');
-    added = true;
-    created = true;
-    return content.trimEnd() + '\n' + scaffold;
+    return content;
   }, cwd);
 
-  // Auto-create fallback guarantees added === true; no else branch needed.
-  const result = { added: true, decision: entry };
-  if (created) result.created = true;
-  output(result, raw, 'true');
+  if (added) {
+    output({ added: true, decision: entry }, raw, 'true');
+  } else {
+    output({ added: false, reason: 'Decisions section not found in STATE.md' }, raw, 'false');
+  }
 }
 
 function cmdStateAddBlocker(cwd, text, raw) {
@@ -569,7 +541,6 @@ function cmdStateAddBlocker(cwd, text, raw) {
 
   const entry = `- ${blockerText}`;
   let added = false;
-  let created = false;
 
   readModifyWriteStateMd(statePath, (content) => {
     const sectionPattern = /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
@@ -582,24 +553,14 @@ function cmdStateAddBlocker(cwd, text, raw) {
       added = true;
       return content.replace(sectionPattern, (_match, header) => `${header}${sectionBody}`);
     }
-
-    // Section absent — DWIM: auto-create canonical ### Blockers scaffold.
-    const scaffold = [
-      '',
-      '### Blockers',
-      '',
-      entry,
-      '',
-    ].join('\n');
-    added = true;
-    created = true;
-    return content.trimEnd() + '\n' + scaffold;
+    return content;
   }, cwd);
 
-  // Auto-create fallback guarantees added === true; no else branch needed.
-  const result = { added: true, blocker: blockerText };
-  if (created) result.created = true;
-  output(result, raw, 'true');
+  if (added) {
+    output({ added: true, blocker: blockerText }, raw, 'true');
+  } else {
+    output({ added: false, reason: 'Blockers section not found in STATE.md' }, raw, 'false');
+  }
 }
 
 function cmdStateResolveBlocker(cwd, text, raw) {
@@ -874,11 +835,12 @@ function buildStateFrontmatter(bodyContent, cwd) {
           let diskCompletedPhases = 0;
 
           for (const dir of phaseDirs) {
-            const phaseDir = path.join(phasesDir, dir);
-            const { planCount, summaryCount, completed } = scanPhasePlans(phaseDir);
-            diskTotalPlans += planCount;
-            diskTotalSummaries += summaryCount;
-            if (completed) diskCompletedPhases++;
+            const files = fs.readdirSync(path.join(phasesDir, dir));
+            const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
+            const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+            diskTotalPlans += plans;
+            diskTotalSummaries += summaries;
+            if (plans > 0 && summaries >= plans) diskCompletedPhases++;
           }
           cached = {
             totalPhases: isDirInMilestone.phaseCount > 0
@@ -1489,7 +1451,9 @@ function cmdStateValidate(cwd, raw) {
       const phaseDir = entries.find(e => e.isDirectory() && e.name.startsWith(normalized.replace(/^0+/, '').padStart(2, '0')));
       if (phaseDir) {
         const phaseDirPath = path.join(phasesDir, phaseDir.name);
-        const { planCount: diskPlans, summaryCount: diskSummaries } = scanPhasePlans(phaseDirPath);
+        const files = fs.readdirSync(phaseDirPath);
+        const diskPlans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
+        const diskSummaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
 
         // Check plan count mismatch
         if (totalPlansInPhase !== null && diskPlans !== totalPlansInPhase) {
@@ -1498,7 +1462,6 @@ function cmdStateValidate(cwd, raw) {
         }
 
         // Check for VERIFICATION.md
-        const files = fs.readdirSync(phaseDirPath);
         const verificationFiles = files.filter(f => f.includes('VERIFICATION') && f.endsWith('.md'));
         for (const vf of verificationFiles) {
           try {
@@ -1571,10 +1534,12 @@ function cmdStateSync(cwd, options, raw) {
 
   for (const dir of entries) {
     const dirPath = path.join(phasesDir, dir);
-    const { planCount: plans, summaryCount: summaries, completed } = scanPhasePlans(dirPath);
+    const files = fs.readdirSync(dirPath);
+    const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
+    const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
     totalDiskPlans += plans;
     totalDiskSummaries += summaries;
-    if (completed) diskCompletedPhases++;
+    if (plans > 0 && summaries >= plans) diskCompletedPhases++;
 
     // Track the highest phase with incomplete plans (or any plans)
     const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);

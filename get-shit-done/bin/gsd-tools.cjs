@@ -172,7 +172,7 @@
 const fs = require('fs');
 const path = require('path');
 const core = require('./lib/core.cjs');
-const { error, findProjectRoot, ERROR_REASON } = core;
+const { error, findProjectRoot } = core;
 const { getActiveWorkstream } = require('./lib/planning-workspace.cjs');
 const state = require('./lib/state.cjs');
 const phase = require('./lib/phase.cjs');
@@ -315,8 +315,6 @@ async function main() {
   if (jsonErrorsIdx !== -1) {
     core.setJsonErrorMode(true);
     args.splice(jsonErrorsIdx, 1);
-  } else if (process.env.GSD_JSON_ERRORS === '1') {
-    core.setJsonErrorMode(true);
   }
 
   // --pick <name>: extract a single field from JSON output (replaces jq dependency).
@@ -326,7 +324,7 @@ async function main() {
   let pickField = null;
   if (pickIdx !== -1) {
     pickField = args[pickIdx + 1];
-    if (!pickField || pickField.startsWith('--')) error('Missing value for --pick', ERROR_REASON.USAGE);
+    if (!pickField || pickField.startsWith('--')) error('Missing value for --pick');
     args.splice(pickIdx, 2);
   }
 
@@ -372,7 +370,7 @@ async function main() {
   // supported by the dispatcher so `--help` is actually useful for
   // discovery; previously it was a partial subset that didn't include
   // phase / roadmap / milestone / progress / etc.
-  const TOP_LEVEL_USAGE = 'Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>] [--ws <name>] [--json-errors]\n' +
+  const TOP_LEVEL_USAGE = 'Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>] [--ws <name>]\n' +
     'Commands: agent-skills, audit-open, audit-uat, check-commit, commit, commit-to-subrepo, ' +
     'config-ensure-section, config-get, config-new-project, config-path, config-set, ' +
     'current-timestamp, detect-custom-files, docs-init, extract-messages, find-phase, ' +
@@ -381,12 +379,6 @@ async function main() {
     'learnings, list-todos, milestone, phase, phase-plan-index, phases, profile-questionnaire, ' +
     'profile-sample, progress, requirements, resolve-model, roadmap, scaffold, state, ' +
     'template, validate, verify, verify-path-exists, verify-summary, workstream\n\n' +
-    'Global flags:\n' +
-    '  --raw              Emit raw output without post-processing\n' +
-    '  --pick <field>     Extract a single field from JSON output (dot/bracket notation)\n' +
-    '  --cwd <path>       Override working directory for project-root resolution\n' +
-    '  --ws <name>        Override active workstream (or set GSD_WORKSTREAM)\n' +
-    '  --json-errors      Emit structured JSON error objects on stderr (or set GSD_JSON_ERRORS=1)\n\n' +
     'For command-specific argument requirements, invoke the command without args ' +
     '(e.g. `gsd-tools phase add`) — the resulting error lists what is required.';
 
@@ -415,7 +407,7 @@ async function main() {
   const NEVER_VALID_FLAGS = new Set(['--version', '-v']);
   for (const arg of args) {
     if (NEVER_VALID_FLAGS.has(arg)) {
-      error(`Unknown flag: ${arg}\ngsd-tools does not accept version flags. Run "gsd-tools" with no arguments for usage.`, ERROR_REASON.USAGE);
+      error(`Unknown flag: ${arg}\ngsd-tools does not accept version flags. Run "gsd-tools" with no arguments for usage.`);
     }
   }
 
@@ -1030,7 +1022,7 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
         const planningDir = path.join(cwd, '.planning');
         core.output(intel.intelUpdate(planningDir), raw);
       } else {
-        error('Unknown intel subcommand. Available: query, status, update, diff, snapshot, patch-meta, validate, extract-exports', ERROR_REASON.SDK_UNKNOWN_COMMAND);
+        error('Unknown intel subcommand. Available: query, status, update, diff, snapshot, patch-meta, validate, extract-exports');
       }
       break;
     }
@@ -1211,7 +1203,7 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
         const rest = originalCommand.slice(dotIdx + 1);
         suggestion = ` — did you mean: "${head} ${rest}"?`;
       }
-      error(`Unknown command: ${command}${suggestion}`, ERROR_REASON.SDK_UNKNOWN_COMMAND);
+      error(`Unknown command: ${command}${suggestion}`);
     }
   }
 }

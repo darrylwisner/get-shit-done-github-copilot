@@ -8,7 +8,6 @@ const { execSync } = require('child_process');
 const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
 const { planningPaths, planningDir, planningRoot } = require('./planning-workspace.cjs');
 const { maskIfSecret } = require('./secrets.cjs');
-const scanPhasePlans = require('./plan-scan.cjs');
 
 // Accept all bold/colon variants of the Requirements header (#2769):
 // **Requirements:** / **Requirements**: / **Requirements** : render the
@@ -16,11 +15,27 @@ const scanPhasePlans = require('./plan-scan.cjs');
 const REQUIREMENTS_HEADER_RE = /^\*\*Requirements:?\*\*[^\S\n]*:?[^\S\n]*([^\n]*)$/m;
 
 function listPhaseSummaryFiles(phaseDir) {
-  return scanPhasePlans(phaseDir).summaryFiles;
+  const phaseFiles = fs.readdirSync(phaseDir);
+  const rootSummaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+  const plansDir = path.join(phaseDir, 'plans');
+  let nestedSummaries = [];
+  if (fs.existsSync(plansDir)) {
+    const files = fs.readdirSync(plansDir);
+    nestedSummaries = files.filter(f => /^SUMMARY-\d+.*\.md$/i.test(f));
+  }
+  return rootSummaries.concat(nestedSummaries);
 }
 
 function listPhasePlanFiles(phaseDir) {
-  return scanPhasePlans(phaseDir).planFiles;
+  const phaseFiles = fs.readdirSync(phaseDir);
+  const rootPlans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
+  const plansDir = path.join(phaseDir, 'plans');
+  let nestedPlans = [];
+  if (fs.existsSync(plansDir)) {
+    const files = fs.readdirSync(plansDir);
+    nestedPlans = files.filter(f => /^PLAN-\d+.*\.md$/i.test(f));
+  }
+  return rootPlans.concat(nestedPlans);
 }
 
 function getLatestCompletedMilestone(cwd) {
@@ -197,7 +212,8 @@ function cmdInitExecutePhase(cwd, phase, raw, options = {}) {
         const warnings = [];
         const phasesPath = planningPaths(cwd).phases;
         if (phaseInfo && phaseInfo.directory && fs.existsSync(path.join(cwd, phaseInfo.directory))) {
-          const diskPlans = listPhasePlanFiles(path.join(cwd, phaseInfo.directory)).length;
+          const files = fs.readdirSync(path.join(cwd, phaseInfo.directory));
+          const diskPlans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
           const totalPlansRaw = stateExtractField(stateContent, 'Total Plans in Phase');
           const totalPlansInPhase = totalPlansRaw ? parseInt(totalPlansRaw, 10) : null;
           if (totalPlansInPhase !== null && diskPlans !== totalPlansInPhase) {
@@ -256,23 +272,6 @@ function cmdInitPlanPhase(cwd, phase, raw, options = {}) {
     : null;
   const phase_req_ids = (reqExtracted && reqExtracted !== 'TBD') ? reqExtracted : null;
 
-  // #3287: compute the canonical directory name with project_code prefix so
-  // the first-touch mkdir in /gsd-plan-phase stays consistent with phase.add.
-  const phaseDirPlan = phaseInfo?.directory || null;
-  const phaseNumberPlan = phaseInfo?.phase_number || null;
-  const phaseNamePlan = phaseInfo?.phase_name || null;
-  const rawProjectCodePlan = config.project_code || '';
-  let expectedPhaseDirPlan = null;
-  if (!phaseDirPlan && phaseNumberPlan && phaseNamePlan) {
-    const paddedNum = normalizePhaseName(phaseNumberPlan);
-    const slug = generateSlugInternal(phaseNamePlan).substring(0, 60);
-    if (slug) {
-      const prefix = rawProjectCodePlan ? `${rawProjectCodePlan}-` : '';
-      const dirName = `${prefix}${paddedNum}-${slug}`;
-      expectedPhaseDirPlan = toPosixPath(path.relative(cwd, path.join(planningPaths(cwd).phases, dirName)));
-    }
-  }
-
   const result = {
     // Models
     researcher_model: resolveModelInternal(cwd, 'gsd-phase-researcher'),
@@ -295,12 +294,11 @@ function cmdInitPlanPhase(cwd, phase, raw, options = {}) {
 
     // Phase info
     phase_found: !!phaseInfo,
-    phase_dir: phaseDirPlan,
-    expected_phase_dir: expectedPhaseDirPlan,
-    phase_number: phaseNumberPlan,
-    phase_name: phaseNamePlan,
+    phase_dir: phaseInfo?.directory || null,
+    phase_number: phaseInfo?.phase_number || null,
+    phase_name: phaseInfo?.phase_name || null,
     phase_slug: phaseInfo?.phase_slug || null,
-    padded_phase: phaseNumberPlan ? normalizePhaseName(phaseNumberPlan) : null,
+    padded_phase: phaseInfo?.phase_number ? normalizePhaseName(phaseInfo.phase_number) : null,
     phase_req_ids,
 
     // Existing artifacts
@@ -749,23 +747,6 @@ function cmdInitPhaseOp(cwd, phase, raw) {
     }
   }
 
-  // #3287: compute the canonical directory name with project_code prefix so
-  // the first-touch mkdir in /gsd-discuss-phase stays consistent with phase.add.
-  const phaseDir = phaseInfo?.directory || null;
-  const phaseNumber = phaseInfo?.phase_number || null;
-  const phaseName = phaseInfo?.phase_name || null;
-  const rawProjectCode = config.project_code || '';
-  let expectedPhaseDir = null;
-  if (!phaseDir && phaseNumber && phaseName) {
-    const paddedNum = normalizePhaseName(phaseNumber);
-    const slug = generateSlugInternal(phaseName).substring(0, 60);
-    if (slug) {
-      const prefix = rawProjectCode ? `${rawProjectCode}-` : '';
-      const dirName = `${prefix}${paddedNum}-${slug}`;
-      expectedPhaseDir = toPosixPath(path.relative(cwd, path.join(planningPaths(cwd).phases, dirName)));
-    }
-  }
-
   const result = {
     // Config
     commit_docs: config.commit_docs,
@@ -779,12 +760,11 @@ function cmdInitPhaseOp(cwd, phase, raw) {
 
     // Phase info
     phase_found: !!phaseInfo,
-    phase_dir: phaseDir,
-    expected_phase_dir: expectedPhaseDir,
-    phase_number: phaseNumber,
-    phase_name: phaseName,
+    phase_dir: phaseInfo?.directory || null,
+    phase_number: phaseInfo?.phase_number || null,
+    phase_name: phaseInfo?.phase_name || null,
     phase_slug: phaseInfo?.phase_slug || null,
-    padded_phase: phaseNumber ? normalizePhaseName(phaseNumber) : null,
+    padded_phase: phaseInfo?.phase_number ? normalizePhaseName(phaseInfo.phase_number) : null,
 
     // Existing artifacts
     has_research: phaseInfo?.has_research || false,
