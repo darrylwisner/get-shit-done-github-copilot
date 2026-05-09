@@ -24,8 +24,6 @@ import { join, relative } from 'node:path';
 
 import { toPosixPath, stateExtractField } from './helpers.js';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { validateWorkstreamName, toWorkstreamSlug } from '../workstream-name-policy.js';
-import { readActiveWorkstream, writeActiveWorkstream } from './active-workstream-store.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────
@@ -60,6 +58,37 @@ function filterSummaryFiles(files: string[]): string[] {
   return files.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
 }
 
+function getActiveWorkstream(projectDir: string): string | null {
+  const filePath = join(planningRoot(projectDir), 'active-workstream');
+  try {
+    const name = readFileSync(filePath, 'utf-8').trim();
+    if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+      try { unlinkSync(filePath); } catch { /* already gone */ }
+      return null;
+    }
+    const wsDir = join(workstreamsDir(projectDir), name);
+    if (!existsSync(wsDir)) {
+      try { unlinkSync(filePath); } catch { /* already gone */ }
+      return null;
+    }
+    return name;
+  } catch {
+    return null;
+  }
+}
+
+function setActiveWorkstream(projectDir: string, name: string | null): void {
+  const filePath = join(planningRoot(projectDir), 'active-workstream');
+  if (!name) {
+    try { unlinkSync(filePath); } catch { /* already gone */ }
+    return;
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    throw new Error('Invalid workstream name: must be alphanumeric, hyphens, and underscores only');
+  }
+  writeFileSync(filePath, name + '\n', 'utf-8');
+}
+
 // ─── Handlers ─────────────────────────────────────────────────────────────
 
 /**
@@ -68,7 +97,7 @@ function filterSummaryFiles(files: string[]): string[] {
  * Port of `cmdWorkstreamGet` from `workstream.cjs` lines 367–371.
  */
 export const workstreamGet: QueryHandler = async (_args, projectDir) => {
-  const active = readActiveWorkstream(projectDir);
+  const active = getActiveWorkstream(projectDir);
   const wsRoot = workstreamsDir(projectDir);
   return {
     data: {
@@ -97,7 +126,7 @@ export const workstreamCreate: QueryHandler = async (args, projectDir) => {
     return { data: { created: false, reason: 'invalid workstream name — path separators not allowed' } };
   }
 
-  const slug = toWorkstreamSlug(rawName);
+  const slug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (!slug) return { data: { created: false, reason: 'invalid workstream name — must contain at least one alphanumeric character' } };
 
   const baseDir = planningRoot(projectDir);
@@ -145,7 +174,7 @@ export const workstreamCreate: QueryHandler = async (args, projectDir) => {
     writeFileSync(statePath, stateContent, 'utf-8');
   }
 
-  writeActiveWorkstream(projectDir, slug);
+  setActiveWorkstream(projectDir, slug);
 
   const relPath = toPosixPath(relative(projectDir, wsDir));
   return {
@@ -186,13 +215,13 @@ export const workstreamSet: QueryHandler = async (args, projectDir) => {
     if (name !== '--clear') {
       return { data: { set: false, reason: 'name required. Usage: workstream set <name> (or workstream set --clear to unset)' } };
     }
-    const previous = readActiveWorkstream(projectDir);
-    writeActiveWorkstream(projectDir, null);
+    const previous = getActiveWorkstream(projectDir);
+    setActiveWorkstream(projectDir, null);
     return { data: { active: null, cleared: true, previous: previous || null } };
   }
 
-  if (!validateWorkstreamName(name)) {
-    return { data: { active: null, error: 'invalid_name', message: 'Workstream name must be alphanumeric, hyphens, underscores, or dots only' } };
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    return { data: { active: null, error: 'invalid_name', message: 'Workstream name must be alphanumeric, hyphens, and underscores only' } };
   }
 
   const wsDir = join(workstreamsDir(projectDir), name);
@@ -200,7 +229,7 @@ export const workstreamSet: QueryHandler = async (args, projectDir) => {
     return { data: { active: null, error: 'not_found', workstream: name } };
   }
 
-  writeActiveWorkstream(projectDir, name);
+  setActiveWorkstream(projectDir, name);
   syncRootStateMirror(projectDir, name);
   return { data: { active: name, set: true, mirror_synced: existsSync(join(wsDir, 'STATE.md')) } };
 };
@@ -287,8 +316,8 @@ export const workstreamComplete: QueryHandler = async (args, projectDir) => {
     return { data: { completed: false, error: 'not_found', workstream: name } };
   }
 
-  const active = readActiveWorkstream(projectDir);
-  if (active === name) writeActiveWorkstream(projectDir, null);
+  const active = getActiveWorkstream(projectDir);
+  if (active === name) setActiveWorkstream(projectDir, null);
 
   const archiveDir = join(root, 'milestones');
   const today = new Date().toISOString().split('T')[0];
@@ -312,7 +341,7 @@ export const workstreamComplete: QueryHandler = async (args, projectDir) => {
       try { renameSync(join(archivePath, fname), join(wsDir, fname)); } catch { /* rollback */ }
     }
     try { rmdirSync(archivePath); } catch { /* cleanup */ }
-    if (active === name) writeActiveWorkstream(projectDir, name);
+    if (active === name) setActiveWorkstream(projectDir, name);
     return { data: { completed: false, error: 'archive_failed', message: String(err), workstream: name } };
   }
 
@@ -353,7 +382,7 @@ export const workstreamProgress: QueryHandler = async (_args, projectDir) => {
     };
   }
 
-  const active = readActiveWorkstream(projectDir);
+  const active = getActiveWorkstream(projectDir);
   const entries = readdirSync(wsRoot, { withFileTypes: true });
   const workstreams: Array<{
     name: string;

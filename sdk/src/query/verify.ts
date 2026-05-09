@@ -26,7 +26,6 @@ import {
   planningPaths,
 } from './helpers.js';
 import type { QueryHandler } from './utils.js';
-import { resolveGsdToolsPath } from '../sdk-package-compatibility.js';
 
 // ─── verifyPlanStructure ───────────────────────────────────────────────────
 
@@ -659,7 +658,14 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
 export const verifyCodebaseDrift: QueryHandler = async (_args, projectDir) => {
   try {
     const { execFileSync } = await import('node:child_process');
-    const toolsPath = resolveGsdToolsPath(projectDir);
+    const { fileURLToPath } = await import('node:url');
+    const { dirname, resolve } = await import('node:path');
+    const here = typeof __dirname === 'string'
+      ? __dirname
+      : dirname(fileURLToPath(import.meta.url));
+    // sdk/src/query -> ../../../get-shit-done/bin/gsd-tools.cjs
+    // sdk/dist/query -> ../../../get-shit-done/bin/gsd-tools.cjs
+    const toolsPath = resolve(here, '..', '..', '..', 'get-shit-done', 'bin', 'gsd-tools.cjs');
     const out = execFileSync(process.execPath, [toolsPath, 'verify', 'codebase-drift'], {
       cwd: projectDir,
       encoding: 'utf-8',

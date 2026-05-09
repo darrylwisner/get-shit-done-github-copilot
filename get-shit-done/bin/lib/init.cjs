@@ -1770,7 +1770,6 @@ function cmdAgentSkills(cwd, agentType, raw) {
  */
 function buildSkillManifest(cwd, skillsDir = null) {
   const { extractFrontmatter } = require('./frontmatter.cjs');
-  const { getGlobalSkillsBase } = require('./runtime-homes.cjs');
   const os = require('os');
 
   const canonicalRoots = skillsDir ? [{
@@ -1812,13 +1811,13 @@ function buildSkillManifest(cwd, skillsDir = null) {
     },
     {
       root: '~/.claude/skills',
-      path: getGlobalSkillsBase('claude'),
+      path: path.join(os.homedir(), '.claude', 'skills'),
       scope: 'global',
       kind: 'skills',
     },
     {
       root: '~/.codex/skills',
-      path: getGlobalSkillsBase('codex'),
+      path: path.join(os.homedir(), '.codex', 'skills'),
       scope: 'global',
       kind: 'skills',
     },

@@ -5,7 +5,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, mkdir, rm, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { GSDError, ErrorClassification, exitCodeFor } from '../errors.js';
 
@@ -218,8 +217,7 @@ describe('resolveModel', () => {
 describe('MODEL_PROFILES', () => {
   it('contains every shipped gsd agent file on disk (#3229)', async () => {
     const { MODEL_PROFILES } = await import('./config-query.js');
-    // config-query.test.ts lives at sdk/src/query/ — three levels from repo root
-    const repoRoot = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
+    const repoRoot = resolve(process.cwd(), '..');
     const agentFiles = (await readdir(join(repoRoot, 'agents')))
       .filter((f) => /^gsd-.*\.md$/.test(f))
       .map((f) => f.replace(/\.md$/, ''))

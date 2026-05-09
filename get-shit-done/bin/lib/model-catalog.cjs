@@ -69,7 +69,7 @@ function getAgentToModelMapForProfile(normalizedProfile) {
   const profile = VALID_PROFILES.includes(normalizedProfile) ? normalizedProfile : 'balanced';
   const out = {};
   for (const [agent, profiles] of Object.entries(MODEL_PROFILES)) {
-    out[agent] = profile === 'inherit' ? 'inherit' : (profiles[profile] ?? profiles.balanced);
+    out[agent] = profile === 'inherit' ? 'inherit' : profiles[profile];
   }
   return out;
 }
