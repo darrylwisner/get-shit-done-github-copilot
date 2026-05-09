@@ -7,6 +7,7 @@ const path = require('path');
 const { escapeRegex, loadConfig, getMilestoneInfo, getMilestonePhaseFilter, normalizeMd, output, error, atomicWriteFileSync } = require('./core.cjs');
 const { planningDir, planningPaths } = require('./planning-workspace.cjs');
 const { extractFrontmatter, reconstructFrontmatter } = require('./frontmatter.cjs');
+const scanPhasePlans = require('./plan-scan.cjs');
 
 // Cache disk scan results from buildStateFrontmatter per cwd per process (#1967).
 // Avoids re-reading N+1 directories on every state write when the phase structure
@@ -458,9 +459,9 @@ function cmdStateUpdateProgress(cwd, raw) {
       .filter(e => e.isDirectory()).map(e => e.name)
       .filter(isDirInMilestone);
     for (const dir of phaseDirs) {
-      const files = fs.readdirSync(path.join(phasesDir, dir));
-      totalPlans += files.filter(f => f.match(/-PLAN\.md$/i)).length;
-      totalSummaries += files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+      const { planCount, summaryCount } = scanPhasePlans(path.join(phasesDir, dir));
+      totalPlans += planCount;
+      totalSummaries += summaryCount;
     }
   }
 
@@ -873,12 +874,11 @@ function buildStateFrontmatter(bodyContent, cwd) {
           let diskCompletedPhases = 0;
 
           for (const dir of phaseDirs) {
-            const files = fs.readdirSync(path.join(phasesDir, dir));
-            const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-            const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
-            diskTotalPlans += plans;
-            diskTotalSummaries += summaries;
-            if (plans > 0 && summaries >= plans) diskCompletedPhases++;
+            const phaseDir = path.join(phasesDir, dir);
+            const { planCount, summaryCount, completed } = scanPhasePlans(phaseDir);
+            diskTotalPlans += planCount;
+            diskTotalSummaries += summaryCount;
+            if (completed) diskCompletedPhases++;
           }
           cached = {
             totalPhases: isDirInMilestone.phaseCount > 0
@@ -1489,9 +1489,7 @@ function cmdStateValidate(cwd, raw) {
       const phaseDir = entries.find(e => e.isDirectory() && e.name.startsWith(normalized.replace(/^0+/, '').padStart(2, '0')));
       if (phaseDir) {
         const phaseDirPath = path.join(phasesDir, phaseDir.name);
-        const files = fs.readdirSync(phaseDirPath);
-        const diskPlans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-        const diskSummaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+        const { planCount: diskPlans, summaryCount: diskSummaries } = scanPhasePlans(phaseDirPath);
 
         // Check plan count mismatch
         if (totalPlansInPhase !== null && diskPlans !== totalPlansInPhase) {
@@ -1500,6 +1498,7 @@ function cmdStateValidate(cwd, raw) {
         }
 
         // Check for VERIFICATION.md
+        const files = fs.readdirSync(phaseDirPath);
         const verificationFiles = files.filter(f => f.includes('VERIFICATION') && f.endsWith('.md'));
         for (const vf of verificationFiles) {
           try {
@@ -1572,12 +1571,10 @@ function cmdStateSync(cwd, options, raw) {
 
   for (const dir of entries) {
     const dirPath = path.join(phasesDir, dir);
-    const files = fs.readdirSync(dirPath);
-    const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-    const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+    const { planCount: plans, summaryCount: summaries, completed } = scanPhasePlans(dirPath);
     totalDiskPlans += plans;
     totalDiskSummaries += summaries;
-    if (plans > 0 && summaries >= plans) diskCompletedPhases++;
+    if (completed) diskCompletedPhases++;
 
     // Track the highest phase with incomplete plans (or any plans)
     const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
