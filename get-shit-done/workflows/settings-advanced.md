@@ -349,6 +349,7 @@ Built-in tier defaults by runtime:
 | `qwen`     | `qwen3-max-2026-01-23`        | `qwen3-coder-plus`              | `qwen3-coder-next`            |
 | `opencode` | `anthropic/claude-opus-4-7`   | `anthropic/claude-sonnet-4-6`   | `anthropic/claude-haiku-4-5`  |
 | `copilot`  | `claude-opus-4-7`             | `claude-sonnet-4-6`             | `claude-haiku-4-5`            |
+| `hermes`   | `anthropic/claude-opus-4-7`   | `anthropic/claude-sonnet-4-6`   | `anthropic/claude-haiku-4-5`  |
 | Group B (`kilo`, `cline`, `cursor`, `windsurf`, `augment`, `trae`, `codebuddy`, `antigravity`) | (no built-in default — your runtime handles model selection) | | |
 
 Display a table to the user showing the effective configuration:
@@ -381,6 +382,7 @@ AskUserQuestion([
       { label: "qwen", description: "Qwen CLI." },
       { label: "opencode", description: "OpenCode (uses anthropic/ prefix)." },
       { label: "copilot", description: "GitHub Copilot." },
+      { label: "hermes", description: "Hermes (uses anthropic/ prefix)." },
       { label: "Other (Group B or custom)", description: "kilo, cline, cursor, windsurf, augment, trae, codebuddy, antigravity, or a custom runtime string. Overrides are honored even though no built-in map exists." }
     ]
   }

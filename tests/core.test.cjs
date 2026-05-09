@@ -289,6 +289,17 @@ describe('loadConfig workstream config inheritance (#2714)', () => {
     assert.strictEqual(config.model_profile, 'quality');
     assert.deepStrictEqual(config.model_overrides, { 'gsd-executor': 'opus' });
   });
+
+  test('loadConfig does not mutate GSD_WORKSTREAM when workstream config is missing', () => {
+    writeRootConfig({ model_profile: 'quality' });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'workstreams', 'feature-f'), { recursive: true });
+    process.env.GSD_WORKSTREAM = 'feature-f';
+
+    const config = loadConfig(tmpDir);
+
+    assert.strictEqual(config.model_profile, 'quality');
+    assert.strictEqual(process.env.GSD_WORKSTREAM, 'feature-f');
+  });
 });
 
 // ─── loadConfig commit_docs gitignore auto-detection (#1250) ──────────────────
@@ -434,9 +445,19 @@ describe('resolveModelInternal', () => {
       assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'sonnet');
     });
 
-    test('returns sonnet for unknown agent type even with inherit profile', () => {
+    test('returns opus for unknown agent type with quality profile', () => {
+      writeConfig({ model_profile: 'quality' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'opus');
+    });
+
+    test('returns haiku for unknown agent type with budget profile', () => {
+      writeConfig({ model_profile: 'budget' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'haiku');
+    });
+
+    test('returns inherit for unknown agent type with inherit profile', () => {
       writeConfig({ model_profile: 'inherit' });
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'sonnet');
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'inherit');
     });
 
     test('defaults to balanced profile when model_profile missing', () => {

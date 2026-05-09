@@ -13,6 +13,7 @@ const path = require('path');
 const { output, error, toPosixPath, getMilestoneInfo, generateSlugInternal, filterPlanFiles, filterSummaryFiles, readSubdirectories } = require('./core.cjs');
 const { planningPaths, planningRoot, setActiveWorkstream, getActiveWorkstream } = require('./planning-workspace.cjs');
 const { stateExtractField } = require('./state.cjs');
+const { toWorkstreamSlug, hasInvalidPathSegment, isValidActiveWorkstreamName } = require('./workstream-name-policy.cjs');
 
 // ─── Migration ──────────────────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ const { stateExtractField } = require('./state.cjs');
  * milestones/, research/, codebase/, todos/) stay in place.
  */
 function migrateToWorkstreams(cwd, workstreamName) {
-  if (!workstreamName || /[/\\]/.test(workstreamName) || workstreamName === '.' || workstreamName === '..') {
+  if (!workstreamName || hasInvalidPathSegment(workstreamName)) {
     throw new Error('Invalid workstream name for migration');
   }
 
@@ -72,7 +73,7 @@ function cmdWorkstreamCreate(cwd, name, options, raw) {
     error('workstream name required. Usage: workstream create <name>');
   }
 
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = toWorkstreamSlug(name);
   if (!slug) {
     error('Invalid workstream name — must contain at least one alphanumeric character');
   }
@@ -101,7 +102,15 @@ function cmdWorkstreamCreate(cwd, name, options, raw) {
       const migrateName = options.migrateName || null;
       let existingWsName;
       if (migrateName) {
-        existingWsName = migrateName;
+        existingWsName = toWorkstreamSlug(migrateName);
+        if (!existingWsName) {
+          output({
+            created: false,
+            error: 'migration_failed',
+            message: 'Invalid migrate-name — must contain at least one alphanumeric character',
+          }, raw);
+          return;
+        }
       } else {
         try {
           const milestone = getMilestoneInfo(cwd);
@@ -222,7 +231,7 @@ function cmdWorkstreamList(cwd, raw) {
 
 function cmdWorkstreamStatus(cwd, name, raw) {
   if (!name) error('workstream name required. Usage: workstream status <name>');
-  if (/[/\\]/.test(name) || name === '.' || name === '..') error('Invalid workstream name');
+  if (hasInvalidPathSegment(name)) error('Invalid workstream name');
 
   const wsDir = path.join(planningRoot(cwd), 'workstreams', name);
   if (!fs.existsSync(wsDir)) {
@@ -279,7 +288,7 @@ function cmdWorkstreamStatus(cwd, name, raw) {
 
 function cmdWorkstreamComplete(cwd, name, options, raw) {
   if (!name) error('workstream name required. Usage: workstream complete <name>');
-  if (/[/\\]/.test(name) || name === '.' || name === '..') error('Invalid workstream name');
+  if (hasInvalidPathSegment(name)) error('Invalid workstream name');
 
   const root = planningRoot(cwd);
   const wsRoot = path.join(root, 'workstreams');
@@ -350,8 +359,8 @@ function cmdWorkstreamSet(cwd, name, raw) {
     return;
   }
 
-  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-    output({ active: null, error: 'invalid_name', message: 'Workstream name must be alphanumeric, hyphens, and underscores only' }, raw);
+  if (!isValidActiveWorkstreamName(name)) {
+    output({ active: null, error: 'invalid_name', message: 'Workstream name must be alphanumeric, hyphens, underscores, or dots' }, raw);
     return;
   }
 
