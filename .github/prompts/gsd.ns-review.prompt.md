@@ -1,5 +1,5 @@
 ---
-name: gsd-quality
+name: gsd-review
 description: "quality gates | code review debug audit security eval ui"
 tools: ['read']
 agent: agent

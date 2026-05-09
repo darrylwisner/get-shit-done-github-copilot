@@ -4,18 +4,7 @@ All notable changes to GSD will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.41.0...HEAD)
-
-### Enhancement
-
-- **Shared `scanPhasePlans()` helper extracted to `bin/lib/plan-scan.cjs` (k014)** — four divergent copies of the plan-scan algorithm in `state.cjs`, `roadmap.cjs`, `init.cjs`, and `phase.cjs` are now replaced by a single canonical implementation. Each copy had subtle differences (regex shapes, flat vs nested coverage, pre-bounce exclusion patterns) that caused plan-count drift between the four callers. The helper covers both the flat layout (`*-PLAN.md`, `PLAN.md`) and the nested layout (`plans/PLAN-NN-slug.md`) introduced in #3139, and returns `{ planCount, summaryCount, completed, hasNestedPlans, planFiles, summaryFiles }`. (#3262)
-
-### Fixed
-
-- **`/gsd-discuss-phase` and `/gsd-plan-phase` first-touch creation now apply `project_code` prefix consistently with `phase.add`/`phase.insert`** — projects with `project_code` set in `.planning/config.json` no longer accumulate a two-headed naming convention (`01-foundation/` mixed with `XR-02.1-spike/`). `init.phase-op` and `init.plan-phase` now expose `expected_phase_dir` (with prefix) in their JSON bundle; workflow fallback mkdir calls use this value instead of constructing the path from `padded_phase`+`phase_slug`. `phase.scaffold phase-dir` (CJS and SDK) also fixed. (#3287)
-- **`buildStateFrontmatter` now counts nested `plans/<N>-PLAN-<NN>-<slug>.md` files** — repos using the nested layout (post-#3139) no longer get `progress.*` counters silently overwritten downward on every state mutation. Sibling fix to #3115/#3139/#3191. (#3261)
-
-## [1.41.0](https://github.com/gsd-build/get-shit-done/compare/v1.40.0...v1.41.0) - 2026-05-07
+## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.39.1...HEAD)
 
 ### Fixed
 
