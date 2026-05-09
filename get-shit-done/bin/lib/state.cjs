@@ -7,37 +7,20 @@ const path = require('path');
 const { escapeRegex, loadConfig, getMilestoneInfo, getMilestonePhaseFilter, normalizeMd, output, error, atomicWriteFileSync } = require('./core.cjs');
 const { planningDir, planningPaths } = require('./planning-workspace.cjs');
 const { extractFrontmatter, reconstructFrontmatter } = require('./frontmatter.cjs');
+const scanPhasePlans = require('./plan-scan.cjs');
+const {
+  computeProgressPercent,
+  normalizeProgressNumbers,
+  normalizeStateStatus,
+  shouldPreserveExistingProgress,
+  stateExtractField,
+  stateReplaceField,
+} = require('./state-document.cjs');
 
 // Cache disk scan results from buildStateFrontmatter per cwd per process (#1967).
 // Avoids re-reading N+1 directories on every state write when the phase structure
 // hasn't changed within the same gsd-tools invocation.
 const _diskScanCache = new Map();
-
-/**
- * Compute the canonical progress percent for STATE.md frontmatter and body.
- *
- * Uses min(plan_fraction, phase_fraction) when both denominators are > 0.
- * This prevents a false "100%" when ROADMAP declares future phases that have no
- * disk dirs yet — all plans summarised only means 100% of *realized* work done,
- * not 100% of the declared milestone (#3242 Bug B).
- *
- * @param {number|null} completedPlans
- * @param {number|null} totalPlans
- * @param {number|null} completedPhases
- * @param {number|null} totalPhases  - ROADMAP-declared count (>= realised dirs)
- * @returns {number|null}  0–100, or null when there is no data
- */
-function computeProgressPercent(completedPlans, totalPlans, completedPhases, totalPhases) {
-  const hasPlanData = totalPlans !== null && totalPlans > 0 && completedPlans !== null;
-  const hasPhaseData = totalPhases !== null && totalPhases > 0 && completedPhases !== null;
-
-  if (!hasPlanData && !hasPhaseData) return null;
-
-  const planFraction = hasPlanData ? completedPlans / totalPlans : 1;
-  const phaseFraction = hasPhaseData ? completedPhases / totalPhases : 1;
-
-  return Math.min(100, Math.round(Math.min(planFraction, phaseFraction) * 100));
-}
 
 /** Shorthand — every state command needs this path */
 function getStatePath(cwd) {
@@ -53,19 +36,6 @@ process.on('exit', () => {
     try { require('fs').unlinkSync(lockPath); } catch { /* already gone */ }
   }
 });
-
-// Shared helper: extract a field value from STATE.md content.
-// Supports both **Field:** bold and plain Field: format.
-// Horizontal whitespace only after ':' so YAML keys like `progress:` do not match as `Progress:` (parity with sdk/helpers stateExtractField).
-function stateExtractField(content, fieldName) {
-  const escaped = escapeRegex(fieldName);
-  const boldPattern = new RegExp(`\\*\\*${escaped}:\\*\\*[ \\t]*(.+)`, 'i');
-  const boldMatch = content.match(boldPattern);
-  if (boldMatch) return boldMatch[1].trim();
-  const plainPattern = new RegExp(`^${escaped}:[ \\t]*(.+)`, 'im');
-  const plainMatch = content.match(plainPattern);
-  return plainMatch ? plainMatch[1].trim() : null;
-}
 
 function cmdStateLoad(cwd, raw) {
   const config = loadConfig(cwd);
@@ -189,16 +159,9 @@ function cmdStatePatch(cwd, patches, raw) {
     // Use atomic read-modify-write to prevent lost updates from concurrent agents
     readModifyWriteStateMd(statePath, (content) => {
       for (const [field, value] of Object.entries(patches)) {
-        const fieldEscaped = escapeRegex(field);
-        // Try **Field:** bold format first, then plain Field: format
-        const boldPattern = new RegExp(`(\\*\\*${fieldEscaped}:\\*\\*\\s*)(.*)`, 'i');
-        const plainPattern = new RegExp(`(^${fieldEscaped}:\\s*)(.*)`, 'im');
-
-        if (boldPattern.test(content)) {
-          content = content.replace(boldPattern, (_match, prefix) => `${prefix}${value}`);
-          results.updated.push(field);
-        } else if (plainPattern.test(content)) {
-          content = content.replace(plainPattern, (_match, prefix) => `${prefix}${value}`);
+        const result = stateReplaceField(content, field, value);
+        if (result) {
+          content = result;
           results.updated.push(field);
         } else {
           results.failed.push(field);
@@ -228,23 +191,22 @@ function cmdStateUpdate(cwd, field, value) {
   const statePath = planningPaths(cwd).state;
   try {
     let updated = false;
-    // resync: false — cmdStateUpdate only replaces a body text line.
-    // Triggering syncStateFrontmatter would rebuild progress.* from disk, trampling
-    // manually-curated cross-milestone counters stored in the frontmatter (#3242 Bug A).
+    const shouldResync = ['Progress', 'Total Plans in Phase', 'Total Phases'].includes(field);
+    // Preserve curated progress for body-only updates, but allow fields that
+    // directly project into progress.* frontmatter to rebuild after mutation.
     readModifyWriteStateMd(statePath, (content) => {
-      const fieldEscaped = escapeRegex(field);
-      // Try **Field:** bold format first, then plain Field: format
-      const boldPattern = new RegExp(`(\\*\\*${fieldEscaped}:\\*\\*\\s*)(.*)`, 'i');
-      const plainPattern = new RegExp(`(^${fieldEscaped}:\\s*)(.*)`, 'im');
-      if (boldPattern.test(content)) {
+      const body = stripFrontmatter(content);
+      const result = stateReplaceField(body, field, value);
+      if (result) {
         updated = true;
-        return content.replace(boldPattern, (_match, prefix) => `${prefix}${value}`);
-      } else if (plainPattern.test(content)) {
-        updated = true;
-        return content.replace(plainPattern, (_match, prefix) => `${prefix}${value}`);
+        const existingFm = extractFrontmatter(content);
+        if (Object.keys(existingFm).length > 0) {
+          return `---\n${reconstructFrontmatter(existingFm)}\n---\n\n${result}`;
+        }
+        return result;
       }
       return content;
-    }, cwd, { resync: false });
+    }, cwd, { resync: shouldResync });
     if (updated) {
       output({ updated: true });
     } else {
@@ -256,21 +218,6 @@ function cmdStateUpdate(cwd, field, value) {
 }
 
 // ─── State Progression Engine ────────────────────────────────────────────────
-// stateExtractField is defined above (shared helper) — do not duplicate.
-
-function stateReplaceField(content, fieldName, newValue) {
-  const escaped = escapeRegex(fieldName);
-  // Try **Field:** bold format first, then plain Field: format
-  const boldPattern = new RegExp(`(\\*\\*${escaped}:\\*\\*\\s*)(.*)`, 'i');
-  if (boldPattern.test(content)) {
-    return content.replace(boldPattern, (_match, prefix) => `${prefix}${newValue}`);
-  }
-  const plainPattern = new RegExp(`(^${escaped}:\\s*)(.*)`, 'im');
-  if (plainPattern.test(content)) {
-    return content.replace(plainPattern, (_match, prefix) => `${prefix}${newValue}`);
-  }
-  return null;
-}
 
 /**
  * Replace a STATE.md field with fallback field name support.
@@ -400,14 +347,16 @@ function cmdStateRecordMetric(cwd, options, raw) {
   }
 
   let recorded = false;
+  let created = false;
   readModifyWriteStateMd(statePath, (content) => {
     // Find Performance Metrics section and its table
     const metricsPattern = /(##\s*Performance Metrics[\s\S]*?\n\|[^\n]+\n\|[-|\s]+\n)([\s\S]*?)(?=\n##|\n$|$)/i;
     const metricsMatch = content.match(metricsPattern);
 
+    const newRow = `| Phase ${phase} P${plan} | ${duration} | ${tasks || '-'} tasks | ${files || '-'} files |`;
+
     if (metricsMatch) {
       let tableBody = metricsMatch[2].trimEnd();
-      const newRow = `| Phase ${phase} P${plan} | ${duration} | ${tasks || '-'} tasks | ${files || '-'} files |`;
 
       if (tableBody.trim() === '' || tableBody.includes('None yet')) {
         tableBody = newRow;
@@ -418,14 +367,27 @@ function cmdStateRecordMetric(cwd, options, raw) {
       recorded = true;
       return content.replace(metricsPattern, (_match, header) => `${header}${tableBody}\n`);
     }
-    return content;
+
+    // Section absent — DWIM: auto-create canonical ## Performance Metrics scaffold,
+    // then append the row. Matches state begin-phase / advance-plan DWIM behavior.
+    const scaffold = [
+      '',
+      '## Performance Metrics',
+      '',
+      '| Phase | Plan | Duration | Notes |',
+      '|-------|------|----------|-------|',
+      newRow,
+      '',
+    ].join('\n');
+    recorded = true;
+    created = true;
+    return content.trimEnd() + '\n' + scaffold;
   }, cwd);
 
-  if (recorded) {
-    output({ recorded: true, phase, plan, duration }, raw, 'true');
-  } else {
-    output({ recorded: false, reason: 'Performance Metrics section not found in STATE.md' }, raw, 'false');
-  }
+  // Auto-create fallback guarantees recorded === true; no else branch needed.
+  const result = { recorded: true, phase, plan, duration };
+  if (created) result.created = true;
+  output(result, raw, 'true');
 }
 
 function cmdStateUpdateProgress(cwd, raw) {
@@ -443,9 +405,9 @@ function cmdStateUpdateProgress(cwd, raw) {
       .filter(e => e.isDirectory()).map(e => e.name)
       .filter(isDirInMilestone);
     for (const dir of phaseDirs) {
-      const files = fs.readdirSync(path.join(phasesDir, dir));
-      totalPlans += files.filter(f => f.match(/-PLAN\.md$/i)).length;
-      totalSummaries += files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+      const { planCount, summaryCount } = scanPhasePlans(path.join(phasesDir, dir));
+      totalPlans += planCount;
+      totalSummaries += summaryCount;
     }
   }
 
@@ -500,6 +462,7 @@ function cmdStateAddDecision(cwd, options, raw) {
 
   const entry = `- [Phase ${phase || '?'}]: ${summaryText}${rationaleText ? ` — ${rationaleText}` : ''}`;
   let added = false;
+  let created = false;
 
   readModifyWriteStateMd(statePath, (content) => {
     // Find Decisions section (various heading patterns)
@@ -514,14 +477,25 @@ function cmdStateAddDecision(cwd, options, raw) {
       added = true;
       return content.replace(sectionPattern, (_match, header) => `${header}${sectionBody}`);
     }
-    return content;
+
+    // Section absent — DWIM: auto-create canonical ## Decisions scaffold,
+    // then append the entry. Matches state begin-phase / advance-plan DWIM behavior.
+    const scaffold = [
+      '',
+      '## Decisions',
+      '',
+      entry,
+      '',
+    ].join('\n');
+    added = true;
+    created = true;
+    return content.trimEnd() + '\n' + scaffold;
   }, cwd);
 
-  if (added) {
-    output({ added: true, decision: entry }, raw, 'true');
-  } else {
-    output({ added: false, reason: 'Decisions section not found in STATE.md' }, raw, 'false');
-  }
+  // Auto-create fallback guarantees added === true; no else branch needed.
+  const result = { added: true, decision: entry };
+  if (created) result.created = true;
+  output(result, raw, 'true');
 }
 
 function cmdStateAddBlocker(cwd, text, raw) {
@@ -541,6 +515,7 @@ function cmdStateAddBlocker(cwd, text, raw) {
 
   const entry = `- ${blockerText}`;
   let added = false;
+  let created = false;
 
   readModifyWriteStateMd(statePath, (content) => {
     const sectionPattern = /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
@@ -553,14 +528,24 @@ function cmdStateAddBlocker(cwd, text, raw) {
       added = true;
       return content.replace(sectionPattern, (_match, header) => `${header}${sectionBody}`);
     }
-    return content;
+
+    // Section absent — DWIM: auto-create canonical ### Blockers scaffold.
+    const scaffold = [
+      '',
+      '### Blockers',
+      '',
+      entry,
+      '',
+    ].join('\n');
+    added = true;
+    created = true;
+    return content.trimEnd() + '\n' + scaffold;
   }, cwd);
 
-  if (added) {
-    output({ added: true, blocker: blockerText }, raw, 'true');
-  } else {
-    output({ added: false, reason: 'Blockers section not found in STATE.md' }, raw, 'false');
-  }
+  // Auto-create fallback guarantees added === true; no else branch needed.
+  const result = { added: true, blocker: blockerText };
+  if (created) result.created = true;
+  output(result, raw, 'true');
 }
 
 function cmdStateResolveBlocker(cwd, text, raw) {
@@ -835,12 +820,11 @@ function buildStateFrontmatter(bodyContent, cwd) {
           let diskCompletedPhases = 0;
 
           for (const dir of phaseDirs) {
-            const files = fs.readdirSync(path.join(phasesDir, dir));
-            const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-            const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
-            diskTotalPlans += plans;
-            diskTotalSummaries += summaries;
-            if (plans > 0 && summaries >= plans) diskCompletedPhases++;
+            const phaseDir = path.join(phasesDir, dir);
+            const { planCount, summaryCount, completed } = scanPhasePlans(phaseDir);
+            diskTotalPlans += planCount;
+            diskTotalSummaries += summaryCount;
+            if (completed) diskCompletedPhases++;
           }
           cached = {
             totalPhases: isDirInMilestone.phaseCount > 0
@@ -871,24 +855,7 @@ function buildStateFrontmatter(bodyContent, cwd) {
     if (pctMatch) progressPercent = parseInt(pctMatch[1], 10);
   }
 
-  // Normalize status to one of: planning, discussing, executing, verifying, paused, completed, unknown
-  let normalizedStatus = status || 'unknown';
-  const statusLower = (status || '').toLowerCase();
-  if (statusLower.includes('paused') || statusLower.includes('stopped') || pausedAt) {
-    normalizedStatus = 'paused';
-  } else if (statusLower.includes('executing') || statusLower.includes('in progress')) {
-    normalizedStatus = 'executing';
-  } else if (statusLower.includes('planning') || statusLower.includes('ready to plan')) {
-    normalizedStatus = 'planning';
-  } else if (statusLower.includes('discussing')) {
-    normalizedStatus = 'discussing';
-  } else if (statusLower.includes('verif')) {
-    normalizedStatus = 'verifying';
-  } else if (statusLower.includes('complete') || statusLower.includes('done')) {
-    normalizedStatus = 'completed';
-  } else if (statusLower.includes('ready to execute')) {
-    normalizedStatus = 'executing';
-  }
+  const normalizedStatus = normalizeStateStatus(status, pausedAt);
 
   const fm = { gsd_state_version: '1.0' };
 
@@ -1087,6 +1054,12 @@ function cmdStateJson(cwd, raw) {
   // Preserve existing status when body-derived status is 'unknown' (same logic as syncStateFrontmatter).
   if (built.status === 'unknown' && existingFm && existingFm.status && existingFm.status !== 'unknown') {
     built.status = existingFm.status;
+  }
+  // Preserve curated cross-milestone aggregates when local disk scanning sees
+  // only a narrower realized subset (#3242 Bug A). Stale lower counters still
+  // rebuild from disk because they do not exceed the derived scan.
+  if (existingFm && shouldPreserveExistingProgress(existingFm.progress, built.progress)) {
+    built.progress = normalizeProgressNumbers(existingFm.progress);
   }
 
   output(built, raw, JSON.stringify(built, null, 2));
@@ -1451,9 +1424,7 @@ function cmdStateValidate(cwd, raw) {
       const phaseDir = entries.find(e => e.isDirectory() && e.name.startsWith(normalized.replace(/^0+/, '').padStart(2, '0')));
       if (phaseDir) {
         const phaseDirPath = path.join(phasesDir, phaseDir.name);
-        const files = fs.readdirSync(phaseDirPath);
-        const diskPlans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-        const diskSummaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+        const { planCount: diskPlans, summaryCount: diskSummaries } = scanPhasePlans(phaseDirPath);
 
         // Check plan count mismatch
         if (totalPlansInPhase !== null && diskPlans !== totalPlansInPhase) {
@@ -1462,6 +1433,7 @@ function cmdStateValidate(cwd, raw) {
         }
 
         // Check for VERIFICATION.md
+        const files = fs.readdirSync(phaseDirPath);
         const verificationFiles = files.filter(f => f.includes('VERIFICATION') && f.endsWith('.md'));
         for (const vf of verificationFiles) {
           try {
@@ -1534,12 +1506,10 @@ function cmdStateSync(cwd, options, raw) {
 
   for (const dir of entries) {
     const dirPath = path.join(phasesDir, dir);
-    const files = fs.readdirSync(dirPath);
-    const plans = files.filter(f => f.match(/-PLAN\.md$/i)).length;
-    const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i)).length;
+    const { planCount: plans, summaryCount: summaries, completed } = scanPhasePlans(dirPath);
     totalDiskPlans += plans;
     totalDiskSummaries += summaries;
-    if (plans > 0 && summaries >= plans) diskCompletedPhases++;
+    if (completed) diskCompletedPhases++;
 
     // Track the highest phase with incomplete plans (or any plans)
     const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
