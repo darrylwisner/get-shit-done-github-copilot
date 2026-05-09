@@ -382,7 +382,6 @@ AskUserQuestion([
       { label: "qwen", description: "Qwen CLI." },
       { label: "opencode", description: "OpenCode (uses anthropic/ prefix)." },
       { label: "copilot", description: "GitHub Copilot." },
-      { label: "hermes", description: "Hermes (uses anthropic/ prefix)." },
       { label: "Other (Group B or custom)", description: "kilo, cline, cursor, windsurf, augment, trae, codebuddy, antigravity, or a custom runtime string. Overrides are honored even though no built-in map exists." }
     ]
   }

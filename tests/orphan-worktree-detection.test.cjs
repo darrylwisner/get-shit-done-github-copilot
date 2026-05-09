@@ -1,12 +1,13 @@
 // allow-test-rule: architectural-invariant
-// Structural checks verify the health seam exports worktree inspection capability.
-// Behavioral tests cover detection flow via validate health output.
+// verify.cjs must contain the W017 warning code and the worktree list invocation.
+// These checks guard the existence of the detection feature, not its text output.
+// Behavioral tests cover the detection flow; structural tests guard the implementation contract.
 
 /**
  * GSD Tools Tests - Orphan/Stale Worktree Detection (W017)
  *
  * Tests for feat/worktree-health-w017-2167:
- *   - Worktree Safety Policy Module exports health inspection interface (structural)
+ *   - W017 code exists in verify.cjs (structural)
  *   - No false positives on projects without linked worktrees
  *   - Adding the check does not regress baseline health status
  */
@@ -62,20 +63,23 @@ function setupHealthyProject(tmpDir) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Structural: Worktree Safety Policy Module exposes inspection interface
+// 1. Structural: W017 code exists in verify.cjs
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('W017: structural presence', () => {
-  test('worktree-safety module exports inspectWorktreeHealth', () => {
-    const modulePath = path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'worktree-safety.cjs');
-    const seam = require(modulePath);
-    assert.strictEqual(typeof seam.inspectWorktreeHealth, 'function');
+  test('verify.cjs contains W017 warning code', () => {
+    const verifyPath = path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'verify.cjs');
+    const source = fs.readFileSync(verifyPath, 'utf-8');
+    assert.ok(source.includes("'W017'"), 'verify.cjs should contain W017 warning code');
   });
 
-  test('worktree-safety module exports linked worktree listing interface', () => {
-    const modulePath = path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'worktree-safety.cjs');
-    const seam = require(modulePath);
-    assert.strictEqual(typeof seam.listLinkedWorktreePaths, 'function');
+  test('verify.cjs contains worktree list --porcelain invocation', () => {
+    const verifyPath = path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'verify.cjs');
+    const source = fs.readFileSync(verifyPath, 'utf-8');
+    assert.ok(
+      source.includes('worktree') && source.includes('--porcelain'),
+      'verify.cjs should invoke git worktree list --porcelain'
+    );
   });
 });
 
