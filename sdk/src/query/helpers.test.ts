@@ -193,6 +193,11 @@ describe('stateExtractField', () => {
 // ─── planningPaths ──────────────────────────────────────────────────────────
 
 describe('planningPaths', () => {
+  afterEach(() => {
+    delete process.env['GSD_WORKSTREAM'];
+    delete process.env['GSD_PROJECT'];
+  });
+
   it('returns all expected keys', () => {
     const paths = planningPaths('/proj');
     expect(paths).toHaveProperty('planning');
@@ -208,6 +213,19 @@ describe('planningPaths', () => {
     const paths = planningPaths('/proj');
     expect(paths.state).toContain('.planning/STATE.md');
     expect(paths.config).toContain('.planning/config.json');
+  });
+
+  it('uses GSD_PROJECT env when no explicit workstream is provided', () => {
+    process.env['GSD_PROJECT'] = 'proj-scope';
+    const paths = planningPaths('/proj');
+    expect(paths.planning).toContain('/proj/.planning/proj-scope');
+  });
+
+  it('explicit workstream overrides GSD_PROJECT env', () => {
+    process.env['GSD_PROJECT'] = 'proj-scope';
+    const paths = planningPaths('/proj', 'ws-a');
+    expect(paths.planning).toContain('/proj/.planning/workstreams/ws-a');
+    expect(paths.planning).not.toContain('proj-scope');
   });
 });
 
@@ -285,7 +303,7 @@ const RUNTIME_ENV_VARS = [
   'OPENCODE_CONFIG', 'KILO_CONFIG_DIR', 'KILO_CONFIG', 'XDG_CONFIG_HOME',
   'GEMINI_CONFIG_DIR', 'CODEX_HOME', 'COPILOT_CONFIG_DIR', 'ANTIGRAVITY_CONFIG_DIR',
   'CURSOR_CONFIG_DIR', 'WINDSURF_CONFIG_DIR', 'AUGMENT_CONFIG_DIR', 'TRAE_CONFIG_DIR',
-  'QWEN_CONFIG_DIR', 'CODEBUDDY_CONFIG_DIR', 'CLINE_CONFIG_DIR',
+  'QWEN_CONFIG_DIR', 'CODEBUDDY_CONFIG_DIR', 'CLINE_CONFIG_DIR', 'HERMES_HOME',
 ] as const;
 
 describe('getRuntimeConfigDir', () => {
@@ -315,6 +333,7 @@ describe('getRuntimeConfigDir', () => {
     qwen: join(homedir(), '.qwen'),
     codebuddy: join(homedir(), '.codebuddy'),
     cline: join(homedir(), '.cline'),
+    hermes: join(homedir(), '.hermes'),
   };
 
   for (const runtime of SUPPORTED_RUNTIMES) {
@@ -336,6 +355,7 @@ describe('getRuntimeConfigDir', () => {
     ['qwen', 'QWEN_CONFIG_DIR', '/x/qwen'],
     ['codebuddy', 'CODEBUDDY_CONFIG_DIR', '/x/codebuddy'],
     ['cline', 'CLINE_CONFIG_DIR', '/x/cline'],
+    ['hermes', 'HERMES_HOME', '/x/hermes'],
     ['opencode', 'OPENCODE_CONFIG_DIR', '/x/opencode'],
     ['kilo', 'KILO_CONFIG_DIR', '/x/kilo'],
   ];

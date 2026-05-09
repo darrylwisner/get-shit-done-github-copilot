@@ -22,19 +22,12 @@ import { realpath } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { relPlanningPath } from '../workstream-utils.js';
+export { SUPPORTED_RUNTIMES, type Runtime } from '../model-catalog.js';
+import { SUPPORTED_RUNTIMES, type Runtime } from '../model-catalog.js';
+import { workspacePlanningPaths, resolveWorkspaceContext, type PlanningPaths } from './workspace.js';
+import { relPlanningPath, validateWorkstreamName } from '../workstream-utils.js';
 
 // ─── Runtime-aware agents directory resolution ─────────────────────────────
-
-/**
- * Supported GSD runtimes. Kept in sync with `bin/install.js:getGlobalDir()`.
- */
-export const SUPPORTED_RUNTIMES = [
-  'claude', 'opencode', 'kilo', 'gemini', 'codex', 'copilot', 'antigravity',
-  'cursor', 'windsurf', 'augment', 'trae', 'qwen', 'codebuddy', 'cline',
-] as const;
-
-export type Runtime = (typeof SUPPORTED_RUNTIMES)[number];
 
 function expandTilde(p: string): string {
   return p.startsWith('~/') || p === '~' ? join(homedir(), p.slice(1)) : p;
@@ -82,6 +75,10 @@ export function getRuntimeConfigDir(runtime: Runtime): string {
       return process.env.CODEBUDDY_CONFIG_DIR ? expandTilde(process.env.CODEBUDDY_CONFIG_DIR) : join(homedir(), '.codebuddy');
     case 'cline':
       return process.env.CLINE_CONFIG_DIR ? expandTilde(process.env.CLINE_CONFIG_DIR) : join(homedir(), '.cline');
+    case 'hermes':
+      return process.env.HERMES_HOME ? expandTilde(process.env.HERMES_HOME) : join(homedir(), '.hermes');
+    default:
+      throw new Error(`Unknown runtime: ${String(runtime)}`);
   }
 }
 
@@ -177,15 +174,7 @@ export function renderGlobalSkillDisplayPath(runtime: Runtime, skillName: string
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Paths to common .planning files. */
-export interface PlanningPaths {
-  planning: string;
-  state: string;
-  roadmap: string;
-  project: string;
-  config: string;
-  phases: string;
-  requirements: string;
-}
+export type { PlanningPaths } from './workspace.js';
 
 // ─── escapeRegex ────────────────────────────────────────────────────────────
 
@@ -466,11 +455,23 @@ export function normalizeMd(content: string): string {
  * All paths returned in POSIX format.
  *
  * @param projectDir - Root project directory
- * @param workstream - Optional workstream name (see relPlanningPath)
+ * @param workstream - Optional workstream name
  * @returns Object with paths to common .planning files
  */
 export function planningPaths(projectDir: string, workstream?: string): PlanningPaths {
-  const base = join(projectDir, relPlanningPath(workstream));
+  const envCtx = resolveWorkspaceContext();
+  // Validate env workstream before use: invalid GSD_WORKSTREAM falls back to
+  // root .planning/ (bug-2791 contract — invalid env must not crash or route
+  // to a bad path; silent fallback to root preserves pre-#3269 behaviour).
+  const validEnvWorkstream =
+    envCtx.workstream && validateWorkstreamName(envCtx.workstream) ? envCtx.workstream : null;
+  const effectiveWorkstream = workstream ?? validEnvWorkstream;
+  // Use relPlanningPath(workstream) to scope the base path per workstream policy.
+  const base = join(projectDir, relPlanningPath(effectiveWorkstream ?? undefined));
+  // For env-sourced project scoping (no explicit workstream), delegate to workspace.
+  if (!effectiveWorkstream && envCtx.project) {
+    return workspacePlanningPaths(projectDir, { workstream: null, project: envCtx.project });
+  }
   return {
     planning: toPosixPath(base),
     state: toPosixPath(join(base, 'STATE.md')),

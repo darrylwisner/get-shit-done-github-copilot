@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { isValidActiveWorkstreamName } = require('./workstream-name-policy.cjs');
 
 const WORKSTREAM_SESSION_ENV_KEYS = [
   'GSD_SESSION_KEY',
@@ -235,7 +236,7 @@ function pickActiveWorkstreamAdapter(cwd, opts = {}) {
 }
 
 function validateWorkstreamName(name) {
-  return /^[a-zA-Z0-9_-]+$/.test(name);
+  return isValidActiveWorkstreamName(name);
 }
 
 function withPlanningLock(cwd, fn) {
@@ -333,7 +334,7 @@ function createPlanningWorkspace(cwd, opts = {}) {
           return;
         }
         if (!validateWorkstreamName(name)) {
-          throw new Error('Invalid workstream name: must be alphanumeric, hyphens, and underscores only');
+          throw new Error('Invalid workstream name: must be alphanumeric, hyphens, underscores, or dots');
         }
 
         const wsDir = path.join(planningRoot(cwd), 'workstreams', name);

@@ -1505,6 +1505,68 @@ describe('phasesArchive', () => {
   });
 });
 
+// ─── milestoneComplete help-flag defense (#3259) ────────────────────────────
+
+describe('milestoneComplete help-flag defense', () => {
+  it('rejects --help as a version value with GSDError before any disk write', async () => {
+    const { milestoneComplete } = await import('./phase-lifecycle.js');
+    const { GSDError, ErrorClassification } = await import('../errors.js');
+    await setupTestProject(tmpDir);
+
+    // Capture pre-invocation filesystem state
+    const planningDir = join(tmpDir, '.planning');
+    const milestonesPath = join(planningDir, 'MILESTONES.md');
+    const statePath = join(planningDir, 'STATE.md');
+    const preStateStat = await import('node:fs').then((m) => m.statSync(statePath));
+    const milestonesExistedBefore = existsSync(milestonesPath);
+
+    let thrown: unknown;
+    try {
+      await milestoneComplete(['--help'], tmpDir);
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(GSDError);
+    const err = thrown as InstanceType<typeof GSDError>;
+    expect(err.classification).toBe(ErrorClassification.Validation);
+    expect(err.message).toContain('--help');
+
+    // Assert no files were written
+    const postStateStat = await import('node:fs').then((m) => m.statSync(statePath));
+    expect(postStateStat.mtimeMs).toBe(preStateStat.mtimeMs);
+    expect(existsSync(milestonesPath)).toBe(milestonesExistedBefore);
+  });
+
+  it('rejects -h as a version value with GSDError before any disk write', async () => {
+    const { milestoneComplete } = await import('./phase-lifecycle.js');
+    const { GSDError, ErrorClassification } = await import('../errors.js');
+    await setupTestProject(tmpDir);
+
+    const statePath = join(tmpDir, '.planning', 'STATE.md');
+    const preStateStat = await import('node:fs').then((m) => m.statSync(statePath));
+    const milestonesPath = join(tmpDir, '.planning', 'MILESTONES.md');
+    const milestonesExistedBefore = existsSync(milestonesPath);
+
+    let thrown: unknown;
+    try {
+      await milestoneComplete(['-h'], tmpDir);
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(GSDError);
+    const err = thrown as InstanceType<typeof GSDError>;
+    expect(err.classification).toBe(ErrorClassification.Validation);
+    expect(err.message).toContain('-h');
+
+    // Assert no files were written
+    const postStateStat = await import('node:fs').then((m) => m.statSync(statePath));
+    expect(postStateStat.mtimeMs).toBe(preStateStat.mtimeMs);
+    expect(existsSync(milestonesPath)).toBe(milestonesExistedBefore);
+  });
+});
+
 // ─── Registry integration ──────────────────────────────────────────────────
 
 describe('lifecycle handlers in registry', () => {
@@ -1536,5 +1598,124 @@ describe('lifecycle handlers in registry', () => {
       const handler = registry.getHandler(cmd);
       expect(handler, `${cmd} should be registered`).toBeDefined();
     }
+  });
+});
+
+// ─── CR-3267 regression: error-propagation in listDirectories ─────────────
+
+describe('listDirectories — CR-3267 finding 1: non-ENOENT errors propagate', () => {
+  it('propagates EACCES from readdir instead of returning []', async () => {
+    const { listDirectories } = await import('./phase-filesystem-adapter.js');
+    // Create a real directory then remove read permission
+    const dir = await mkdtemp(join(tmpdir(), 'gsd-fs-acl-'));
+    const inner = join(dir, 'phases');
+    await mkdir(inner);
+    try {
+      await import('node:fs/promises').then(m => m.chmod(inner, 0o000));
+      await expect(listDirectories(inner)).rejects.toThrow();
+    } finally {
+      // Restore so cleanup can delete
+      await import('node:fs/promises').then(m => m.chmod(inner, 0o755));
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns [] for ENOENT (directory gone between existsSync and readdir)', async () => {
+    // existsSync passes, but the directory has been removed before readdir —
+    // the ENOENT branch must still return [].
+    const { listDirectories } = await import('./phase-filesystem-adapter.js');
+    // We can't easily race the real FS, but we can verify the function tolerates
+    // a path that truly does not exist (existsSync returns false → early []).
+    const nonExistent = join(tmpdir(), 'gsd-does-not-exist-' + Date.now());
+    const result = await listDirectories(nonExistent);
+    expect(result).toEqual([]);
+  });
+});
+
+// ─── CR-3267 regression: error-propagation in readModifyWriteRoadmapMd ─────
+
+describe('readModifyWriteRoadmapMd — CR-3267 finding 4: non-ENOENT errors propagate', () => {
+  it('propagates EACCES on ROADMAP.md readFile instead of treating as empty', async () => {
+    const { readModifyWriteRoadmapMd } = await import('./phase-lifecycle.js');
+    const dir = await mkdtemp(join(tmpdir(), 'gsd-roadmap-acl-'));
+    const planningDir = join(dir, '.planning');
+    await mkdir(planningDir, { recursive: true });
+    const roadmapPath = join(planningDir, 'ROADMAP.md');
+    await writeFile(roadmapPath, '# Roadmap\n', 'utf-8');
+    try {
+      await import('node:fs/promises').then(m => m.chmod(roadmapPath, 0o000));
+      await expect(
+        readModifyWriteRoadmapMd(dir, (c) => c)
+      ).rejects.toThrow();
+    } finally {
+      await import('node:fs/promises').then(m => m.chmod(roadmapPath, 0o644));
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('starts with empty content when ROADMAP.md is absent (ENOENT)', async () => {
+    const { readModifyWriteRoadmapMd } = await import('./phase-lifecycle.js');
+    const dir = await mkdtemp(join(tmpdir(), 'gsd-roadmap-noent-'));
+    const planningDir = join(dir, '.planning');
+    await mkdir(planningDir, { recursive: true });
+    // No ROADMAP.md written — must default to '' and create it
+    try {
+      const result = await readModifyWriteRoadmapMd(dir, (c) => c + 'NEW');
+      expect(result).toBe('NEW');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── CR-3267 regression: buildPhaseRoadmapEntry — no "Phase 0" dependency ──
+
+describe('buildPhaseRoadmapEntry — CR-3267 finding 2: first sequential phase has no predecessor', () => {
+  it('omits Depends on line when phaseId is 1', async () => {
+    const { buildPhaseRoadmapEntry } = await import('./phase-lifecycle-policy.js');
+    const entry = buildPhaseRoadmapEntry(1, 'Bootstrap', 'sequential');
+    expect(entry).not.toContain('Depends on');
+    expect(entry).not.toContain('Phase 0');
+  });
+
+  it('includes Depends on line when phaseId is 2', async () => {
+    const { buildPhaseRoadmapEntry } = await import('./phase-lifecycle-policy.js');
+    const entry = buildPhaseRoadmapEntry(2, 'Second Phase', 'sequential');
+    expect(entry).toContain('**Depends on:** Phase 1');
+  });
+
+  it('omits Depends on line for custom naming mode regardless of id', async () => {
+    const { buildPhaseRoadmapEntry } = await import('./phase-lifecycle-policy.js');
+    const entry = buildPhaseRoadmapEntry('ALPHA', 'Custom', 'custom');
+    expect(entry).not.toContain('Depends on');
+  });
+});
+
+// ─── CR-3267 regression: collectDecimalSuffixesFromDirNames prefix grammar ─
+
+describe('collectDecimalSuffixesFromDirNames — CR-3267 finding 3: alphanumeric prefixes accepted', () => {
+  it('matches directories with long alphanumeric project-code prefix', async () => {
+    const { collectDecimalSuffixesFromDirNames } = await import('./phase-lifecycle-policy.js');
+    // Prefix "MYAPP01" is longer than 6 chars and contains digits — was rejected before fix
+    const dirs = ['MYAPP01-3.1-some-work', 'MYAPP01-3.2-other-work', 'unrelated-dir'];
+    const result = collectDecimalSuffixesFromDirNames('3', dirs);
+    expect(result.has(1)).toBe(true);
+    expect(result.has(2)).toBe(true);
+  });
+
+  it('still matches directories with short uppercase-only prefix', async () => {
+    const { collectDecimalSuffixesFromDirNames } = await import('./phase-lifecycle-policy.js');
+    const dirs = ['AB-5.1-task', 'AB-5.3-other'];
+    const result = collectDecimalSuffixesFromDirNames('5', dirs);
+    expect(result.has(1)).toBe(true);
+    expect(result.has(3)).toBe(true);
+  });
+
+  it('matches directories with no prefix', async () => {
+    const { collectDecimalSuffixesFromDirNames } = await import('./phase-lifecycle-policy.js');
+    const dirs = ['3.1-plain', '3.2-also-plain'];
+    const result = collectDecimalSuffixesFromDirNames('3', dirs);
+    expect(result.has(1)).toBe(true);
+    expect(result.has(2)).toBe(true);
   });
 });
