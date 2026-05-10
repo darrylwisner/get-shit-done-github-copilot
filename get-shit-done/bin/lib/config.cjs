@@ -109,6 +109,7 @@ function buildNewProjectConfig(userChoices) {
       ui_safety_gate: true,
       ai_integration_phase: true,
       tdd_mode: false,
+      human_verify_mode: 'end-of-phase',
       text_mode: false,
       research_before_questions: false,
       discuss_mode: 'discuss',
@@ -354,6 +355,12 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
     }
   }
 
+  // Human verification checkpoint mode (#3309)
+  const VALID_HUMAN_VERIFY_MODES = ['mid-flight', 'end-of-phase'];
+  if (keyPath === 'workflow.human_verify_mode' && !VALID_HUMAN_VERIFY_MODES.includes(String(parsedValue))) {
+    error(`Invalid workflow.human_verify_mode '${value}'. Valid values: ${VALID_HUMAN_VERIFY_MODES.join(', ')}`);
+  }
+
   const setConfigValueResult = setConfigValue(cwd, keyPath, parsedValue);
 
   // Mask secrets in both JSON and text output. The plaintext is written
@@ -384,6 +391,8 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
  */
 const SCHEMA_DEFAULTS = {
   'context_window': 200000,
+  'executor.stall_detect_interval_minutes': 5,
+  'executor.stall_threshold_minutes': 10,
 };
 
 function cmdConfigGet(cwd, keyPath, raw, defaultValue) {
