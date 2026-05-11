@@ -109,7 +109,6 @@ function buildNewProjectConfig(userChoices) {
       ui_safety_gate: true,
       ai_integration_phase: true,
       tdd_mode: false,
-      human_verify_mode: 'end-of-phase',
       text_mode: false,
       research_before_questions: false,
       discuss_mode: 'discuss',
@@ -353,12 +352,6 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
     if (typeof parsedValue !== 'boolean') {
       error(`Invalid workflow.post_planning_gaps '${value}'. Must be a boolean (true or false).`);
     }
-  }
-
-  // Human verification checkpoint mode (#3309)
-  const VALID_HUMAN_VERIFY_MODES = ['mid-flight', 'end-of-phase'];
-  if (keyPath === 'workflow.human_verify_mode' && !VALID_HUMAN_VERIFY_MODES.includes(String(parsedValue))) {
-    error(`Invalid workflow.human_verify_mode '${value}'. Valid values: ${VALID_HUMAN_VERIFY_MODES.join(', ')}`);
   }
 
   const setConfigValueResult = setConfigValue(cwd, keyPath, parsedValue);
