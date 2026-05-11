@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { safeReadFile, loadConfig, normalizePhaseName, escapeRegex, execGit, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, extractCurrentMilestone, output, error, checkAgentsInstalled, CONFIG_DEFAULTS, inspectWorktreeHealth } = require('./core.cjs');
+const { safeReadFile, loadConfig, normalizePhaseName, escapeRegex, execGit, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, extractCurrentMilestone, output, error, checkAgentsInstalled, CONFIG_DEFAULTS } = require('./core.cjs');
 const { planningDir } = require('./planning-workspace.cjs');
 const { extractFrontmatter, parseMustHavesBlock } = require('./frontmatter.cjs');
 const { writeStateMd } = require('./state.cjs');
@@ -908,39 +908,33 @@ function cmdValidateHealth(cwd, options, raw) {
 
   // ─── Check 11: Stale / orphan git worktrees (#2167) ────────────────────────
   try {
-    const worktreeHealth = inspectWorktreeHealth(
-      cwd,
-      { staleAfterMs: 60 * 60 * 1000 },
-      { execGit, existsSync: fs.existsSync, statSync: fs.statSync }
-    );
-    if (!worktreeHealth.ok) {
-      // AC2 / AC3: surface degraded-git state as a structured warning instead
-      // of silently suppressing it (PRED.k302 — error-swallowing-empty-sentinel).
-      if (worktreeHealth.reason === 'git_timed_out') {
-        addIssue('warning', 'W020',
-          'Worktree health check degraded: git worktree list timed out after 10s — orphan/stale worktrees could not be inspected',
-          'Run: git worktree list --porcelain to diagnose; check for .git/index.lock or a hung git process');
-      }
-      if (worktreeHealth.reason === 'git_list_failed') {
-        addIssue('warning', 'W020',
-          'Worktree health check degraded: git worktree list failed — orphan/stale worktrees could not be inspected',
-          'Run: git worktree list --porcelain to diagnose; check git repository state and permissions');
-      }
-      // Other non-ok reasons (not_a_git_repo) are silent — not meaningful for
-      // users who have no git repo.
-    } else {
-      for (const finding of worktreeHealth.findings) {
-        if (finding.kind === 'orphan') {
-          addIssue('warning', 'W017',
-            `Orphan git worktree: ${finding.path} (path no longer exists on disk)`,
-            'Run: git worktree prune');
-          continue;
-        }
+    const worktreeResult = execGit(cwd, ['worktree', 'list', '--porcelain']);
+    if (worktreeResult.exitCode === 0 && worktreeResult.stdout) {
+      const blocks = worktreeResult.stdout.split('\n\n').filter(Boolean);
+      // Skip the first block — it is always the main worktree
+      for (let i = 1; i < blocks.length; i++) {
+        const lines = blocks[i].split('\n');
+        const wtLine = lines.find(l => l.startsWith('worktree '));
+        if (!wtLine) continue;
+        const wtPath = wtLine.slice('worktree '.length);
 
-        if (finding.kind === 'stale') {
+        if (!fs.existsSync(wtPath)) {
+          // Orphan: path no longer exists on disk
           addIssue('warning', 'W017',
-            `Stale git worktree: ${finding.path} (last modified ${finding.ageMinutes} minutes ago)`,
-            `Run: git worktree remove ${finding.path} --force`);
+            `Orphan git worktree: ${wtPath} (path no longer exists on disk)`,
+            'Run: git worktree prune');
+        } else {
+          // Check if stale (older than 1 hour)
+          try {
+            const stat = fs.statSync(wtPath);
+            const ageMs = Date.now() - stat.mtimeMs;
+            const ONE_HOUR = 60 * 60 * 1000;
+            if (ageMs > ONE_HOUR) {
+              addIssue('warning', 'W017',
+                `Stale git worktree: ${wtPath} (last modified ${Math.round(ageMs / 60000)} minutes ago)`,
+                `Run: git worktree remove ${wtPath} --force`);
+            }
+          } catch { /* stat failed — skip */ }
         }
       }
     }

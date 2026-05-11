@@ -22,11 +22,9 @@ import { realpath } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { GSDError, ErrorClassification } from '../errors.js';
+import { relPlanningPath } from '../workstream-utils.js';
 export { SUPPORTED_RUNTIMES, type Runtime } from '../model-catalog.js';
 import { SUPPORTED_RUNTIMES, type Runtime } from '../model-catalog.js';
-import { workspacePlanningPaths, resolveWorkspaceContext, type PlanningPaths } from './workspace.js';
-export { stateExtractField } from './state-document.js';
-import { relPlanningPath, validateWorkstreamName } from '../workstream-utils.js';
 
 // ─── Runtime-aware agents directory resolution ─────────────────────────────
 
@@ -119,63 +117,18 @@ export function resolveAgentsDir(runtime: Runtime = 'claude'): string {
   return join(getRuntimeConfigDir(runtime), 'agents');
 }
 
-/**
- * Resolve the runtime-global skills base directory.
- *
- * Most runtimes store global skills under `<configDir>/skills`.
- * `cline` is rules-based and has no global skills directory.
- */
-export function resolveGlobalSkillsBase(runtime: Runtime): string | null {
-  if (runtime === 'cline') return null;
-  return join(getRuntimeConfigDir(runtime), 'skills');
-}
-
-/**
- * Render a human-readable runtime-global skills base path.
- * Uses `~` when the path lives under the current home dir.
- * Returns a displayable string for unsupported runtimes (never null).
- */
-export function renderGlobalSkillsBaseDisplayPath(runtime: Runtime): string {
-  const base = resolveGlobalSkillsBase(runtime);
-  if (!base) return `(${runtime} does not use a skills directory)`;
-  const home = homedir();
-  const homeWithSep = home.endsWith(pathSep) ? home : `${home}${pathSep}`;
-  return (base === home || base.startsWith(homeWithSep)) ? `~${base.slice(home.length)}` : base;
-}
-
-/** Resolve one runtime-global skill directory, or `null` when unsupported. */
-export function resolveGlobalSkillDir(runtime: Runtime, skillName: string): string | null {
-  const base = resolveGlobalSkillsBase(runtime);
-  if (base === null) return null;
-  const candidate = resolve(base, skillName);
-  const rel = relative(base, candidate);
-  if (!skillName || rel.startsWith('..') || isAbsolute(rel)) return null;
-  return candidate;
-}
-
-/** Resolve the canonical SKILL.md path for one runtime-global skill. */
-export function resolveGlobalSkillMarkdownPath(runtime: Runtime, skillName: string): string | null {
-  const dir = resolveGlobalSkillDir(runtime, skillName);
-  if (dir === null) return null;
-  return join(dir, 'SKILL.md');
-}
-
-/**
- * Render a human-readable global skill path for warnings.
- * Uses `~` when the path lives under the current home dir.
- */
-export function renderGlobalSkillDisplayPath(runtime: Runtime, skillName: string): string {
-  const dir = resolveGlobalSkillDir(runtime, skillName);
-  if (!dir) return `(${runtime} does not use a skills directory)`;
-  const home = homedir();
-  const homeWithSep = home.endsWith(pathSep) ? home : `${home}${pathSep}`;
-  return (dir === home || dir.startsWith(homeWithSep)) ? `~${dir.slice(home.length)}` : dir;
-}
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Paths to common .planning files. */
-export type { PlanningPaths } from './workspace.js';
+export interface PlanningPaths {
+  planning: string;
+  state: string;
+  roadmap: string;
+  project: string;
+  config: string;
+  phases: string;
+  requirements: string;
+}
 
 // ─── escapeRegex ────────────────────────────────────────────────────────────
 
@@ -318,6 +271,29 @@ export function toPosixPath(p: string): string {
   return p.split('\\').join('/');
 }
 
+// ─── stateExtractField ──────────────────────────────────────────────────────
+
+/**
+ * Extract a field value from STATE.md content.
+ *
+ * Supports both **bold:** and plain: formats, case-insensitive.
+ *
+ * @param content - STATE.md content string
+ * @param fieldName - Field name to extract
+ * @returns The field value, or null if not found
+ */
+export function stateExtractField(content: string, fieldName: string): string | null {
+  const escaped = escapeRegex(fieldName);
+  // Horizontal whitespace only after ':' so YAML blocks like `progress:\n  total:` do not
+  // match as `Progress:` with a multi-line "value" (parity with STATE.md body fields).
+  const boldPattern = new RegExp(`\\*\\*${escaped}:\\*\\*[ \\t]*(.+)`, 'i');
+  const boldMatch = content.match(boldPattern);
+  if (boldMatch) return boldMatch[1].trim();
+  const plainPattern = new RegExp(`^${escaped}:[ \\t]*(.+)`, 'im');
+  const plainMatch = content.match(plainPattern);
+  return plainMatch ? plainMatch[1].trim() : null;
+}
+
 // ─── normalizeMd ───────────────────────────────────────────────────────────
 
 /**
@@ -433,23 +409,11 @@ export function normalizeMd(content: string): string {
  * All paths returned in POSIX format.
  *
  * @param projectDir - Root project directory
- * @param workstream - Optional workstream name
+ * @param workstream - Optional workstream name (see relPlanningPath)
  * @returns Object with paths to common .planning files
  */
 export function planningPaths(projectDir: string, workstream?: string): PlanningPaths {
-  const envCtx = resolveWorkspaceContext();
-  // Validate env workstream before use: invalid GSD_WORKSTREAM falls back to
-  // root .planning/ (bug-2791 contract — invalid env must not crash or route
-  // to a bad path; silent fallback to root preserves pre-#3269 behaviour).
-  const validEnvWorkstream =
-    envCtx.workstream && validateWorkstreamName(envCtx.workstream) ? envCtx.workstream : null;
-  const effectiveWorkstream = workstream ?? validEnvWorkstream;
-  // Use relPlanningPath(workstream) to scope the base path per workstream policy.
-  const base = join(projectDir, relPlanningPath(effectiveWorkstream ?? undefined));
-  // For env-sourced project scoping (no explicit workstream), delegate to workspace.
-  if (!effectiveWorkstream && envCtx.project) {
-    return workspacePlanningPaths(projectDir, { workstream: null, project: envCtx.project });
-  }
+  const base = join(projectDir, relPlanningPath(workstream));
   return {
     planning: toPosixPath(base),
     state: toPosixPath(join(base, 'STATE.md')),
