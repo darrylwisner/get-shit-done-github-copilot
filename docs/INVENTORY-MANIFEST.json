@@ -1,5 +1,5 @@
 {
-  "generated": "2026-05-07",
+  "generated": "2026-05-11",
   "families": {
     "agents": [
       "gsd-advisor-researcher",
@@ -223,6 +223,7 @@
       "planner-antipatterns.md",
       "planner-chunked.md",
       "planner-gap-closure.md",
+      "planner-human-verify-mode.md",
       "planner-mvp-mode.md",
       "planner-reviews.md",
       "planner-revision.md",
@@ -256,8 +257,10 @@
       "worktree-path-safety.md"
     ],
     "cli_modules": [
+      "active-workstream-store.cjs",
       "artifacts.cjs",
       "audit.cjs",
+      "cjs-command-router-adapter.cjs",
       "command-aliases.generated.cjs",
       "commands.cjs",
       "config-schema.cjs",
@@ -274,6 +277,9 @@
       "init-command-router.cjs",
       "init.cjs",
       "install-profiles.cjs",
+      "installer-migration-authoring.cjs",
+      "installer-migration-report.cjs",
+      "installer-migrations.cjs",
       "intel.cjs",
       "learnings.cjs",
       "milestone.cjs",
@@ -282,6 +288,7 @@
       "phase-command-router.cjs",
       "phase.cjs",
       "phases-command-router.cjs",
+      "plan-scan.cjs",
       "planning-workspace.cjs",
       "profile-output.cjs",
       "profile-pipeline.cjs",
@@ -292,13 +299,17 @@
       "secrets.cjs",
       "security.cjs",
       "state-command-router.cjs",
+      "state-document.cjs",
       "state.cjs",
       "template.cjs",
       "uat.cjs",
       "validate-command-router.cjs",
       "verify-command-router.cjs",
       "verify.cjs",
-      "workstream.cjs"
+      "workstream-inventory.cjs",
+      "workstream-name-policy.cjs",
+      "workstream.cjs",
+      "worktree-safety.cjs"
     ],
     "hooks": [
       "gsd-check-update-worker.js",
