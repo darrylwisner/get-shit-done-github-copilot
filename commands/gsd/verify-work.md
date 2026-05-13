@@ -10,6 +10,7 @@ allowed-tools:
   - Edit
   - Write
   - Agent
+requires: [execute-phase, phase]
 ---
 <objective>
 Validate built features through conversational testing with persistent state.
