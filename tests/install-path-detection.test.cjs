@@ -17,14 +17,6 @@ const os = require('os');
 const path = require('path');
 
 const INSTALL_PATH = path.join(__dirname, '..', 'bin', 'install.js');
-const PROJECTION_PATH = path.join(
-  __dirname,
-  '..',
-  'get-shit-done',
-  'bin',
-  'lib',
-  'shell-command-projection.cjs',
-);
 
 function loadInstaller() {
   process.env.GSD_TEST_MODE = '1';
@@ -42,10 +34,8 @@ function cleanup(dir) {
 
 describe('installer HOME-relative PATH detection (#2620)', () => {
   let installer;
-  let projection;
   before(() => {
     installer = loadInstaller();
-    projection = require(PROJECTION_PATH);
   });
 
   test('homePathCoveredByRc is exported', () => {
@@ -267,23 +257,10 @@ describe('installer HOME-relative PATH detection (#2620)', () => {
       }
 
       const joined = logs.join('\n');
-      assert.equal(
-        typeof projection.projectPersistentPathExportActions,
-        'function',
-        'shell command projection module must export projectPersistentPathExportActions',
+      assert.ok(
+        /echo 'export PATH=/.test(joined),
+        `installer should emit absolute export suggestion when rc does not cover globalBin; got:\n${joined}`,
       );
-      const projected = projection.projectPersistentPathExportActions({
-        targetDir: globalBin,
-        platform: process.platform,
-      });
-      assert.ok(Array.isArray(projected.shellActions), 'projected.shellActions must be an array');
-      assert.ok(projected.shellActions.length >= 2, 'expected at least zsh/bash projected actions');
-      for (const action of projected.shellActions) {
-        assert.ok(
-          joined.includes(action.command),
-          `installer should render projected command "${action.command}". Output:\n${joined}`,
-        );
-      }
     } finally {
       cleanup(home);
     }

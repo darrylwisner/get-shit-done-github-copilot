@@ -25,21 +25,13 @@ import { homedir } from 'node:os';
 
 import { loadConfig } from '../config.js';
 import { resolveModel } from './config-query.js';
-import {
-  detectRuntime,
-  planningPaths,
-  normalizePhaseName,
-  phaseTokenMatches,
-  resolveAgentsDir,
-  toPosixPath,
-} from './helpers.js';
+import { planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath } from './helpers.js';
 import {
   getMilestoneInfo,
   extractCurrentMilestone,
   extractNextMilestoneSection,
   extractPhasesFromSection,
 } from './roadmap.js';
-import { agentSkills } from './skills.js';
 import { withProjectRoot } from './init.js';
 import type { QueryHandler } from './utils.js';
 
@@ -59,31 +51,6 @@ async function getModelAlias(agentType: string, projectDir: string): Promise<str
  */
 function pathExists(base: string, relPath: string): boolean {
   return existsSync(join(base, relPath));
-}
-
-const NEW_PROJECT_REQUIRED_AGENTS = [
-  'gsd-project-researcher',
-  'gsd-research-synthesizer',
-  'gsd-roadmapper',
-];
-
-function hasAgentDefinition(agentsDir: string, agent: string): boolean {
-  return existsSync(join(agentsDir, `${agent}.md`)) ||
-    existsSync(join(agentsDir, `${agent}.agent.md`));
-}
-
-async function resolveAgentSkillPayloadAgents(
-  requiredAgents: string[],
-  projectDir: string,
-): Promise<string[]> {
-  const available: string[] = [];
-  for (const agent of requiredAgents) {
-    const result = await agentSkills([agent], projectDir);
-    if (typeof result.data === 'string' && result.data.trim() !== '') {
-      available.push(agent);
-    }
-  }
-  return available;
 }
 
 /**
@@ -223,15 +190,6 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     getModelAlias('gsd-research-synthesizer', projectDir),
     getModelAlias('gsd-roadmapper', projectDir),
   ]);
-  const runtime = detectRuntime(config as { runtime?: unknown });
-  const agentsDir = resolveAgentsDir(runtime);
-  const missingRequiredAgents = NEW_PROJECT_REQUIRED_AGENTS.filter(
-    agent => !hasAgentDefinition(agentsDir, agent),
-  );
-  const agentSkillPayloadAgents = await resolveAgentSkillPayloadAgents(
-    NEW_PROJECT_REQUIRED_AGENTS,
-    projectDir,
-  );
 
   const result: Record<string, unknown> = {
     researcher_model: researcherModel,
@@ -257,13 +215,6 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     exa_search_available: hasExaSearch,
 
     project_path: '.planning/PROJECT.md',
-    agent_runtime: runtime,
-    agents_dir: agentsDir,
-    required_agents: NEW_PROJECT_REQUIRED_AGENTS,
-    required_agents_installed: missingRequiredAgents.length === 0,
-    missing_required_agents: missingRequiredAgents,
-    agent_skill_payloads_available: agentSkillPayloadAgents.length === NEW_PROJECT_REQUIRED_AGENTS.length,
-    agent_skill_payload_agents: agentSkillPayloadAgents,
   };
 
   return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
