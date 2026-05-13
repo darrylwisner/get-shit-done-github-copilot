@@ -7,6 +7,7 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
+requires: [import, phase, plan-phase]
 ---
 
 <objective>
