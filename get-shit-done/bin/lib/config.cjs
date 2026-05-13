@@ -13,6 +13,7 @@ const {
 } = require('./model-profiles.cjs');
 const { VALID_CONFIG_KEYS, isValidConfigKey } = require('./config-schema.cjs');
 const { isSecretKey, maskSecret } = require('./secrets.cjs');
+const { normalizeConfiguredDefaultReviewers } = require('./review-reviewer-selection.cjs');
 
 const CONFIG_KEY_SUGGESTIONS = {
   'workflow.nyquist_validation_enabled': 'workflow.nyquist_validation',
@@ -353,6 +354,25 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
       error(`Invalid workflow.post_planning_gaps '${value}'. Must be a boolean (true or false).`);
     }
   }
+
+  if (keyPath === 'ship.pr_body_sections') {
+    validateShipPrBodySections(parsedValue);
+  }
+
+  // Human verification checkpoint mode (#3309)
+  const VALID_HUMAN_VERIFY_MODES = ['mid-flight', 'end-of-phase'];
+  if (keyPath === 'workflow.human_verify_mode' && !VALID_HUMAN_VERIFY_MODES.includes(String(parsedValue))) {
+    error(`Invalid workflow.human_verify_mode '${value}'. Valid values: ${VALID_HUMAN_VERIFY_MODES.join(', ')}`);
+  }
+
+  if (keyPath === 'review.default_reviewers') {
+    const normalized = normalizeConfiguredDefaultReviewers(parsedValue);
+    if (normalized.errors.length > 0) {
+      error(normalized.errors[0]);
+    }
+    parsedValue = normalized.values;
+  }
+
 
   const setConfigValueResult = setConfigValue(cwd, keyPath, parsedValue);
 
