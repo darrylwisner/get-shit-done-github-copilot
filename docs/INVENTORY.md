@@ -359,7 +359,7 @@ The `gsd-planner` agent is decomposed into a core agent plus reference modules t
 
 ---
 
-## CLI Modules (54 shipped)
+## CLI Modules (55 shipped)
 
 Full listing: `get-shit-done/bin/lib/*.cjs`.
 
@@ -407,6 +407,7 @@ Full listing: `get-shit-done/bin/lib/*.cjs`.
 | `schema-detect.cjs` | Schema-drift detection for ORM patterns (Prisma, Drizzle, etc.) |
 | `secrets.cjs` | Secret-config masking convention (`****<last-4>`) for integration keys managed by `/gsd-config --integrations` — keeps plaintext out of `config-set` output |
 | `security.cjs` | Path traversal prevention, prompt injection detection, safe JSON/shell helpers |
+| `shell-command-projection.cjs` | Runtime-aware shell command projection for managed hook serialization: decides PowerShell call-operator usage by runtime/platform and normalizes Windows script path tokens |
 | `state-command-router.cjs` | Thin CJS subcommand router adapter for `gsd-tools state` |
 | `state.cjs` | STATE.md parsing, updating, progression, metrics |
 | `state-document.cjs` | Pure STATE.md field extraction, replacement, status normalization, and progress calculation transforms |
