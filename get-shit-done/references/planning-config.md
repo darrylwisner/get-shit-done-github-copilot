@@ -30,6 +30,7 @@ Configuration options for `.planning/` directory behavior.
 | `search_gitignored` | `false` | Add `--no-ignore` to broad rg searches |
 | `git.branching_strategy` | `"none"` | Git branching approach: `"none"`, `"phase"`, or `"milestone"` |
 | `git.base_branch` | `null` (auto-detect) | Target branch for PRs and merges (e.g. `"master"`, `"develop"`). When `null`, auto-detects from `git symbolic-ref refs/remotes/origin/HEAD`, falling back to `"main"`. |
+| `git.create_tag` | `true` | Create git tags on milestone completion |
 | `git.phase_branch_template` | `"gsd/phase-{phase}-{slug}"` | Branch template for phase strategy |
 | `git.milestone_branch_template` | `"gsd/{milestone}-{slug}"` | Branch template for milestone strategy |
 | `git.quick_branch_template` | `null` | Optional branch template for quick-task runs |
@@ -278,6 +279,7 @@ Set via `git.*` namespace (e.g., `"git": { "branching_strategy": "phase" }`).
 |-----|------|---------|----------------|-------------|
 | `git.branching_strategy` | string | `"none"` | `"none"`, `"phase"`, `"milestone"` | Git branching approach for phase/milestone isolation |
 | `git.base_branch` | string\|null | `null` (auto-detect) | Any branch name | Target branch for PRs and merges; auto-detects from `origin/HEAD` when `null` |
+| `git.create_tag` | boolean | `true` | `true`, `false` | Create git tags on milestone completion |
 | `git.phase_branch_template` | string | `"gsd/phase-{phase}-{slug}"` | Template with `{phase}`, `{slug}` | Branch naming template for `phase` strategy |
 | `git.milestone_branch_template` | string | `"gsd/{milestone}-{slug}"` | Template with `{milestone}`, `{slug}` | Branch naming template for `milestone` strategy |
 | `git.quick_branch_template` | string\|null | `null` | Template with `{slug}` | Optional branch template for quick-task runs |

@@ -361,6 +361,7 @@ If `.planning/` is in `.gitignore`, `commit_docs` is automatically `false` regar
 | `hooks.context_warnings` | boolean | `true` | Show context window usage warnings via context monitor hook |
 | `hooks.workflow_guard` | boolean | `false` | Warn when file edits happen outside GSD workflow context (advises using `/gsd-quick` or `/gsd-fast`) |
 | `statusline.show_last_command` | boolean | `false` | Append `last: /<cmd>` suffix to the statusline showing the most recently invoked slash command. Opt-in; reads the active session transcript to extract the latest `<command-name>` tag (closes #2538) |
+| `statusline.context_position` | string | `"end"` | Position of the context-window meter. `"end"` (default) renders at line tail; `"front"` renders immediately after the model name so the meter stays visible in narrow terminals. Closes #2937 |
 
 The prompt injection guard hook (`gsd-prompt-guard.js`) is always active and cannot be disabled — it's a security feature, not a workflow toggle.
 
@@ -542,6 +543,7 @@ All four fields are **optional and additive** — STATE.md files without them ke
 |---------|------|---------|-------------|
 | `git.branching_strategy` | enum | `none` | `none`, `phase`, or `milestone` |
 | `git.base_branch` | string | `main` | The integration branch that phase/milestone branches are created from and merged back into. Override when your repo uses `master` or a release branch |
+| `git.create_tag` | boolean | `true` | Create a git tag (`v[X.Y]`) on milestone completion. Set to `false` for projects with their own release flow |
 | `git.phase_branch_template` | string | `gsd/phase-{phase}-{slug}` | Branch name template for phase strategy |
 | `git.milestone_branch_template` | string | `gsd/{milestone}-{slug}` | Branch name template for milestone strategy |
 | `git.quick_branch_template` | string or null | `null` | Optional branch name template for `/gsd-quick` tasks |

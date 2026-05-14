@@ -25,6 +25,9 @@
     "search_gitignored": false,
     "sub_repos": []
   },
+  "git": {
+    "create_tag": true
+  },
   "parallelization": {
     "enabled": true,
     "plan_level": true,
