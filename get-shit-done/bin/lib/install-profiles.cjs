@@ -41,6 +41,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { platformWriteSync } = require('./shell-command-projection.cjs');
 
 // ---------------------------------------------------------------------------
 // Profile definitions
@@ -60,6 +61,7 @@ const PROFILES = Object.freeze({
     'discuss-phase',
     'plan-phase',
     'execute-phase',
+    'phase',
     'help',
     'update',
   ]),
@@ -403,8 +405,7 @@ function readActiveProfile(runtimeConfigDir) {
  * @param {string} profileName e.g. 'core', 'standard', 'full'
  */
 function writeActiveProfile(runtimeConfigDir, profileName) {
-  fs.mkdirSync(runtimeConfigDir, { recursive: true });
-  fs.writeFileSync(path.join(runtimeConfigDir, PROFILE_MARKER_NAME), profileName + '\n', 'utf8');
+  platformWriteSync(path.join(runtimeConfigDir, PROFILE_MARKER_NAME), profileName + '\n');
 }
 
 // ---------------------------------------------------------------------------
