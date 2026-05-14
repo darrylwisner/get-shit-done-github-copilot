@@ -247,6 +247,15 @@ AskUserQuestion([
     ]
   },
   {
+    question: "Create git tags on milestone completion?",
+    header: "Git Tagging",
+    multiSelect: false,
+    options: [
+      { label: "Yes (Recommended)", description: "Tag releases with version (e.g., v1.0) on milestone completion" },
+      { label: "No", description: "Skip git tagging — use if your project doesn't use tags or uses a different release convention" }
+    ]
+  },
+  {
     question: "Enable context window warnings? (injects advisory messages when context is getting full)",
     header: "Ctx Warnings",
     multiSelect: false,
@@ -349,7 +358,8 @@ Merge new settings into existing config.json:
   },
   "git": {
     "branching_strategy": "none" | "phase" | "milestone",
-    "quick_branch_template": <string|null>
+    "quick_branch_template": <string|null>,
+    "create_tag": true/false
   },
   "hooks": {
     "context_warnings": true/false,
@@ -450,6 +460,7 @@ Display:
 | UI Safety Gate       | {On/Off} |
 | AI Integration Phase | {On/Off} |
 | Git Branching        | {None/Per Phase/Per Milestone} |
+| Git Tagging          | {On/Off} |
 | Skip Discuss         | {On/Off} |
 | Context Warnings     | {On/Off} |
 | Saved as Defaults    | {Yes/No} |
@@ -470,7 +481,7 @@ Quick commands:
 
 <success_criteria>
 - [ ] Current config read
-- [ ] User presented with 22 settings (profile + workflow toggles + features + git branching + ctx warnings), grouped into six sections: Planning, Execution, Docs & Output, Features, Model & Pipeline, Misc. `code_review_depth` is conditional on `code_review=on`.
+- [ ] User presented with 23 settings (profile + workflow toggles + features + git branching + git tagging + ctx warnings), grouped into six sections: Planning, Execution, Docs & Output, Features, Model & Pipeline, Misc. `code_review_depth` is conditional on `code_review=on`.
 - [ ] Config updated with model_profile, workflow, and git sections
 - [ ] User offered to save as global defaults (~/.gsd/defaults.json)
 - [ ] Changes confirmed to user

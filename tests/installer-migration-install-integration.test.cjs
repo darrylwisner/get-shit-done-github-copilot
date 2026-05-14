@@ -174,6 +174,14 @@ function assertHasGsdDirectory(root, relPath) {
   );
 }
 
+function assertNoGsdDirectoryEntries(root, relPath) {
+  assert.equal(
+    listDirNames(root, relPath).some((name) => name.startsWith('gsd-')),
+    false,
+    `${relPath} should not contain generated GSD entries`
+  );
+}
+
 function assertFreshInstallContract(runtime, targetDir) {
   const contract = RUNTIME_INSTALL_CONTRACTS[runtime];
   assert.ok(contract, `missing runtime install contract for ${runtime}`);
@@ -201,7 +209,11 @@ function assertFreshInstallContract(runtime, targetDir) {
   );
 
   if (contract.surface === 'flat-skills') {
-    assertHasGsdDirectory(targetDir, 'skills');
+    if (runtime === 'codex') {
+      assertNoGsdDirectoryEntries(targetDir, 'skills');
+    } else {
+      assertHasGsdDirectory(targetDir, 'skills');
+    }
   } else if (contract.surface === 'hermes-skills') {
     assertHasGsdDirectory(targetDir, path.join('skills', 'gsd'));
     assert.ok(

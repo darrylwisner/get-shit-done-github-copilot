@@ -179,6 +179,12 @@ function expectedSkillSet() {
   return new Set([...MINIMAL_SKILL_ALLOWLIST]);
 }
 
+function expectedManifestSkillSet(runtime) {
+  // Codex no longer materializes gsd-* skill files in minimal mode.
+  if (runtime === 'codex') return new Set();
+  return expectedSkillSet();
+}
+
 describe('install: --minimal honoured for every runtime in --global mode', () => {
   for (const runtime of SKILL_RUNTIMES) {
     test(`${runtime} --global --minimal emits exactly the core skill set, zero agents`, () => {
@@ -193,7 +199,7 @@ describe('install: --minimal honoured for every runtime in --global mode', () =>
           `${runtime} global manifest.mode should be "minimal"`);
         assert.deepStrictEqual(
           [...manifestSkillSet(manifest)].sort(),
-          [...expectedSkillSet()].sort(),
+          [...expectedManifestSkillSet(runtime)].sort(),
           `${runtime} global should record exactly the MINIMAL allowlist in the manifest`,
         );
         assert.strictEqual(manifestAgentCount(manifest), 0,
@@ -219,7 +225,7 @@ describe('install: --minimal honoured for every runtime in --local mode', () => 
           `${runtime} local manifest.mode should be "minimal"`);
         assert.deepStrictEqual(
           [...manifestSkillSet(manifest)].sort(),
-          [...expectedSkillSet()].sort(),
+          [...expectedManifestSkillSet(runtime)].sort(),
           `${runtime} local should record exactly the MINIMAL allowlist in the manifest (regression guard for #2923)`,
         );
         assert.strictEqual(manifestAgentCount(manifest), 0,
