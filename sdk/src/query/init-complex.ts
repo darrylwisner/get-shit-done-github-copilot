@@ -19,19 +19,28 @@
  */
 
 import { existsSync, readdirSync, statSync, type Dirent } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { homedir } from 'node:os';
 
 import { loadConfig } from '../config.js';
 import { resolveModel } from './config-query.js';
-import { planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath } from './helpers.js';
+import {
+  detectRuntime,
+  planningPaths,
+  normalizePhaseName,
+  phaseTokenMatches,
+  resolveAgentsDir,
+  toPosixPath,
+} from './helpers.js';
 import {
   getMilestoneInfo,
   extractCurrentMilestone,
   extractNextMilestoneSection,
   extractPhasesFromSection,
 } from './roadmap.js';
+import { agentSkills } from './skills.js';
 import { withProjectRoot } from './init.js';
 import type { QueryHandler } from './utils.js';
 
@@ -51,6 +60,69 @@ async function getModelAlias(agentType: string, projectDir: string): Promise<str
  */
 function pathExists(base: string, relPath: string): boolean {
   return existsSync(join(base, relPath));
+}
+
+/**
+ * Bug #3491: detect whether `base` is inside any git worktree, and if so,
+ * return the absolute worktree root. Mirrors the CJS `gitWorktreeInfoInternal`
+ * in get-shit-done/bin/lib/core.cjs — keep these two implementations behaviour-
+ * identical so the SDK and CJS init handlers emit the same has_git semantics.
+ *
+ * Returns { inside, worktreeRoot } — both fall back to false/null on any error
+ * (git unavailable, not a repo, timeout) so callers see the conservative
+ * default that preserves pre-fix behaviour for non-git environments.
+ */
+function gitWorktreeInfo(base: string): { inside: boolean; worktreeRoot: string | null } {
+  try {
+    const inside = execSync('git rev-parse --is-inside-work-tree', {
+      cwd: base,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).trim();
+    if (inside !== 'true') return { inside: false, worktreeRoot: null };
+    try {
+      const root = execSync('git rev-parse --show-toplevel', {
+        cwd: base,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf-8',
+        timeout: 5000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      }).trim();
+      return { inside: true, worktreeRoot: root || null };
+    } catch {
+      return { inside: true, worktreeRoot: null };
+    }
+  } catch {
+    return { inside: false, worktreeRoot: null };
+  }
+}
+
+
+const NEW_PROJECT_REQUIRED_AGENTS = [
+  'gsd-project-researcher',
+  'gsd-research-synthesizer',
+  'gsd-roadmapper',
+];
+
+function hasAgentDefinition(agentsDir: string, agent: string): boolean {
+  return existsSync(join(agentsDir, `${agent}.md`)) ||
+    existsSync(join(agentsDir, `${agent}.agent.md`));
+}
+
+async function resolveAgentSkillPayloadAgents(
+  requiredAgents: string[],
+  projectDir: string,
+): Promise<string[]> {
+  const available: string[] = [];
+  for (const agent of requiredAgents) {
+    const result = await agentSkills([agent], projectDir);
+    if (typeof result.data === 'string' && result.data.trim() !== '') {
+      available.push(agent);
+    }
+  }
+  return available;
 }
 
 /**
@@ -209,6 +281,15 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     getModelAlias('gsd-research-synthesizer', projectDir),
     getModelAlias('gsd-roadmapper', projectDir),
   ]);
+  const runtime = detectRuntime(config as { runtime?: unknown });
+  const agentsDir = resolveAgentsDir(runtime);
+  const missingRequiredAgents = NEW_PROJECT_REQUIRED_AGENTS.filter(
+    agent => !hasAgentDefinition(agentsDir, agent),
+  );
+  const agentSkillPayloadAgents = await resolveAgentSkillPayloadAgents(
+    NEW_PROJECT_REQUIRED_AGENTS,
+    projectDir,
+  );
 
   const result: Record<string, unknown> = {
     researcher_model: researcherModel,
@@ -227,13 +308,26 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     needs_codebase_map:
       (hasExistingCode || hasPackageFile) && !pathExists(projectDir, '.planning/codebase'),
 
-    has_git: pathExists(projectDir, '.git'),
+    // Bug #3491: detect parent worktree to avoid nested .git init.
+    has_git: (() => gitWorktreeInfo(projectDir).inside)(),
+    git_worktree_root: (() => gitWorktreeInfo(projectDir).worktreeRoot)(),
+    in_nested_subdir: (() => {
+      const info = gitWorktreeInfo(projectDir);
+      return info.inside && info.worktreeRoot !== null && info.worktreeRoot !== projectDir;
+    })(),
 
     brave_search_available: hasBraveSearch,
     firecrawl_available: hasFirecrawl,
     exa_search_available: hasExaSearch,
 
     project_path: '.planning/PROJECT.md',
+    agent_runtime: runtime,
+    agents_dir: agentsDir,
+    required_agents: NEW_PROJECT_REQUIRED_AGENTS,
+    required_agents_installed: missingRequiredAgents.length === 0,
+    missing_required_agents: missingRequiredAgents,
+    agent_skill_payloads_available: agentSkillPayloadAgents.length === NEW_PROJECT_REQUIRED_AGENTS.length,
+    agent_skill_payload_agents: agentSkillPayloadAgents,
   };
 
   return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };

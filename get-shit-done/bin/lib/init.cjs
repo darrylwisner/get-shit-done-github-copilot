@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execGit, platformWriteSync, platformReadSync } = require('./shell-command-projection.cjs');
-const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
+const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, gitWorktreeInfoInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
 const { planningPaths, planningDir, planningRoot } = require('./planning-workspace.cjs');
 const { maskIfSecret } = require('./secrets.cjs');
 const scanPhasePlans = require('./plan-scan.cjs');
@@ -458,8 +458,17 @@ function cmdInitNewProject(cwd, raw) {
     is_brownfield: hasCode || hasPackageFile,
     needs_codebase_map: (hasCode || hasPackageFile) && !pathExistsInternal(cwd, '.planning/codebase'),
 
-    // Git state
-    has_git: pathExistsInternal(cwd, '.git'),
+    // Git state (Bug #3491: detect parent worktree to avoid nested .git init)
+    ...(() => {
+      const info = gitWorktreeInfoInternal(cwd);
+      const worktreeRoot = info.worktreeRoot;
+      const inNestedSubdir = info.inside && worktreeRoot !== null && worktreeRoot !== cwd;
+      return {
+        has_git: info.inside,
+        git_worktree_root: worktreeRoot,
+        in_nested_subdir: inNestedSubdir,
+      };
+    })(),
 
     // Enhanced search
     brave_search_available: hasBraveSearch,
@@ -593,7 +602,17 @@ function cmdInitIngestDocs(cwd, raw) {
   const result = {
     project_exists: pathExistsInternal(cwd, '.planning/PROJECT.md'),
     planning_exists: fs.existsSync(planningRoot(cwd)),
-    has_git: fs.existsSync(path.join(cwd, '.git')),
+    ...(() => {
+      // Bug #3491 — see cmdInitNewProject above. Same shallow-check bug.
+      const info = gitWorktreeInfoInternal(cwd);
+      const worktreeRoot = info.worktreeRoot;
+      const inNestedSubdir = info.inside && worktreeRoot !== null && worktreeRoot !== cwd;
+      return {
+        has_git: info.inside,
+        git_worktree_root: worktreeRoot,
+        in_nested_subdir: inNestedSubdir,
+      };
+    })(),
     project_path: '.planning/PROJECT.md',
     commit_docs: config.commit_docs,
   };

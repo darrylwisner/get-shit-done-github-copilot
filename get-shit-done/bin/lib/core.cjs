@@ -1535,6 +1535,48 @@ function pathExistsInternal(cwd, targetPath) {
   }
 }
 
+/**
+ * Detect whether `cwd` sits inside a git worktree, and if so, return the
+ * absolute path of the worktree root.
+ *
+ * Bug #3491: the previous shallow `pathExistsInternal(cwd, '.git')` check
+ * only saw a `.git` entry directly in cwd, so subdirectories of an existing
+ * repo reported `has_git: false` and the new-project workflow then ran
+ * `git init` — creating a nested `.git` inside the outer repo's worktree.
+ *
+ * Mirrors `git rev-parse --is-inside-work-tree` semantics. Uses the existing
+ * `execGit` seam so behaviour is consistent with the rest of the toolchain
+ * (non-interactive env, 10s timeout, mockable in tests).
+ *
+ * Returns: { inside: boolean, worktreeRoot: string | null }
+ *   - inside=true  → cwd is somewhere inside a git worktree
+ *   - inside=false → cwd is not inside any git worktree (or git is unavailable)
+ *
+ * Failure modes (git not installed, command times out, non-zero exit) all
+ * collapse to `{ inside: false, worktreeRoot: null }` — the conservative
+ * default that preserves pre-fix behaviour for environments without git.
+ */
+function gitWorktreeInfoInternal(cwd) {
+  try {
+    const insideResult = execGit(['rev-parse', '--is-inside-work-tree'], { cwd, timeout: 5000 });
+    if (insideResult.exitCode !== 0) {
+      return { inside: false, worktreeRoot: null };
+    }
+    const insideStdout = String(insideResult.stdout || '').trim();
+    if (insideStdout !== 'true') {
+      return { inside: false, worktreeRoot: null };
+    }
+    const rootResult = execGit(['rev-parse', '--show-toplevel'], { cwd, timeout: 5000 });
+    if (rootResult.exitCode !== 0) {
+      return { inside: true, worktreeRoot: null };
+    }
+    const root = String(rootResult.stdout || '').trim();
+    return { inside: true, worktreeRoot: root || null };
+  } catch {
+    return { inside: false, worktreeRoot: null };
+  }
+}
+
 function generateSlugInternal(text) {
   if (!text) return null;
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 60);
@@ -1817,6 +1859,7 @@ module.exports = {
   resolveTierEntry,
   _resetRuntimeWarningCacheForTests,
   pathExistsInternal,
+  gitWorktreeInfoInternal,
   generateSlugInternal,
   getMilestoneInfo,
   getMilestonePhaseFilter,
