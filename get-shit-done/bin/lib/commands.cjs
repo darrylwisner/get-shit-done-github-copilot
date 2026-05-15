@@ -779,7 +779,7 @@ function cmdScaffold(cwd, type, options, raw) {
   switch (type) {
     case 'context': {
       filePath = path.join(phaseDir, `${padded}-CONTEXT.md`);
-      content = `---\nphase: "${padded}"\nname: "${name || phaseInfo?.phase_name || 'Unnamed'}"\ncreated: ${today}\n---\n\n# Phase ${phase}: ${name || phaseInfo?.phase_name || 'Unnamed'} — Context\n\n## Decisions\n\n_Decisions will be captured during /gsd-discuss-phase ${phase}_\n\n## Discretion Areas\n\n_Areas where the executor can use judgment_\n\n## Deferred Ideas\n\n_Ideas to consider later_\n`;
+      content = `---\nphase: "${padded}"\nname: "${name || phaseInfo?.phase_name || 'Unnamed'}"\ncreated: ${today}\n---\n\n# Phase ${phase}: ${name || phaseInfo?.phase_name || 'Unnamed'} — Context\n\n## Decisions\n\n_Decisions will be captured during /gsd:discuss-phase ${phase}_\n\n## Discretion Areas\n\n_Areas where the executor can use judgment_\n\n## Deferred Ideas\n\n_Ideas to consider later_\n`;
       break;
     }
     case 'uat': {
@@ -797,7 +797,11 @@ function cmdScaffold(cwd, type, options, raw) {
         error('phase and name required for phase-dir scaffold');
       }
       const slug = generateSlugInternal(name);
-      const dirName = `${padded}-${slug}`;
+      // #3287: apply project_code prefix to stay consistent with phase.add/phase.insert
+      const scaffoldConfig = loadConfig(cwd);
+      const scaffoldProjectCode = scaffoldConfig.project_code || '';
+      const scaffoldPrefix = scaffoldProjectCode ? `${scaffoldProjectCode}-` : '';
+      const dirName = `${scaffoldPrefix}${padded}-${slug}`;
       const phasesParent = planningPaths(cwd).phases;
       platformEnsureDir(phasesParent);
       const dirPath = path.join(phasesParent, dirName);

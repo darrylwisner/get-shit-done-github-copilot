@@ -17,7 +17,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { install, parseTomlToObject } = require('../bin/install.js');
+const installModule = require('../bin/install.js');
+const { readInstallState } = require('../get-shit-done/bin/lib/installer-migrations.cjs');
+const { install, parseTomlToObject } = installModule;
 const { createTempDir, cleanup } = require('./helpers.cjs');
 const HOOKS_DIST = path.join(__dirname, '..', 'hooks', 'dist');
 const BUILD_HOOKS_SCRIPT = path.join(__dirname, '..', 'scripts', 'build-hooks.js');
@@ -74,6 +76,7 @@ describe('#3357 — Codex install removes legacy GSD hooks.json entries', { conc
   });
 
   afterEach(() => {
+    delete installModule.__codexSchemaValidator;
     cleanup(tmpRoot);
   });
 
@@ -113,5 +116,26 @@ describe('#3357 — Codex install removes legacy GSD hooks.json entries', { conc
     assert.equal(commands.includes('node "/Users/example/bin/gsd-check-update.js"'), true);
     assert.equal(managed.length, 2);
     assert.equal(tomlGsdHookCount(codexHome), 0);
+  });
+
+  test('restores migrated hooks.json and install state when later Codex validation fails', () => {
+    const before = JSON.stringify({ SessionStart: [legacyGsdHook(codexHome)] }, null, 2);
+    fs.writeFileSync(path.join(codexHome, 'hooks.json'), before);
+
+    installModule.__codexSchemaValidator = () => ({
+      ok: false,
+      reason: 'forced migration rollback test',
+    });
+
+    assert.throws(
+      () => withCodexHome(codexHome, () => install(true, 'codex')),
+      /forced migration rollback test/
+    );
+
+    assert.equal(fs.readFileSync(path.join(codexHome, 'hooks.json'), 'utf8'), before);
+    assert.equal(
+      readInstallState(codexHome).appliedMigrations.some((entry) => entry.id === '2026-05-11-codex-legacy-hooks-json'),
+      false
+    );
   });
 });
