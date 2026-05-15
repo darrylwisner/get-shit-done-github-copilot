@@ -207,8 +207,55 @@ describe('resolveModel', () => {
     const planner = (await resolveModel(['gsd-planner'], tmpDir)).data as Record<string, unknown>;
     const executor = (await resolveModel(['gsd-executor'], tmpDir)).data as Record<string, unknown>;
 
-    expect(planner).toMatchObject({ model: 'gpt-5.5', profile: 'balanced' });
-    expect(executor).toMatchObject({ model: 'gpt-5.3-codex', profile: 'balanced' });
+    expect(planner).toMatchObject({ model: 'gpt-5.5', profile: 'balanced', reasoning_effort: 'high' });
+    expect(executor).toMatchObject({ model: 'gpt-5.3-codex', profile: 'balanced', reasoning_effort: 'medium' });
+  });
+
+  it('returns runtime reasoning_effort from the same phase-tier source as model', async () => {
+    const { resolveModel } = await import('./config-query.js');
+    const { resolveRuntimeTierDefault } = await import('../model-catalog.js');
+    const opusCodexTier = resolveRuntimeTierDefault('codex', 'opus');
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({
+        model_profile: 'budget',
+        runtime: 'codex',
+        models: { execution: 'opus' },
+      }),
+    );
+
+    const executor = (await resolveModel(['gsd-executor'], tmpDir)).data as Record<string, unknown>;
+
+    expect(executor).toMatchObject({
+      model: 'gpt-5.4',
+      profile: 'budget',
+      reasoning_effort: opusCodexTier?.reasoning_effort,
+    });
+  });
+
+  it('does not leak reasoning_effort from overrides for unsupported runtimes', async () => {
+    const { resolveModel } = await import('./config-query.js');
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({
+        model_profile: 'balanced',
+        runtime: 'opencode',
+        models: { planning: 'opus' },
+        model_profile_overrides: {
+          opencode: {
+            opus: { model: 'openrouter/openai/gpt-5.5', reasoning_effort: 'high' },
+          },
+        },
+      }),
+    );
+
+    const planner = (await resolveModel(['gsd-planner'], tmpDir)).data as Record<string, unknown>;
+
+    expect(planner).toMatchObject({
+      model: 'openrouter/openai/gpt-5.5',
+      profile: 'balanced',
+    });
+    expect(planner).not.toHaveProperty('reasoning_effort');
   });
 
   it('resolveModel uses workstream config when --ws is specified', async () => {

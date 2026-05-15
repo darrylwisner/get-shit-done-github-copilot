@@ -39,6 +39,7 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
     "discuss_mode": "discuss",
     "max_discuss_passes": 3,
     "skip_discuss": false,
+    "human_verify_mode": "end-of-phase",
     "tdd_mode": false,
     "text_mode": false,
     "use_worktrees": true,
@@ -74,6 +75,9 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
     "context_warnings": true,
     "workflow_guard": false
   },
+  "statusline": {
+    "context_position": "end"
+  },
   "review": {
     "default_reviewers": null,
     "models": {}
@@ -88,6 +92,7 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
   },
   "git": {
     "branching_strategy": "none",
+    "create_tag": true,
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null
@@ -1000,6 +1005,8 @@ The intent is the same as the Claude profile tiers -- use a stronger model for p
 ### Runtime-Aware Profiles (#2517)
 
 When `runtime` is set, profile tiers (`opus`/`sonnet`/`haiku`) resolve to runtime-native model IDs instead of Claude aliases. This lets a single shared `.planning/config.json` work cleanly across Claude and Codex.
+
+`resolve-model` JSON output includes `reasoning_effort` when the runtime tier resolved for the agent (after phase-type overrides) defines a `reasoning_effort`. Runtime adapters may pass that value to child-agent launch calls that support it; runtimes without explicit support omit it.
 
 **Built-in tier maps:**
 
