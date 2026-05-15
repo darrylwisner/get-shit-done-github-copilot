@@ -648,6 +648,40 @@ function cmdConfigPath(cwd) {
   output(configPath, true, configPath);
 }
 
+/**
+ * Explicit on-disk migration of legacy config keys to canonical nested shape.
+ *
+ * Wraps the Configuration Module's migrateOnDisk() for the CLI surface. This
+ * is the Phase 2 acceptance-criteria deliverable for opt-in migration (#3536):
+ * users can run `gsd-tools migrate-config` to apply all four legacy-key
+ * migrations to their .planning/config.json without having to load any config
+ * implicitly via another command.
+ *
+ * Output: JSON object with { migrated, normalizations, wrote } or a human-readable
+ * summary when --raw is set. Exits 0 in all cases (including no-op).
+ */
+async function cmdMigrateConfig(cwd, raw) {
+  const { migrateOnDisk } = require('./configuration.generated.cjs');
+  const ws = process.env.GSD_WORKSTREAM || null;
+  const report = await migrateOnDisk(cwd, ws || undefined);
+
+  if (raw) {
+    if (!report.migrated) {
+      const msg = 'No legacy keys found — config is already canonical.';
+      output(msg, true, msg);
+    } else {
+      const lines = [
+        `Migrated: ${report.wrote}`,
+        ...report.normalizations.map(n => `  ${n.from} → ${n.to}`),
+      ].join('\n');
+      output(lines, true, lines);
+    }
+  } else {
+    // output() JSON.stringify's its first arg when raw=false; pass the report object.
+    output(report, false, report);
+  }
+}
+
 module.exports = {
   VALID_CONFIG_KEYS,
   cmdConfigEnsureSection,
@@ -656,4 +690,5 @@ module.exports = {
   cmdConfigSetModelProfile,
   cmdConfigNewProject,
   cmdConfigPath,
+  cmdMigrateConfig,
 };

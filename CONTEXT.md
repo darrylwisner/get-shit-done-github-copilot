@@ -19,6 +19,9 @@ Canonical error kind set:
 - `validation_error`
 - `internal_error`
 
+### Sync Runtime Bridge Module
+SDK Module exposing `executeForCjs(input: RuntimeBridgeExecuteInput): RuntimeBridgeSyncResult` — a synchronous-friendly entry point on top of the async `QueryRuntimeBridge`. Enables the CJS dispatcher (`bin/gsd-tools.cjs` and per-family `*-command-router.cjs` files) to invoke SDK query handlers in-process — no subprocess hop — while preserving the synchronous contract that ~21 CJS test files and 100+ consumers depend on. Implementation uses `synckit` (Atomics.wait on a SharedArrayBuffer in a pooled Worker thread). First-call cost ~80ms (Worker startup + native bridge construction); steady-state ~0.1ms per call after the worker warms. Maps the async bridge's exceptions into a typed sync result `{ ok: true, data, exitCode: 0 } | { ok: false, exitCode, errorKind, errorDetails?, stderrLines }` aligned with the Dispatch Policy Module's error taxonomy from ADR-0001 (`unknown_command`, `native_failure`, `native_timeout`, `fallback_failure`, `validation_error`, `internal_error`). Subprocess fallback is disabled by design inside the sync bridge — unknown commands surface as `unknown_command` rather than spawning `gsd-sdk`. Source: `sdk/src/runtime-bridge-sync/index.ts` + `sdk/src/runtime-bridge-sync/worker.ts`.
+
 ### Command Definition Module
 Canonical command metadata Interface powering alias, catalog, and semantics generation.
 
@@ -47,16 +50,22 @@ Canonical command normalization and resolution Interface (`query-command-resolut
 Module owning command resolution, policy projection (`mutation`, `output_mode`), unknown-command diagnosis, and handler Adapter binding at one seam for query dispatch.
 
 ### CJS Command Router Adapter Module
-Compatibility Adapter Module for `gsd-tools.cjs` command families. Uses generated command metadata plus small argument shapers to route to CJS handlers, rather than calling SDK Command Topology directly. Preserves CJS compatibility startup while reducing hand-written router drift.
+Compatibility Adapter Module for `gsd-tools.cjs` command families. Uses generated command metadata plus small argument shapers to route to CJS handlers, rather than calling SDK Command Topology directly. Preserves CJS compatibility startup while reducing hand-written router drift. Per-family migration to call the **Sync Runtime Bridge Module**'s `executeForCjs` in-process — eliminating the remaining parallel CJS handler implementations — is the active work of #3524 Phase 5; the primitive itself ships in #3555, with each canonical command family (`state.*`, `verify.*`, `init.*`, `phase.*`, `phases.*`, `validate.*`, `roadmap.*`, `frontmatter.*`, `config.*`) routing through `executeForCjs` in its own follow-up enhancement.
 
 ### Query Pre-Project Config Policy Module
 Module policy that defines query-time behavior when `.planning/config.json` is absent: use built-in defaults for parity-sensitive query Interfaces, and emit parity-aligned empty model ids for pre-project model resolution surfaces.
+
+### Configuration Module
+Shared CJS/SDK Module owning config load, legacy-key normalization, defaults merge, and explicit on-disk migration for `.planning/config.json`. Interface: `loadConfig(cwd) → MergedConfig` (pure read, never writes disk), `normalizeLegacyKeys(parsed) → { parsed, normalizations[] }` (idempotent, pure, returns the list of normalizations applied), `mergeDefaults(parsed) → MergedConfig` (deep-merge of parsed config over canonical defaults), `migrateOnDisk(cwd) → MigrationReport` (explicit, opt-in, called by the installer and by `gsd-tools migrate-config`). Invariants: never mutates disk inside `loadConfig`; legacy top-level keys (`branching_strategy`, `sub_repos`, `multiRepo`, `depth`) are normalized into their canonical nested locations in the returned value; defaults come from the shared `sdk/shared/config-defaults.manifest.json`; schema (`VALID_CONFIG_KEYS`, `RUNTIME_STATE_KEYS`, `DYNAMIC_KEY_PATTERNS`) comes from `sdk/shared/config-schema.manifest.json`. Source of truth: `sdk/src/configuration/index.ts`; CJS callers consume the generator-emitted `get-shit-done/bin/lib/configuration.generated.cjs` via the thin Adapters at `bin/lib/core.cjs:loadConfig` and `bin/lib/config-schema.cjs`. Eliminates the recurring #3523-class drift bug structurally.
 
 ### Planning Workspace Module
 Module owning `.planning` path resolution, active workstream pointer policy (`session-scoped > shared`), pointer self-heal behavior, and planning lock semantics for workstream-aware execution.
 
 ### Workstream Inventory Module
-Shared CJS/SDK Module owning workstream directory discovery, per-workstream state projection, phase/plan/summary counting, roadmap-declared phase count, active marker projection, and active-workstream collision inputs. Command handlers render list/status/progress outputs from this inventory instead of rescanning `.planning/workstreams/*` directly.
+Shared CJS/SDK Module owning workstream directory discovery, per-workstream state projection, phase/plan/summary counting, roadmap-declared phase count, active marker projection, and active-workstream collision inputs. Command handlers render list/status/progress outputs from this inventory instead of rescanning `.planning/workstreams/*` directly. Source of truth for the pure projection is `sdk/src/workstream-inventory/builder.ts` (a Builder Module emitted to `get-shit-done/bin/lib/workstream-inventory-builder.generated.cjs` via the generator pattern); per-side Reader Adapters (`bin/lib/workstream-inventory.cjs` sync, `sdk/src/query/workstream-inventory.ts` async-ready) collect filesystem inputs and delegate projection to the Builder.
+
+### Project-Root Resolution Module
+Shared CJS/SDK Module owning project-root resolution from any starting directory. Walks the ancestor chain (bounded by `FIND_PROJECT_ROOT_MAX_DEPTH = 10`) applying four heuristics in order: (0) own `.planning/` guard (#1362), (1) parent `.planning/config.json` `sub_repos` traversal, (2) legacy `multiRepo: true` boolean + ancestor `.git`, (3) `.git` heuristic with parent `.planning/`. Returns `startDir` when no ancestor qualifies. Sync `node:fs` I/O. Source of truth: `sdk/src/project-root/index.ts`; CJS callers consume the generator-emitted `get-shit-done/bin/lib/project-root.generated.cjs` via thin re-exports at `get-shit-done/bin/lib/core.cjs` and `sdk/src/query/helpers.ts`.
 
 ### Planning Path Projection Module
 SDK query Module owning projection from project/workstream context to concrete `.planning` paths. Policy precedence is `explicit workstream > env workstream > env project > root`. Invalid workspace context is a validation error at this seam rather than a silent fallback.

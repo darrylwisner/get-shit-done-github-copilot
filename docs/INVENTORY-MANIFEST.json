@@ -1,5 +1,5 @@
 {
-  "generated": "2026-05-14",
+  "generated": "2026-05-15",
   "families": {
     "agents": [
       "gsd-advisor-researcher",
@@ -224,6 +224,7 @@
       "planner-antipatterns.md",
       "planner-chunked.md",
       "planner-gap-closure.md",
+      "planner-graphify-auto-update.md",
       "planner-human-verify-mode.md",
       "planner-mvp-mode.md",
       "planner-reviews.md",
@@ -268,6 +269,7 @@
       "commands.cjs",
       "config-schema.cjs",
       "config.cjs",
+      "configuration.generated.cjs",
       "context-utilization.cjs",
       "core.cjs",
       "decisions.cjs",
@@ -296,6 +298,7 @@
       "planning-workspace.cjs",
       "profile-output.cjs",
       "profile-pipeline.cjs",
+      "project-root.generated.cjs",
       "review-reviewer-selection.cjs",
       "roadmap-command-router.cjs",
       "roadmap.cjs",
@@ -314,6 +317,7 @@
       "validate-command-router.cjs",
       "verify-command-router.cjs",
       "verify.cjs",
+      "workstream-inventory-builder.generated.cjs",
       "workstream-inventory.cjs",
       "workstream-name-policy.cjs",
       "workstream.cjs",
@@ -323,6 +327,7 @@
       "gsd-check-update-worker.js",
       "gsd-check-update.js",
       "gsd-context-monitor.js",
+      "gsd-graphify-update.sh",
       "gsd-phase-boundary.sh",
       "gsd-prompt-guard.js",
       "gsd-read-guard.js",

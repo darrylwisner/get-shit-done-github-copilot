@@ -411,18 +411,33 @@ function graphifyStatus(cwd) {
     if (commitsBehind !== null) commitStale = commitsBehind > 0;
   }
 
+  // Auto-update status (#3347). Read .last-build-status.json written by the
+  // hooks/gsd-graphify-update.sh PostToolUse hook (opt-in via graphify.auto_update,
+  // default false). When the most recent auto-build is "failed" or still "running",
+  // fold that into the existing `stale: true` signal so consumers (gsd-planner,
+  // gsd-phase-researcher) surface the standard "treat semantic relationships as
+  // approximate" annotation without per-consumer prompt changes. The full state
+  // (running/failed/exit_code/duration_ms/head_at_build) is exposed under
+  // `last_build` for callers that want richer context.
+  const statusPath = path.join(planningDir, 'graphs', '.last-build-status.json');
+  const lastBuildAutoUpdate = fs.existsSync(statusPath) ? safeReadJson(statusPath) : null;
+  const autoUpdateStale =
+    lastBuildAutoUpdate &&
+    (lastBuildAutoUpdate.status === 'failed' || lastBuildAutoUpdate.status === 'running');
+
   return {
     exists: true,
     last_build: stat.mtime.toISOString(),
     node_count: (graph.nodes || []).length,
     edge_count: (graph.edges || graph.links || []).length,
     hyperedge_count: (graph.hyperedges || []).length,
-    stale: age > STALE_MS,
+    stale: age > STALE_MS || Boolean(autoUpdateStale),
     age_hours: Math.round(age / (60 * 60 * 1000)),
     built_at_commit: builtAt ? builtAt.slice(0, 7) : null,
     current_commit: head ? head.slice(0, 7) : null,
     commits_behind: commitsBehind,
     commit_stale: commitStale,
+    last_build_auto_update: lastBuildAutoUpdate || null,
   };
 }
 
