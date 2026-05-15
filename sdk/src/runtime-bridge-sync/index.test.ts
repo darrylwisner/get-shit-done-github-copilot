@@ -81,19 +81,21 @@ describe('executeForCjs - sync primitive', () => {
 
   it('native_failure: handler execution failure is classified as native_failure', () => {
     // generate-slug with no args throws a GSDError (validation) — that maps to validation_error.
-    // We need a command that throws a plain Error. The 'current-timestamp' command with
-    // an invalid format that causes a runtime failure should work. Instead, let's directly
-    // test the bridge's behavior when the execution policy throws a non-TypeError GSDToolsError.
+    // We need a command that throws a plain Error (GSDToolsError classification.kind='failure').
     //
-    // We'll use 'frontmatter.get' with a non-existent file path that causes a file read failure.
-    // That should result in native_failure.
+    // Phase 5.1 fix note: the Phase 5.0 fixture used projectDir='/tmp' with an absolute
+    // path arg that started with /tmp — after the worker fix threads projectDir correctly,
+    // frontmatter.get returns a soft ok:true error instead of throwing (path escape check
+    // passes, then realpath on the nonexistent path returns ok:true with error field).
+    // Updated fixture: use a completely nonexistent projectDir so resolvePathUnderProject
+    // calls realpath('/nonexistent...') and throws ENOENT, which is classified as native_failure.
     const result = executeForCjs({
       registryCommand: 'frontmatter.get',
-      registryArgs: ['/tmp/__definitely_does_not_exist_abc123/file.md'],
+      registryArgs: ['file.md'],
       legacyCommand: 'frontmatter get',
-      legacyArgs: ['/tmp/__definitely_does_not_exist_abc123/file.md'],
+      legacyArgs: ['file.md'],
       mode: 'json',
-      projectDir: '/tmp',
+      projectDir: '/nonexistent-absolutely-does-not-exist-project-dir',
     });
 
     expect(result.ok).toBe(false);
