@@ -725,11 +725,11 @@ The `security.cjs` module scans for known injection patterns (role overrides, in
 
 ---
 
-### Package Legitimacy Gate (v1.51)
+### Package Legitimacy Gate (v1.42.1)
 
 AI coding tools hallucinate package names. Attackers pre-register those names on npm, PyPI, and crates.io with malicious post-install scripts — a technique called *slopsquatting*. A hallucinated name that passes `npm view` looks legitimate, so it would flow undetected through GSD's research → plan → execute pipeline all the way to `npm install <malicious-pkg>` running on your machine.
 
-v1.51 adds a three-layer gate that stops this before it reaches your shell.
+v1.42.1 adds a three-layer gate that stops this before it reaches your shell.
 
 #### What you'll see
 
@@ -802,7 +802,7 @@ pip install slopcheck
 
 `slopcheck` is a MIT-licensed Python tool maintained by ToxSec (the researcher who documented the slopsquatting attack surface). It checks packages across npm, PyPI, crates.io, RubyGems, Go modules, Maven, and Packagist using multi-signal heuristics: registry age, download count, source-repo linkage, naming distance to popular packages, and registry-specific suspicion patterns.
 
-If `slopcheck` is ever unavailable or abandoned, GSD's `[ASSUMED]`-gate fallback ensures you always get a human checkpoint before any install — the system never silently degrades to the pre-v1.51 behavior.
+If `slopcheck` is ever unavailable or abandoned, GSD's `[ASSUMED]`-gate fallback ensures you always get a human checkpoint before any install — the system never silently degrades to the pre-v1.42.1 behavior.
 
 ---
 

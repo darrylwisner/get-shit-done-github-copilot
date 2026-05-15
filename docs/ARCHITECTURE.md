@@ -679,7 +679,7 @@ Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→
 - Missing bridge files handled gracefully (subagents, fresh sessions)
 - Context monitor is advisory — never issues imperative commands that override user preferences
 
-### Package Legitimacy Gate (v1.51)
+### Package Legitimacy Gate (v1.42.1)
 
 The researcher → planner → executor pipeline includes a supply-chain gate against slopsquatting (AI-hallucinated package names pre-registered with malicious post-install scripts).
 
