@@ -39,6 +39,7 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
     "discuss_mode": "discuss",
     "max_discuss_passes": 3,
     "skip_discuss": false,
+    "human_verify_mode": "end-of-phase",
     "tdd_mode": false,
     "text_mode": false,
     "use_worktrees": true,
@@ -74,6 +75,9 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
     "context_warnings": true,
     "workflow_guard": false
   },
+  "statusline": {
+    "context_position": "end"
+  },
   "review": {
     "default_reviewers": null,
     "models": {}
@@ -88,6 +92,7 @@ GSD stores project settings in `.planning/config.json`. Created during `/gsd-new
   },
   "git": {
     "branching_strategy": "none",
+    "create_tag": true,
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null
