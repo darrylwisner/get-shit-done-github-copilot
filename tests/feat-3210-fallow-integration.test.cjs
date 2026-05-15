@@ -274,22 +274,20 @@ describe('feat-3210: M2 - node_modules/.bin resolution order', () => {
 
 describe('feat-3210: workflow and config contracts', () => {
   test('config schema allows code_quality.fallow.* keys in CJS and SDK', () => {
-    const cjsSchema = fs.readFileSync(
-      path.join(ROOT, 'get-shit-done', 'bin', 'lib', 'config-schema.cjs'),
-      'utf8',
-    );
-    const sdkSchema = fs.readFileSync(
-      path.join(ROOT, 'sdk', 'src', 'query', 'config-schema.ts'),
-      'utf8',
-    );
+    // After Cycle 5 (#3536), both CJS and SDK source from the manifest.
+    // Use the CJS runtime Set and the manifest directly (no inline text parsing).
+    const { VALID_CONFIG_KEYS } = require('../get-shit-done/bin/lib/config-schema.cjs');
+    const manifestPath = path.join(ROOT, 'sdk', 'shared', 'config-schema.manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const manifestKeys = new Set(manifest.validKeys);
     for (const key of [
       'code_quality.fallow.enabled',
       'code_quality.fallow.scope',
       'code_quality.fallow.profile',
       'code_quality.fallow.mcp',
     ]) {
-      assert.ok(cjsSchema.includes(`'${key}'`), `missing CJS config key: ${key}`);
-      assert.ok(sdkSchema.includes(`'${key}'`), `missing SDK config key: ${key}`);
+      assert.ok(VALID_CONFIG_KEYS.has(key), `missing CJS config key: ${key}`);
+      assert.ok(manifestKeys.has(key), `missing manifest key: ${key} (SDK sources from manifest)`);
     }
   });
 

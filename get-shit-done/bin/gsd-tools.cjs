@@ -367,7 +367,7 @@ async function main() {
   // phase / roadmap / milestone / progress / etc.
   const TOP_LEVEL_USAGE = 'Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>] [--ws <name>] [--json-errors]\n' +
     'Commands: agent-skills, audit-open, audit-uat, check-commit, commit, commit-to-subrepo, ' +
-    'config-ensure-section, config-get, config-new-project, config-path, config-set, ' +
+    'config-ensure-section, config-get, config-new-project, config-path, config-set, migrate-config, ' +
     'current-timestamp, detect-custom-files, docs-init, extract-messages, find-phase, ' +
     'from-gsd2, frontmatter, gap-analysis, generate-claude-md, generate-claude-profile, ' +
     'generate-dev-preferences, generate-slug, graphify, history-digest, init, intel, ' +
@@ -665,6 +665,13 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
 
     case 'config-path': {
       config.cmdConfigPath(cwd, raw);
+      break;
+    }
+
+    case 'migrate-config': {
+      // Explicit on-disk migration of legacy config keys to canonical shape (#3536).
+      // Wraps Configuration Module migrateOnDisk(); idempotent. async — must await.
+      await config.cmdMigrateConfig(cwd, raw);
       break;
     }
 

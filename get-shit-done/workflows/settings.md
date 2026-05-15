@@ -51,6 +51,7 @@ Parse current values (default to `true` if not present):
 - `commit_docs` — whether `.planning/` files are committed to git (default: true if absent)
 - `intel.enabled` — enable queryable codebase intelligence (/gsd:map-codebase --query) (default: false if absent)
 - `graphify.enabled` — enable project knowledge graph (/gsd:graphify) (default: false if absent)
+- `graphify.auto_update` — opt-in: auto-rebuild graph after main HEAD advances (#3347) (default: `false`)
 - `model_profile` — which model each agent uses (default: `balanced`)
 - `git.branching_strategy` — branching approach (default: `"none"`)
 - `workflow.use_worktrees` — whether parallel executor agents run in worktree isolation (default: `true`)
@@ -90,7 +91,7 @@ Verifier, TDD Mode, Code Review, Code Review Depth _(conditional — only when c
 Commit Docs, Skip Discuss, Worktrees
 
 ### Features
-Intel, Graphify
+Intel, Graphify, Graph auto-update _(conditional — only when graphify=on)_
 
 ### Model & Pipeline
 Model Profile, Auto-Advance, Branching
@@ -99,6 +100,8 @@ Model Profile, Auto-Advance, Branching
 Context Warnings, Research Qs
 
 **Conditional visibility — code_review_depth:** This question is shown only when the user's chosen `code_review` value (after they answer that question, or the pre-selected value if unchanged) is on. If `code_review` is off, omit the `code_review_depth` question from the AskUserQuestion block and preserve the existing `workflow.code_review_depth` value in config (do not overwrite). Implementation: ask the Model + Planning + Execution-up-to-Code-Review questions first; if `code_review=on`, include `code_review_depth` in the same batch; otherwise skip it. Conceptually this is a one-branch split on the `code_review` answer.
+
+**Conditional visibility — graphify.auto_update:** This question is shown only when the user's chosen `graphify.enabled` value is on. If `graphify.enabled` is off, omit the `graphify.auto_update` question and preserve the existing `graphify.auto_update` value in config (do not overwrite). Implementation: ask Graphify first; only ask Graph auto-update when Graphify is enabled.
 
 ```
 AskUserQuestion([
@@ -317,6 +320,15 @@ AskUserQuestion([
       { label: "No (Recommended)", description: "Skip knowledge graph. Use when dependency graphs are not needed." },
       { label: "Yes", description: "Enable /gsd:graphify commands. Builds and queries a project knowledge graph." }
     ]
+  },
+  {
+    question: "Auto-rebuild graph after main HEAD advances? (only effective if Graphify is enabled — #3347)",
+    header: "Graph auto-update",
+    multiSelect: false,
+    options: [
+      { label: "No (Recommended)", description: "Manual /gsd:graphify build only. Conservative default — opt in if you want fresh context on every /gsd:quick or /gsd:plan-phase." },
+      { label: "Yes", description: "Auto-rebuild the graph in a detached background process after git commit/merge/pull/rebase --continue/cherry-pick on the default branch. Hook returns instantly; rebuild runs out-of-band. No-op if Graphify is disabled." }
+    ]
   }
 ])
 ```
@@ -354,7 +366,8 @@ Merge new settings into existing config.json:
     "enabled": true/false
   },
   "graphify": {
-    "enabled": true/false
+    "enabled": true/false,
+    "auto_update": true/false
   },
   "git": {
     "branching_strategy": "none" | "phase" | "milestone",
@@ -426,7 +439,8 @@ Write `~/.gsd/defaults.json` with:
     "enabled": <current>
   },
   "graphify": {
-    "enabled": <current>
+    "enabled": <current>,
+    "auto_update": <current>
   }
 }
 ```
