@@ -32,11 +32,79 @@ const CONFIG_KEY_SUGGESTIONS = {
   'plan_checker': 'workflow.plan_check',
 };
 
+const SHIP_PR_BODY_SECTION_KEYS = new Set(['heading', 'enabled', 'source', 'fallback', 'template']);
+const SHIP_PR_BODY_TEMPLATE_TOKENS = new Set([
+  'phase_number',
+  'phase_name',
+  'phase_dir',
+  'base_branch',
+  'padded_phase',
+]);
+const SHIP_PR_BODY_SOURCE_RE = /^(ROADMAP|PLAN|SUMMARY|VERIFICATION|STATE|REQUIREMENTS|CONTEXT)\.md\s+##\s+[^\r\n#][^\r\n]*$/;
+
 function validateKnownConfigKeyPath(keyPath) {
   const suggested = CONFIG_KEY_SUGGESTIONS[keyPath];
   if (suggested) {
     error(`Unknown config key: ${keyPath}. Did you mean ${suggested}?`, ERROR_REASON.CONFIG_INVALID_KEY);
   }
+}
+
+function validateShipPrBodySections(value) {
+  if (!Array.isArray(value)) {
+    error('Invalid ship.pr_body_sections value. Expected a JSON array of section objects.');
+  }
+
+  value.forEach((section, index) => {
+    const prefix = `Invalid ship.pr_body_sections[${index}]`;
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+      error(`${prefix}. Expected an object.`);
+    }
+
+    const unknownKeys = Object.keys(section).filter((key) => !SHIP_PR_BODY_SECTION_KEYS.has(key));
+    if (unknownKeys.length > 0) {
+      error(`${prefix}. Unknown field(s): ${unknownKeys.join(', ')}.`);
+    }
+
+    if (typeof section.heading !== 'string' || section.heading.trim() === '') {
+      error(`${prefix}. heading must be a non-empty string.`);
+    }
+    if (/[\r\n]/.test(section.heading)) {
+      error(`${prefix}. heading must be a single line.`);
+    }
+
+    if ('enabled' in section && typeof section.enabled !== 'boolean') {
+      error(`${prefix}. enabled must be true or false.`);
+    }
+
+    for (const field of ['source', 'fallback', 'template']) {
+      if (field in section && typeof section[field] !== 'string') {
+        error(`${prefix}. ${field} must be a string.`);
+      }
+    }
+
+    const hasContent = ['source', 'fallback', 'template'].some((field) => {
+      return typeof section[field] === 'string' && section[field].trim() !== '';
+    });
+    if (!hasContent) {
+      error(`${prefix}. Provide at least one of source, fallback, or template.`);
+    }
+
+    if (typeof section.source === 'string' && section.source.trim() !== '') {
+      const selectors = section.source.split('||').map((selector) => selector.trim()).filter(Boolean);
+      if (selectors.length === 0 || selectors.some((selector) => !SHIP_PR_BODY_SOURCE_RE.test(selector))) {
+        error(`${prefix}. source must use selectors like "PLAN.md ## Risks", separated with "||".`);
+      }
+    }
+
+    if (typeof section.template === 'string') {
+      const tokens = section.template.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g);
+      for (const match of tokens) {
+        if (!SHIP_PR_BODY_TEMPLATE_TOKENS.has(match[1])) {
+          error(`${prefix}. Unsupported template token: {${match[1]}}.`);
+        }
+      }
+    }
+  });
 }
 
 /**
@@ -45,7 +113,7 @@ function validateKnownConfigKeyPath(keyPath) {
  * Merges (increasing priority):
  *   1. Hardcoded defaults — every key that loadConfig() resolves, plus mode/granularity
  *   2. User-level defaults from ~/.gsd/defaults.json (if present)
- *   3. userChoices — the settings the user explicitly selected during /gsd-new-project
+ *   3. userChoices — the settings the user explicitly selected during /gsd:new-project
  *
  * Uses the canonical `git` namespace for branching keys (consistent with VALID_CONFIG_KEYS
  * and the settings workflow). loadConfig() handles both flat and nested formats, so this
@@ -112,6 +180,7 @@ function buildNewProjectConfig(userChoices) {
       ui_safety_gate: true,
       ai_integration_phase: true,
       tdd_mode: false,
+      human_verify_mode: 'end-of-phase',
       text_mode: false,
       research_before_questions: false,
       discuss_mode: 'discuss',
@@ -129,6 +198,9 @@ function buildNewProjectConfig(userChoices) {
       security_asvs_level: CONFIG_DEFAULTS.security_asvs_level,
       security_block_on: CONFIG_DEFAULTS.security_block_on,
     },
+    ship: {
+      pr_body_sections: [],
+    },
     hooks: {
       context_warnings: true,
     },
@@ -139,7 +211,7 @@ function buildNewProjectConfig(userChoices) {
   };
 
   // Three-level deep merge: hardcoded <- userDefaults <- choices
-  return {
+  const config = {
     ...hardcoded,
     ...userDefaults,
     ...choices,
@@ -153,6 +225,11 @@ function buildNewProjectConfig(userChoices) {
       ...(userDefaults.workflow || {}),
       ...(choices.workflow || {}),
     },
+    ship: {
+      ...hardcoded.ship,
+      ...(userDefaults.ship || {}),
+      ...(choices.ship || {}),
+    },
     hooks: {
       ...hardcoded.hooks,
       ...(userDefaults.hooks || {}),
@@ -164,13 +241,16 @@ function buildNewProjectConfig(userChoices) {
       ...(choices.agent_skills || {}),
     },
   };
+
+  validateShipPrBodySections(config.ship.pr_body_sections);
+  return config;
 }
 
 /**
  * Command: create a fully-materialized .planning/config.json for a new project.
  *
  * Accepts user-chosen settings as a JSON string (the keys the user explicitly
- * configured during /gsd-new-project). All remaining keys are filled from
+ * configured during /gsd:new-project). All remaining keys are filled from
  * hardcoded defaults and optional ~/.gsd/defaults.json.
  *
  * Idempotent: if config.json already exists, returns { created: false }.
@@ -393,7 +473,6 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
     }
     parsedValue = normalized.values;
   }
-
 
   const setConfigValueResult = setConfigValue(cwd, keyPath, parsedValue);
 

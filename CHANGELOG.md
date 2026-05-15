@@ -4,9 +4,7 @@ All notable changes to GSD will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.42.1...HEAD)
-
-## [1.42.1](https://github.com/gsd-build/get-shit-done/compare/v1.41.0...v1.42.1) - 2026-05-15
+## [Unreleased](https://github.com/gsd-build/get-shit-done/compare/v1.41.0...HEAD)
 
 ### Fixed
 
@@ -2748,8 +2746,7 @@ Technical implementation details for Phase 2 appear in the **Changed** section b
 - YOLO mode for autonomous execution
 - Interactive mode with checkpoints
 
-[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.42.1...HEAD
-[1.42.1]: https://github.com/gsd-build/get-shit-done/compare/v1.41.0...v1.42.1
+[Unreleased]: https://github.com/gsd-build/get-shit-done/compare/v1.38.4...HEAD
 [1.38.4]: https://github.com/gsd-build/get-shit-done/compare/v1.38.2...v1.38.4
 [1.38.2]: https://github.com/gsd-build/get-shit-done/compare/v1.37.1...v1.38.2
 [1.37.1]: https://github.com/gsd-build/get-shit-done/compare/v1.37.0...v1.37.1

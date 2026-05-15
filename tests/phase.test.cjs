@@ -854,6 +854,35 @@ describe('phase add command', () => {
     assert.ok(roadmap.includes('**Requirements**: TBD'), 'new phase entry should include Requirements TBD');
   });
 
+  test('phase add ignores --raw instead of persisting it in the description', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap v1.0\n\n### Phase 1: Foundation\n**Goal:** Setup\n\n---\n`
+    );
+
+    const result = runGsdTools(['phase', 'add', '--raw', 'User', 'Dashboard'], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const roadmap = fs.readFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+    assert.ok(roadmap.includes('### Phase 2: User Dashboard'), 'description should exclude --raw');
+    assert.ok(!roadmap.includes('--raw'), 'raw flag must not be persisted into ROADMAP.md');
+  });
+
+  test('phase add rejects unsupported flags and dangling --id', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap v1.0\n\n### Phase 1: Foundation\n**Goal:** Setup\n\n---\n`
+    );
+
+    const unsupported = runGsdTools(['phase', 'add', '--unknown', 'Dashboard'], tmpDir);
+    assert.ok(!unsupported.success, 'unsupported flags should fail');
+    assert.match(unsupported.error, /phase add does not support --unknown/);
+
+    const dangling = runGsdTools(['phase', 'add', 'Dashboard', '--id'], tmpDir);
+    assert.ok(!dangling.success, 'dangling --id should fail');
+    assert.match(dangling.error, /--id requires a value/);
+  });
+
   test('skips 999.x backlog phases when calculating next phase number', () => {
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'ROADMAP.md'),
@@ -1176,6 +1205,22 @@ describe('phase add-batch command (#2165)', () => {
     const result = runGsdTools(['phase', 'add-batch', '--descriptions', '[]'], tmpDir);
     assert.ok(!result.success, 'should fail on empty array');
   });
+
+  test('returns error when --descriptions JSON is not an array', () => {
+    const result = runGsdTools(['phase', 'add-batch', '--descriptions', '{"one":"Alpha"}'], tmpDir);
+    assert.ok(!result.success, 'should fail on non-array JSON');
+    assert.match(result.error, /--descriptions must be a JSON array/);
+  });
+
+  test('returns error when --descriptions is missing its JSON value', () => {
+    const missing = runGsdTools(['phase', 'add-batch', '--descriptions'], tmpDir);
+    assert.ok(!missing.success, 'should fail on dangling --descriptions');
+    assert.match(missing.error, /--descriptions must be a JSON array/);
+
+    const flagValue = runGsdTools(['phase', 'add-batch', '--descriptions', '--raw'], tmpDir);
+    assert.ok(!flagValue.success, 'should fail when --descriptions value is another flag');
+    assert.match(flagValue.error, /--descriptions must be a JSON array/);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1444,6 +1489,30 @@ describe('phase remove command', () => {
     // Should succeed with --force
     const forceResult = runGsdTools('phase remove 1 --force', tmpDir);
     assert.ok(forceResult.success, `Force remove failed: ${forceResult.error}`);
+  });
+
+  test('bug-3409: supports --force before phase id', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n### Phase 1: A\n**Goal:** A\n### Phase 2: B\n**Goal:** B\n`
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'STATE.md'),
+      `# State\n\n**Current Phase:** 1\n**Total Phases:** 2\n`
+    );
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '01-a'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '02-b'), { recursive: true });
+
+    const result = runGsdTools('phase remove --force 2', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.removed, '2');
+    assert.strictEqual(output.directory_deleted, '02-b');
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.planning', 'phases', '02-b')));
+
+    const state = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(state.includes('**Total Phases:** 1'), 'total phases should be decremented after real removal');
   });
 
   test('removes decimal phase and renumbers siblings', () => {
@@ -2904,4 +2973,3 @@ describe('phase complete excludes 999.x backlog from next-phase (#2129)', () => 
 // ─────────────────────────────────────────────────────────────────────────────
 // milestone complete command
 // ─────────────────────────────────────────────────────────────────────────────
-
