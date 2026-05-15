@@ -1219,6 +1219,12 @@ For the full audit, harness reference, and the composition note with `model_prof
 
 ### Using Non-Claude Runtimes (Codex, OpenCode, Gemini CLI, Kilo)
 
+> **Codex CLI minimum supported version: `0.130.0`** (issue [#3562](https://github.com/gsd-build/get-shit-done/issues/3562)).
+>
+> Codex CLI [0.130.0](https://github.com/openai/codex/releases/tag/rust-v0.130.0) (released 2026-05-08) removed extra-skills-roots discovery via [openai/codex#21485](https://github.com/openai/codex/pull/21485). From that version onward, Codex only discovers commands from `~/.codex/skills/<name>/SKILL.md` (user root), `<project>/.codex/skills/` (cwd root), and registered plugin roots. The GSD installer writes `~/.codex/skills/gsd-<name>/SKILL.md` directly so `$gsd-help`, `$gsd-new-project`, etc. are discoverable after restart.
+>
+> **Earlier Codex CLI versions** (pre-0.130.0) had additional skill-root scanning that discovered the GSD agent/workflow files in alternate locations. GSD still installs the `~/.codex/skills/gsd-*` copies on those versions, which can show a duplicate listing alongside the legacy auto-discovered surface — restart Codex after install and either upgrade to ≥ 0.130.0 or accept the duplicate entries until you do.
+
 If you installed GSD for a non-Claude runtime, the installer already configured model resolution so all agents use the runtime's default model. No manual setup is needed. Specifically, the installer sets `resolve_model_ids: "omit"` in your config, which tells GSD to skip Anthropic model ID resolution and let the runtime choose its own default model.
 
 To assign different models to different agents on a non-Claude runtime, add `model_overrides` to `.planning/config.json` with fully-qualified model IDs that your runtime recognizes:

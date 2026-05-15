@@ -36,21 +36,27 @@ function getBridge(): QueryRuntimeBridge {
   const NATIVE_TIMEOUT_MS = 30_000; // 30 s ceiling for any single handler
   const nativeErrorFactory = createQueryNativeErrorFactory(NATIVE_TIMEOUT_MS);
 
-  const nativeDirectAdapter = new QueryNativeDirectAdapter({
-    timeoutMs: NATIVE_TIMEOUT_MS,
-    dispatch: (registryCommand, registryArgs) =>
-      registry.dispatch(registryCommand, registryArgs, ''),
-    ...nativeErrorFactory,
-  });
-
+  // Build a per-request adapter inside dispatchNative so that projectDir and
+  // workstream from the request close over the correct values. The Phase 5.0
+  // bug was a module-scoped adapter that hardcoded projectDir = '' — any
+  // handler reading .planning/ (e.g. state.*) received an empty path and
+  // silently failed or read from the process CWD. Constructing per-request
+  // adds microseconds; correctness wins. (fix for latent bug, Phase 5.1)
   const transport = new GSDTransport(registry, {
-    dispatchNative: (request) =>
-      nativeDirectAdapter.dispatchResult(
+    dispatchNative: (request) => {
+      const adapter = new QueryNativeDirectAdapter({
+        timeoutMs: NATIVE_TIMEOUT_MS,
+        dispatch: (registryCommand, registryArgs) =>
+          registry.dispatch(registryCommand, registryArgs, request.projectDir, request.workstream),
+        ...nativeErrorFactory,
+      });
+      return adapter.dispatchResult(
         request.legacyCommand,
         request.legacyArgs,
         request.registryCommand,
         request.registryArgs,
-      ),
+      );
+    },
     // Subprocess fallback stubs — never called because allowFallbackToSubprocess=false
     execSubprocessJson: () =>
       Promise.reject(new Error('Subprocess fallback disabled in sync bridge worker')),
@@ -60,10 +66,18 @@ function getBridge(): QueryRuntimeBridge {
 
   const executionPolicy = new QueryExecutionPolicy(transport);
 
-  // Hotpath adapter stubs — dispatchHotpath is not called by executeForCjs
+  // Hotpath adapter: construct a stub that satisfies the QueryRuntimeBridge
+  // constructor. executeForCjs does not invoke dispatchHotpath so this
+  // adapter is never actually called. We still need a valid instance because
+  // QueryRuntimeBridge requires one at construction time.
+  const stubDirectAdapter = new QueryNativeDirectAdapter({
+    timeoutMs: NATIVE_TIMEOUT_MS,
+    dispatch: () => Promise.reject(new Error('stub: hotpath direct adapter not used')),
+    ...nativeErrorFactory,
+  });
   const hotpathAdapter = new QueryNativeHotpathAdapter(
     () => true,
-    nativeDirectAdapter,
+    stubDirectAdapter,
     () => Promise.reject(new Error('hotpath json fallback disabled')),
     () => Promise.reject(new Error('hotpath raw fallback disabled')),
   );

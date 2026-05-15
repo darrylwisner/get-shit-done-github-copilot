@@ -968,6 +968,10 @@ The `dynamic_routing` block is **disabled by default** — `enabled: false` (or 
 
 ### Non-Claude Runtimes (Codex, OpenCode, Gemini CLI, Kilo)
 
+> **Codex CLI minimum supported version: `0.130.0`** (issue [#3562](https://github.com/gsd-build/get-shit-done/issues/3562)).
+>
+> [Codex CLI 0.130.0](https://github.com/openai/codex/releases/tag/rust-v0.130.0) (released 2026-05-08) removed extra-skills-roots discovery via [openai/codex#21485](https://github.com/openai/codex/pull/21485). From this version forward, Codex CLI only scans `~/.codex/skills/<name>/SKILL.md`, `<project>/.codex/skills/`, and registered plugin roots for invocable skills. GSD installs the `$gsd-*` surface as `~/.codex/skills/gsd-<name>/SKILL.md` so commands resolve after a Codex restart. Earlier Codex CLI versions can show a duplicate listing (the legacy extra-roots scan plus the user-root copies) — restart Codex and either upgrade to ≥ 0.130.0 or accept the duplicates until you do.
+
 When GSD is installed for a non-Claude runtime, the installer automatically sets `resolve_model_ids: "omit"` in `~/.gsd/defaults.json`. This causes GSD to return an empty model parameter for all agents, so each agent uses whatever model the runtime is configured with. No additional setup is needed for the default case.
 
 If you want different agents to use different models, use `model_overrides` with fully-qualified model IDs that your runtime recognizes:

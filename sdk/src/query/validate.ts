@@ -594,18 +594,43 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
       const roadmapContent = await readFile(roadmapPath, 'utf-8');
       const roadmapPhases = new Set<string>();
       const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:/gi;
+      const phaseVariants = (phase: string): Set<string> => {
+        const variants = new Set<string>([phase]);
+        const dotIdx = phase.indexOf('.');
+        const head = dotIdx === -1 ? phase : phase.slice(0, dotIdx);
+        const tail = dotIdx === -1 ? '' : phase.slice(dotIdx);
+        const headMatch = head.match(/^(\d+)([A-Z]?)$/i);
+        if (!headMatch) return variants;
+        const numericHead = headMatch[1];
+        const letterSuffix = headMatch[2] || '';
+        variants.add(`${String(parseInt(numericHead, 10))}${letterSuffix}${tail}`);
+        variants.add(`${numericHead.padStart(2, '0')}${letterSuffix}${tail}`);
+        return variants;
+      };
+      const roadmapPhaseVariants = new Set<string>();
       let m: RegExpExecArray | null;
       while ((m = phasePattern.exec(roadmapContent)) !== null) {
         roadmapPhases.add(m[1]);
+        for (const variant of phaseVariants(m[1])) roadmapPhaseVariants.add(variant);
+      }
+      const notStartedPhases = new Set<string>();
+      const uncheckedPattern = /-\s*\[\s\]\s*\*{0,2}Phase\s+(\d+[A-Z]?(?:\.\d+)*)[:\s*]/gi;
+      let um: RegExpExecArray | null;
+      while ((um = uncheckedPattern.exec(roadmapContent)) !== null) {
+        for (const variant of phaseVariants(um[1])) notStartedPhases.add(variant);
       }
 
       const diskPhases = new Set<string>();
+      const activeDiskPhases = new Set<string>();
       try {
         const entries = await readdir(phasesDir, { withFileTypes: true });
         for (const e of entries) {
           if (e.isDirectory()) {
             const dm = e.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-            if (dm) diskPhases.add(dm[1]);
+            if (dm) {
+              diskPhases.add(dm[1]);
+              activeDiskPhases.add(dm[1]);
+            }
           }
         }
       } catch { /* intentionally empty */ }
@@ -625,15 +650,18 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
       } catch { /* intentionally empty */ }
 
       for (const p of roadmapPhases) {
-        const padded = String(parseInt(p, 10)).padStart(2, '0');
-        if (!diskPhases.has(p) && !diskPhases.has(padded)) {
+        const variants = phaseVariants(p);
+        const existsOnDisk = [...variants].some((variant) => diskPhases.has(variant));
+        const isNotStarted = [...variants].some((variant) => notStartedPhases.has(variant));
+        if (!existsOnDisk) {
+          if (isNotStarted) continue;
           addIssue('warning', 'W006', `Phase ${p} in ROADMAP.md but no directory on disk`, 'Create phase directory or remove from roadmap');
         }
       }
 
-      for (const p of diskPhases) {
-        const unpadded = String(parseInt(p, 10));
-        if (!roadmapPhases.has(p) && !roadmapPhases.has(unpadded)) {
+      for (const p of activeDiskPhases) {
+        const variants = phaseVariants(p);
+        if (![...variants].some((variant) => roadmapPhaseVariants.has(variant))) {
           addIssue('warning', 'W007', `Phase ${p} exists on disk but not in ROADMAP.md`, 'Add to roadmap or remove directory');
         }
       }

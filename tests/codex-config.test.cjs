@@ -1462,7 +1462,7 @@ describe('Codex install hook configuration (e2e)', () => {
     runCodexInstall(codexHome);
 
     const content = readCodexConfig(codexHome);
-    assert.ok(content.includes('[features]\ncodex_hooks = true\n'), 'writes codex_hooks feature');
+    assert.ok(content.includes('[features]\nhooks = true\n'), 'writes codex_hooks feature');
     const parsed = parseTomlToObject(content);
     assert.ok(!parsed.hooks || !Array.isArray(parsed.hooks.SessionStart), 'config.toml does not carry managed SessionStart hooks');
     // #3017: handler command now uses the absolute Node binary path so
@@ -1478,7 +1478,7 @@ describe('Codex install hook configuration (e2e)', () => {
     const gsdCommands = hooksJsonCommands.filter((cmd) => cmd.includes('gsd-check-update.js'));
     assert.strictEqual(gsdCommands.length, 1, 'writes one GSD update hook in hooks.json');
     assert.strictEqual(gsdCommands[0], expectedCommand, 'handler command must use absolute node runner pointing at gsd-check-update.js (#3017)');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'writes one codex_hooks key');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'writes one codex_hooks key');
     assertNoDraftRootKeys(content);
     assertUsesOnlyEol(content, '\n');
   });
@@ -1556,7 +1556,7 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'creates one [features] section');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'creates one codex_hooks key');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'creates one codex_hooks key');
     assert.ok(content.includes('# user comment'), 'preserves user comment');
     assert.ok(content.includes('[model]\nname = "o3"'), 'preserves model section');
     assert.ok(content.includes('command = "echo custom"'), 'preserves custom hook');
@@ -1610,7 +1610,7 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'creates one [features] section');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'creates one codex_hooks key');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'creates one codex_hooks key');
     assert.ok(content.includes('# user comment'), 'preserves user comment');
     assert.ok(content.includes('[model]\r\nname = "o3"'), 'preserves model section');
     // [features] should be inserted between top-level lines and [model], not prepended
@@ -1636,8 +1636,8 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
-    assert.ok(content.includes('[features]\r\n# keep me\r\n\r\ncodex_hooks = true\r\n'), 'adds codex_hooks within comment-only table');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.ok(content.includes('[features]\r\n# keep me\r\n\r\nhooks = true\r\n'), 'adds codex_hooks within comment-only table');
     assert.ok(content.includes('[model]\r\nname = "o3"\r\n'), 'preserves following table');
     assertUsesOnlyEol(content, '\r\n');
     assertNoDraftRootKeys(content);
@@ -1657,10 +1657,10 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\s*\[features\](?:\s*#.*)?$/gm), 1, 'keeps one commented [features] header');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'adds one codex_hooks key');
     assert.ok(content.includes('[features] # keep comment\nother_feature = true'), 'preserves commented features table');
-    assert.ok(content.indexOf('codex_hooks = true') > content.indexOf('[features] # keep comment'), 'adds codex_hooks within existing features table');
-    assert.ok(content.indexOf('codex_hooks = true') < content.indexOf('[model]'), 'does not create a second features table before model');
+    assert.ok(content.indexOf('hooks = true') > content.indexOf('[features] # keep comment'), 'adds codex_hooks within existing features table');
+    assert.ok(content.indexOf('hooks = true') < content.indexOf('[model]'), 'does not create a second features table before model');
     assertNoDraftRootKeys(content);
   });
 
@@ -1671,9 +1671,9 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
-    assert.ok(content.indexOf('codex_hooks = true') > content.indexOf('[features]'), 'adds codex_hooks after the existing EOF features header');
-    assert.ok(content.indexOf('codex_hooks = true') < content.indexOf('[agents.'), 'keeps codex_hooks before the first managed [agents.<name>] struct entry');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.ok(content.indexOf('hooks = true') > content.indexOf('[features]'), 'adds codex_hooks after the existing EOF features header');
+    assert.ok(content.indexOf('hooks = true') < content.indexOf('[agents.'), 'keeps codex_hooks before the first managed [agents.<name>] struct entry');
     assertNoDraftRootKeys(content);
   });
 
@@ -1765,7 +1765,7 @@ describe('Codex install hook configuration (e2e)', () => {
     const content = readCodexConfig(codexHome);
     assert.ok(content.includes('[features."a#b"]\nenabled = true'), 'preserves the quoted nested features table');
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'adds one real top-level features table');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'adds one codex_hooks key');
     const hooksJsonCommands = readHooksSessionStartCommands(codexHome);
     const gsdEntries = hooksJsonCommands.filter((cmd) => cmd.includes('gsd-check-update.js'));
     assert.strictEqual(gsdEntries.length, 1, 'remains idempotent for the GSD hook block in hooks.json');
@@ -1786,7 +1786,7 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 0, 'does not add a [features] table');
-    assert.strictEqual(countMatches(content, /^features\.codex_hooks = true$/gm), 1, 'adds one dotted codex_hooks key');
+    assert.strictEqual(countMatches(content, /^features\.hooks = true$/gm), 1, 'adds one dotted codex_hooks key');
     assert.ok(content.includes('features.other_feature = true'), 'preserves existing dotted features key');
     const hooksJsonCommands = readHooksSessionStartCommands(codexHome);
     const gsdEntries = hooksJsonCommands.filter((cmd) => cmd.includes('gsd-check-update.js'));
@@ -1876,9 +1876,9 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.ok(content.includes('features.notes = """\nkeep-me\n"""'), 'preserves the multiline dotted assignment');
-    assert.strictEqual(countMatches(content, /^features\.codex_hooks = true$/gm), 1, 'adds one dotted codex_hooks key');
-    assert.ok(content.indexOf('features.codex_hooks = true') > content.indexOf('"""'), 'inserts codex_hooks after the multiline assignment closes');
-    assert.ok(content.indexOf('features.codex_hooks = true') < content.indexOf('[model]'), 'inserts codex_hooks before the next table');
+    assert.strictEqual(countMatches(content, /^features\.hooks = true$/gm), 1, 'adds one dotted codex_hooks key');
+    assert.ok(content.indexOf('features.hooks = true') > content.indexOf('"""'), 'inserts codex_hooks after the multiline assignment closes');
+    assert.ok(content.indexOf('features.hooks = true') < content.indexOf('[model]'), 'inserts codex_hooks before the next table');
     assertNoDraftRootKeys(content);
   });
 
@@ -1889,8 +1889,8 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds one codex_hooks key');
-    assert.ok(content.includes('[features]\r\n\r\ncodex_hooks = true\r\n'), 'adds codex_hooks to empty table');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'adds one codex_hooks key');
+    assert.ok(content.includes('[features]\r\n\r\nhooks = true\r\n'), 'adds codex_hooks to empty table');
     assertUsesOnlyEol(content, '\r\n');
     assertNoDraftRootKeys(content);
   });
@@ -1914,13 +1914,13 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     assert.strictEqual(countMatches(content, /^\[features\]\s*$/gm), 1, 'keeps one [features] section');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'adds a real codex_hooks key once');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'adds a real codex_hooks key once');
     assert.ok(content.includes('notes = \'\'\'\n[model]\ncodex_hooks = false\n\'\'\''), 'preserves multiline string content');
     assert.strictEqual(countMatches(content, /^codex_hooks = false$/gm), 1, 'does not rewrite codex_hooks text inside multiline string');
-    assert.ok(content.indexOf('codex_hooks = true') > content.indexOf('other_feature = true'), 'does not stop the features section at multiline string content');
+    assert.ok(content.indexOf('hooks = true') > content.indexOf('other_feature = true'), 'does not stop the features section at multiline string content');
     // Parse structurally — verify codex_hooks and migrated AfterCommand hook via parsed object
     const parsed = parseTomlToObject(content);
-    assert.equal(parsed.features?.codex_hooks, true, 'writes a real codex_hooks boolean key');
+    assert.equal(parsed.features?.hooks, true, 'writes a real hooks boolean key (#3566)');
     assert.ok(Array.isArray(parsed.hooks?.AfterCommand), 'AfterCommand flat [[hooks]] migrated to namespaced AoT');
     const afterCmds = parsed.hooks.AfterCommand.flatMap((entry) =>
       Array.isArray(entry.hooks) ? entry.hooks.map((h) => h.command).filter(Boolean) : []
@@ -2112,7 +2112,7 @@ describe('Codex install hook configuration (e2e)', () => {
 
     const content = readCodexConfig(codexHome);
     // [features] is inserted after top-level lines, before [model] — not prepended
-    assert.ok(content.includes('# first line wins\n\n[features]\ncodex_hooks = true\n'), 'inserts features after top-level lines using first newline style');
+    assert.ok(content.includes('# first line wins\n\n[features]\nhooks = true\n'), 'inserts features after top-level lines using first newline style');
     assert.ok(content.includes(`# GSD Agent Configuration — managed by get-shit-done installer\n`), 'writes the managed agent block using the first newline style');
     // Structural check: managed SessionStart hooks live in hooks.json.
     const parsedMixed = parseTomlToObject(content);
@@ -2121,7 +2121,7 @@ describe('Codex install hook configuration (e2e)', () => {
     const gsdEntries = hooksJsonCommands.filter((cmd) => cmd.includes('gsd-check-update.js'));
     assert.strictEqual(gsdEntries.length, 1, 'writes one managed SessionStart hook to hooks.json');
     assert.ok(content.includes('[model]\r\nname = "o3"'), 'preserves the existing CRLF model lines');
-    assert.strictEqual(countMatches(content, /^codex_hooks = true$/gm), 1, 'remains idempotent on repeated installs');
+    assert.strictEqual(countMatches(content, /^hooks = true$/gm), 1, 'remains idempotent on repeated installs');
     assertNoDraftRootKeys(content);
   });
 });
