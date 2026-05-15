@@ -1117,6 +1117,57 @@ describe('resolve-model command', () => {
     assert.ok(output.model, 'should resolve a model');
   });
 
+  test('includes reasoning_effort when selected runtime supports it', () => {
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
+      model_profile: 'balanced',
+      runtime: 'codex',
+      models: { planning: 'opus' },
+    }));
+    const result = runGsdTools('resolve-model gsd-planner', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.model, 'gpt-5.4');
+    assert.strictEqual(output.profile, 'balanced');
+    assert.strictEqual(output.reasoning_effort, 'xhigh');
+  });
+
+  test('does not include reasoning_effort for unsupported runtime overrides', () => {
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
+      model_profile: 'balanced',
+      runtime: 'opencode',
+      models: { planning: 'opus' },
+      model_profile_overrides: {
+        opencode: {
+          opus: { model: 'openrouter/openai/gpt-5.5', reasoning_effort: 'high' },
+        },
+      },
+    }));
+    const result = runGsdTools('resolve-model gsd-planner', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.model, 'openrouter/openai/gpt-5.5');
+    assert.strictEqual(output.profile, 'balanced');
+    assert.ok(!Object.prototype.hasOwnProperty.call(output, 'reasoning_effort'));
+  });
+
+  test('does not include reasoning_effort for per-agent model_overrides', () => {
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
+      model_profile: 'balanced',
+      runtime: 'codex',
+      models: { planning: 'opus' },
+      model_overrides: { 'gsd-planner': 'gpt-5.5' },
+    }));
+    const result = runGsdTools('resolve-model gsd-planner', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.model, 'gpt-5.5');
+    assert.strictEqual(output.profile, 'balanced');
+    assert.ok(!Object.prototype.hasOwnProperty.call(output, 'reasoning_effort'));
+  });
+
   test('fails when no agent-type provided', () => {
     const result = runGsdTools('resolve-model', tmpDir);
     assert.ok(!result.success, 'should fail without agent-type');

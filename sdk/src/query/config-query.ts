@@ -30,7 +30,10 @@ import {
   VALID_PROFILES,
   getAgentToModelMapForProfile,
   resolveRuntimeTierDefault,
+  runtimesWithReasoningEffort,
 } from '../model-catalog.js';
+
+const RUNTIMES_WITH_REASONING_EFFORT = runtimesWithReasoningEffort();
 
 // ─── configGet ──────────────────────────────────────────────────────────────
 
@@ -151,7 +154,11 @@ function resolveRuntimeTier(config: Record<string, unknown>, tier: string): Runt
   const userEntry = normalizeRuntimeTierEntry(runtimeOverrides?.[tier]);
 
   if (!builtin && !userEntry) return null;
-  return { ...(builtin ?? {}), ...(userEntry ?? {}) };
+  const merged = { ...(builtin ?? {}), ...(userEntry ?? {}) };
+  if (!RUNTIMES_WITH_REASONING_EFFORT.has(runtime)) {
+    delete merged.reasoning_effort;
+  }
+  return merged;
 }
 
 /**
@@ -222,7 +229,11 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
   const tier = typeof phaseTier === 'string' ? phaseTier : alias;
   const runtimeTier = resolveRuntimeTier(config as Record<string, unknown>, tier);
   if (runtimeTier?.model) {
-    return { data: { model: runtimeTier.model, profile } };
+    const result: Record<string, unknown> = { model: runtimeTier.model, profile };
+    if (runtimeTier.reasoning_effort) {
+      result.reasoning_effort = runtimeTier.reasoning_effort;
+    }
+    return { data: result };
   }
 
   if (resolveModelIds === 'omit') {

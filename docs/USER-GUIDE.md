@@ -40,12 +40,12 @@ v1.40 ships six **namespace meta-skills** as the first-stage entry points for hi
 
 | Namespace | Router | Routes to |
 |-----------|--------|-----------|
-| Phase pipeline | `/gsd-ns-workflow` | discuss / plan / execute / verify / phase / progress |
-| Project lifecycle | `/gsd-ns-project` | milestones, audits, summary |
-| Quality gates | `/gsd-ns-review` | code review, debug, audit, security, eval, ui |
-| Codebase intelligence | `/gsd-ns-context` | map, graphify, docs, learnings |
-| Management | `/gsd-ns-manage` | config, workspace, workstreams, thread, update, ship, inbox |
-| Exploration & capture | `/gsd-ns-ideate` | explore, sketch, spike, spec, capture |
+| Phase pipeline | `/gsd-workflow` | discuss / plan / execute / verify / phase / progress |
+| Project lifecycle | `/gsd-project` | milestones, audits, summary |
+| Quality gates | `/gsd-quality` | code review, debug, audit, security, eval, ui |
+| Codebase intelligence | `/gsd-context` | map, graphify, docs, learnings |
+| Management | `/gsd-manage` | config, workspace, workstreams, thread, update, ship, inbox |
+| Exploration & capture | `/gsd-ideate` | explore, sketch, spike, spec, capture |
 
 You almost never need to type a namespace router yourself. Their value is in the routing layer the model uses to discover the right sub-skill — they exist so the system prompt can list 6 entries instead of 86. If you already know the concrete command (e.g. `/gsd-plan-phase`), call it directly.
 
@@ -248,6 +248,10 @@ Once a phase is verified, ship it:
 ```
 /gsd-ship 1          # Creates a PR with auto-generated body
 ```
+
+The PR body always includes the required GSD sections: `Summary`, `Changes`, `Requirements Addressed`, `Verification`, and `Key Decisions`. During `/gsd-new-project`, you can also enable optional PRD-style sections such as user stories, acceptance criteria, risks, release criteria, and stakeholder approval. These are appended through `ship.pr_body_sections` and do not change the required core sections.
+
+For setup examples, field definitions, and troubleshooting, see [Custom PR Body Sections](ship-pr-body-sections.md).
 
 For multi-phase projects, repeat the loop:
 
@@ -721,6 +725,87 @@ The `security.cjs` module scans for known injection patterns (role overrides, in
 
 ---
 
+### Package Legitimacy Gate (v1.42.1)
+
+AI coding tools hallucinate package names. Attackers pre-register those names on npm, PyPI, and crates.io with malicious post-install scripts — a technique called *slopsquatting*. A hallucinated name that passes `npm view` looks legitimate, so it would flow undetected through GSD's research → plan → execute pipeline all the way to `npm install <malicious-pkg>` running on your machine.
+
+v1.42.1 adds a three-layer gate that stops this before it reaches your shell.
+
+#### What you'll see
+
+**In RESEARCH.md** — every phase that recommends external packages now includes a `## Package Legitimacy Audit` table:
+
+```markdown
+## Package Legitimacy Audit
+
+| Package | Registry | Age | Downloads | Source Repo | slopcheck | Disposition |
+|---------|----------|-----|-----------|-------------|-----------|-------------|
+| express | npm | 13 yrs | 100M+/wk | github.com/expressjs/express | [OK] | Approved |
+| some-new-util | npm | 3 days | 47 | none | [SLOP] | REMOVED |
+| api-bridge | npm | 6 mo | 1.2k/wk | github.com/user/api-bridge | [SUS] | Flagged |
+
+**Packages removed due to slopcheck:** some-new-util
+**Packages flagged as suspicious:** api-bridge — planner will require human verification before install
+```
+
+`[SLOP]` packages are removed from RESEARCH.md entirely. They never reach the planner.
+
+**In PLAN.md** — if a package is tagged `[ASSUMED]` (sourced from WebSearch, not registry-verified) or `[SUS]` (slopcheck suspicious), the plan includes a verification checkpoint *before* the install task:
+
+```xml
+<task type="checkpoint:human-verify">
+  <what-built>Package verification required before install</what-built>
+  <how-to-verify>
+    Verify these packages before proceeding:
+    - `api-bridge` [SUS — 6 months old, 1.2k downloads/week, GitHub repo present]
+      Check: https://npmjs.com/package/api-bridge
+      Look for: maintainer history, issue tracker activity, no suspicious install scripts
+  </how-to-verify>
+  <resume-signal>Type "verified" once you've confirmed all packages are legitimate</resume-signal>
+</task>
+```
+
+**During execution** — if an install fails, the executor surfaces a checkpoint and stops. It does not silently try a similarly-named alternative (which could be even more dangerous).
+
+#### Slopcheck verdicts
+
+| Verdict | Meaning | GSD action |
+|---------|---------|------------|
+| `[OK]` | Package passes all legitimacy checks | Proceeds — no checkpoint added |
+| `[SUS]` | Suspicious signals (new, low downloads, no source repo, etc.) | Flagged in Audit table; planner adds `checkpoint:human-verify` before install |
+| `[SLOP]` | High-confidence hallucination or attacker-registered package | Removed from RESEARCH.md; never reaches planner |
+
+#### Claim provenance and WebSearch packages
+
+Package names discovered through WebSearch are always tagged `[ASSUMED]` in RESEARCH.md, regardless of whether `npm view` succeeds. A package that exists on the registry is not the same as a package that's safe to install — `npm view` only proves registration, not legitimacy.
+
+`[ASSUMED]` packages trigger the same `checkpoint:human-verify` gate as `[SUS]` packages. You'll see the checkpoint with a link to the registry page and guidance on what to look for.
+
+#### If slopcheck isn't installed
+
+GSD attempts `pip install slopcheck` at research time. If that fails:
+
+- Every recommended package is tagged `[ASSUMED]`
+- The planner gates every install with a `checkpoint:human-verify` task
+- Research and planning complete normally — nothing hard-fails
+
+This is intentionally stricter than the normal flow: slopcheck unavailability means every package install gets a human checkpoint, which is the safest fallback.
+
+To install slopcheck manually:
+
+```bash
+pip install slopcheck
+# verify: slopcheck install express --json
+```
+
+#### slopcheck dependency
+
+`slopcheck` is a MIT-licensed Python tool maintained by ToxSec (the researcher who documented the slopsquatting attack surface). It checks packages across npm, PyPI, crates.io, RubyGems, Go modules, Maven, and Packagist using multi-signal heuristics: registry age, download count, source-repo linkage, naming distance to popular packages, and registry-specific suspicion patterns.
+
+If `slopcheck` is ever unavailable or abandoned, GSD's `[ASSUMED]`-gate fallback ensures you always get a human checkpoint before any install — the system never silently degrades to the pre-v1.42.1 behavior.
+
+---
+
 ### Execution Wave Coordination
 
 ```
@@ -821,10 +906,10 @@ For queryable codebase insights without reading the entire codebase, enable the 
 Then build the index:
 
 ```bash
-/gsd-intel refresh             # Analyze codebase and write .planning/intel/ files
-/gsd-intel query auth          # Search for a term across all intel files
-/gsd-intel status              # Check freshness of intel files
-/gsd-intel diff                # See what changed since last snapshot
+/gsd-map-codebase --query refresh             # Analyze codebase and write .planning/intel/ files
+/gsd-map-codebase --query auth               # Search for a term across all intel files
+/gsd-map-codebase --query status             # Check freshness of intel files
+/gsd-map-codebase --query diff               # See what changed since last snapshot
 ```
 
 Intel files cover stack, API surface, dependency graph, file roles, and architecture decisions.
@@ -834,9 +919,9 @@ Intel files cover stack, API surface, dependency graph, file roles, and architec
 For a focused assessment without full `/gsd-map-codebase` overhead:
 
 ```bash
-/gsd-scan                      # Quick tech + arch overview
-/gsd-scan --focus quality      # Quality and code health only
-/gsd-scan --focus concerns     # Risk areas and concerns
+/gsd-map-codebase --fast                        # Quick tech + arch overview
+/gsd-map-codebase --fast --focus quality        # Quality and code health only
+/gsd-map-codebase --fast --focus concerns       # Risk areas and concerns
 ```
 
 ---

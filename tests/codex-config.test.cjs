@@ -150,6 +150,12 @@ describe('getCodexSkillAdapterHeader', () => {
     const result = getCodexSkillAdapterHeader('gsd-execute-phase');
     assert.ok(result.includes('spawn_agent'), 'maps to spawn_agent');
     assert.ok(result.includes('agent_type'), 'maps subagent_type to agent_type');
+    assert.match(
+      result,
+      /Resolved `reasoning_effort="low\|medium\|high\|xhigh"` \(`xhigh` is a GSD\/Codex tier, not a generic runtime enum\) → pass `reasoning_effort`\s+to `spawn_agent` when the runtime\/tool supports it/,
+      'documents reasoning_effort transport',
+    );
+    assert.ok(result.includes('do not invent one-off effort literals'), 'keeps effort policy centralized');
     assert.ok(result.includes('fork_context'), 'documents fork_context default');
     assert.ok(result.includes('wait(ids)'), 'documents parallel wait pattern');
     assert.ok(result.includes('close_agent'), 'documents close_agent cleanup');

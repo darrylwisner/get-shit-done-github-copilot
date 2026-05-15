@@ -20,12 +20,12 @@ Six namespace routers ship as the first-stage entry points in v1.40. They keep t
 
 | Command | Routes to |
 |---------|-----------|
-| `/gsd-ns-workflow` | Phase pipeline — discuss / plan / execute / verify / phase / progress |
-| `/gsd-ns-project` | Project lifecycle — milestones, audits, summary |
-| `/gsd-ns-review` | Quality gates — code review, debug, audit, security, eval, ui |
-| `/gsd-ns-context` | Codebase intelligence — map, graphify, docs, learnings |
-| `/gsd-ns-manage` | Management — config, workspace, workstreams, thread, update, ship, inbox |
-| `/gsd-ns-ideate` | Exploration & capture — explore, sketch, spike, spec, capture |
+| `/gsd-workflow` | Phase pipeline — discuss / plan / execute / verify / phase / progress |
+| `/gsd-project` | Project lifecycle — milestones, audits, summary |
+| `/gsd-quality` | Quality gates — code review, debug, audit, security, eval, ui |
+| `/gsd-context` | Codebase intelligence — map, graphify, docs, learnings |
+| `/gsd-manage` | Management — config, workspace, workstreams, thread, update, ship, inbox |
+| `/gsd-ideate` | Exploration & capture — explore, sketch, spike, spec, capture |
 
 The namespace skills are **additive** — every existing concrete command (e.g. `/gsd-plan-phase`, `/gsd-code-review --fix`) is still invocable directly.
 
@@ -149,6 +149,8 @@ Research, plan, and verify a phase.
 | `--gaps` | Gap closure mode (reads VERIFICATION.md, skips research) |
 | `--skip-verify` | Skip plan checker verification loop |
 | `--prd <file>` | Use a PRD file instead of discuss-phase for context |
+| `--ingest <path-or-glob>` | Use ADR file(s) instead of discuss-phase for context synthesis |
+| `--ingest-format <auto\|nygard\|madr\|narrative>` | Optional ADR parser format override for `--ingest` |
 | `--reviews` | Replan with cross-AI review feedback from REVIEWS.md |
 | `--validate` | Run state validation before planning begins |
 | `--bounce` | Run external plan bounce validation after planning (uses `workflow.plan_bounce_script`) |
@@ -162,12 +164,25 @@ Research, plan, and verify a phase.
 - With `--research`: force-refresh — re-spawn researcher unconditionally, no prompt.
 - With `--view`: print existing RESEARCH.md to stdout, no spawn. Errors if RESEARCH.md missing.
 
+**Package Legitimacy Gate (v1.42.1):**
+When the researcher recommends external packages, it runs `slopcheck install <pkg> --json` on each one and writes a `## Package Legitimacy Audit` table to RESEARCH.md recording Registry, Age, Downloads, Source Repo, and slopcheck verdict. Verdicts:
+
+- `[SLOP]` — package removed from RESEARCH.md entirely; never reaches the planner
+- `[SUS]` — package flagged; planner inserts `checkpoint:human-verify` before the install task
+- `[OK]` — package approved; no checkpoint added
+
+Packages sourced from WebSearch are tagged `[ASSUMED]` (not `[VERIFIED]`) and treated the same as `[SUS]` — they get a human checkpoint before install. If `slopcheck` cannot be installed, every recommended package is tagged `[ASSUMED]` and gated.
+
+See [Package Legitimacy Gate in the User Guide](USER-GUIDE.md#package-legitimacy-gate-v1421) for the full checkpoint format, verdict table, and troubleshooting.
+
 ```bash
 /gsd-plan-phase 1                              # Research + plan + verify phase 1
 /gsd-plan-phase 3 --skip-research              # Plan without research (familiar domain)
 /gsd-plan-phase --auto                         # Non-interactive planning
 /gsd-plan-phase 2 --validate                   # Validate state before planning
 /gsd-plan-phase 1 --bounce                     # Plan + external bounce validation
+/gsd-plan-phase 2 --ingest docs/adr/0010.md   # ADR express path for context synthesis
+/gsd-plan-phase 2 --ingest 'docs/adr/00*.md' --ingest-format auto
 /gsd-plan-phase --research-phase 4             # Research only on phase 4 (prompts if RESEARCH.md exists)
 /gsd-plan-phase --research-phase 4 --view      # Print existing RESEARCH.md, no spawn
 /gsd-plan-phase --research-phase 4 --research  # Force-refresh research, no prompt
@@ -227,6 +242,8 @@ Execute all plans in a phase with wave-based parallelization, or run a specific 
 **Prerequisites:** Phase has PLAN.md files
 **Produces:** per-plan `{phase}-{N}-SUMMARY.md`, git commits, and `{phase}-VERIFICATION.md` when the phase is fully complete
 
+**Package install failures (v1.42.1):** If a plan's install step fails, the executor surfaces a `checkpoint:human-verify` and stops. It does not auto-install a similarly-named alternative. This is intentional — silently substituting package names is how slopsquatting spreads. Respond to the checkpoint after verifying the package on its registry page.
+
 ```bash
 /gsd-execute-phase 1                # Execute phase 1
 /gsd-execute-phase 1 --wave 2       # Execute only Wave 2
@@ -278,6 +295,9 @@ Create PR from completed phase work with auto-generated body.
 - Requirements addressed (REQ-IDs)
 - Verification status
 - Key decisions
+- Optional configured PRD-style sections from `ship.pr_body_sections`
+
+See [Custom PR Body Sections](ship-pr-body-sections.md) for onboarding, examples, and validation rules.
 
 ---
 
@@ -719,7 +739,6 @@ Generate a developer behavioral profile from Claude Code session analysis across
 
 **Generated artifacts:**
 - `USER-PROFILE.md` — Full behavioral profile
-- `/gsd-dev-preferences` command — Load preferences in any session
 - `CLAUDE.md` profile section — Auto-discovered by Claude Code
 
 ```bash
@@ -1087,6 +1106,8 @@ Review source files changed during a phase for bugs, security vulnerabilities, a
 **Prerequisites:** Phase has been executed and has SUMMARY.md or git history
 **Produces:** `{phase}-REVIEW.md` with severity-classified findings; `{phase}-REVIEW-FIX.md` when `--fix` is used
 **Spawns:** `gsd-code-reviewer` agent; `gsd-code-fixer` agent (with `--fix`)
+
+**Optional structural pre-pass:** Set `code_quality.fallow.enabled` to `true` to run fallow before the agent review. GSD writes `{phase}/FALLOW.json` and embeds a `Structural Findings (fallow)` section in `REVIEW.md`. Configure scope and profile with `code_quality.fallow.scope` and `code_quality.fallow.profile`.
 
 ```bash
 /gsd-code-review 3                          # Standard review for phase 3
