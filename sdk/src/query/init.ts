@@ -22,11 +22,13 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, basename } from 'node:path';
 import { execSync } from 'node:child_process';
 import { homedir } from 'node:os';
+import { GSDError, ErrorClassification } from '../errors.js';
 
 import { loadConfig, type GSDConfig } from '../config.js';
 import { resolveModel, MODEL_PROFILES } from './config-query.js';
 import { maskIfSecret } from './secrets.js';
 import { findPhase } from './phase.js';
+import { getMilestonePhaseFilter } from './state.js';
 import { roadmapGetPhase, getMilestoneInfo, extractCurrentMilestone, extractPhasesFromSection } from './roadmap.js';
 import { determinePhaseStatus } from './progress.js';
 import { planningPaths, normalizePhaseName, toPosixPath, resolveAgentsDir, detectRuntime } from './helpers.js';
@@ -141,13 +143,16 @@ function computeExpectedPhaseDirName(
 async function shouldDropArchivedPhaseMatch(
   phaseInfo: Record<string, unknown> | null,
   roadmapPhase: Record<string, unknown> | null,
-  projectDir: string,
-  workstream?: string,
+  _projectDir: string,
+  _workstream?: string,
 ): Promise<boolean> {
-  if (!phaseInfo?.archived || !roadmapPhase || !roadmapPhase.found) return false;
-  const archivedTag = String(phaseInfo.archived ?? '');
-  const milestone = await getMilestoneInfo(projectDir, workstream);
-  if (milestone?.version && archivedTag === milestone.version) return false;
+  // Matches CJS cmdInitPlanPhase / cmdInitExecutePhase / cmdInitVerifyWork:
+  //   if (phaseInfo?.archived && roadmapPhase?.found) phaseInfo = null;
+  // Unconditional drop — the ROADMAP is authoritative for the current milestone,
+  // regardless of what archived milestone the on-disk match came from. Do NOT add
+  // a milestone-version equality check (#2391 regression risk).
+  if (!phaseInfo?.archived) return false;
+  if (!roadmapPhase || !roadmapPhase.found) return false;
   return true;
 }
 
@@ -367,6 +372,13 @@ export const initExecutePhase: QueryHandler = async (args, projectDir, workstrea
     return { data: { error: 'phase required for init execute-phase' } };
   }
 
+  // --tdd is a boolean override of config.workflow.tdd_mode — matches the CJS
+  // path's parseNamedArgs(args, [], ['validate', 'tdd']) projection
+  // (bin/lib/init-command-router.cjs handler block) which passes options.tdd
+  // through to cmdInitExecutePhase. Without parsing here, `gsd-tools init
+  // execute-phase 1 --tdd` would never override a false config value.
+  const tddFlag = args.includes('--tdd');
+
   const config = await loadConfig(projectDir);
   const paths = planningPaths(projectDir, workstream);
   const planningDir = paths.planning;
@@ -394,7 +406,7 @@ export const initExecutePhase: QueryHandler = async (args, projectDir, workstrea
   const result: Record<string, unknown> = {
     executor_model: executorModel,
     verifier_model: verifierModel,
-    tdd_mode: config.workflow.tdd_mode ?? false,
+    tdd_mode: tddFlag || (config.workflow.tdd_mode ?? false),
     commit_docs: config.commit_docs,
     sub_repos: (config as Record<string, unknown>).sub_repos ?? [],
     parallelization: config.parallelization,
@@ -450,6 +462,10 @@ export const initPlanPhase: QueryHandler = async (args, projectDir, workstream) 
     return { data: { error: 'phase required for init plan-phase' } };
   }
 
+  // --tdd boolean override (parity with CJS router's parseNamedArgs + the
+  // legacy cmdInitPlanPhase `options.tdd || config.tdd_mode || false`).
+  const tddFlag = args.includes('--tdd');
+
   const config = await loadConfig(projectDir);
   const paths = planningPaths(projectDir, workstream);
   const planningDir = paths.planning;
@@ -498,7 +514,7 @@ export const initPlanPhase: QueryHandler = async (args, projectDir, workstream) 
     researcher_model: researcherModel,
     planner_model: plannerModel,
     checker_model: checkerModel,
-    tdd_mode: config.workflow.tdd_mode ?? false,
+    tdd_mode: tddFlag || (config.workflow.tdd_mode ?? false),
     research_enabled: config.workflow.research,
     plan_checker_enabled: config.workflow.plan_check,
     nyquist_validation_enabled: config.workflow.nyquist_validation,
@@ -568,8 +584,14 @@ export const initNewMilestone: QueryHandler = async (_args, projectDir) => {
   let phaseDirCount = 0;
   try {
     if (existsSync(phasesDir)) {
+      // Bug #2445 parity with CJS `cmdInitNewMilestone`: filter phase dirs
+      // to the current milestone so stale dirs from a prior milestone that
+      // weren't archived don't inflate the count. Without this filter the
+      // SDK returns the full directory count, which the new-milestone
+      // workflow then uses to gate "is this a fresh start" decisions.
+      const isDirInMilestone = await getMilestonePhaseFilter(projectDir);
       phaseDirCount = readdirSync(phasesDir, { withFileTypes: true })
-        .filter(entry => entry.isDirectory())
+        .filter(entry => entry.isDirectory() && isDirInMilestone(entry.name))
         .length;
     }
   } catch { /* intentionally empty */ }
@@ -1052,7 +1074,12 @@ export const initMapCodebase: QueryHandler = async (_args, projectDir) => {
     commit_docs: config.commit_docs,
     search_gitignored: config.search_gitignored,
     parallelization: config.parallelization,
-    subagent_timeout: (config as Record<string, unknown>).subagent_timeout ?? undefined,
+    // subagent_timeout lives at workflow.subagent_timeout per the canonical
+    // Configuration manifest (sdk/shared/config-defaults.manifest.json). Reading
+    // the top-level config.subagent_timeout returned undefined, so the workflow
+    // step that consumes this value had to invent its own fallback. Default to
+    // 300000 (5 min) per the manifest. (#1472)
+    subagent_timeout: (((config as Record<string, unknown>).workflow as Record<string, unknown> | undefined)?.subagent_timeout as number | undefined) ?? 300000,
     date: now.toISOString().split('T')[0],
     timestamp: now.toISOString(),
     codebase_dir: '.planning/codebase',
@@ -1174,12 +1201,18 @@ export const initListWorkspaces: QueryHandler = async (_args, _projectDir) => {
 export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
   const name = args[0];
   if (!name) {
-    return { data: { error: 'workspace name required for init remove-workspace' } };
+    // Throw so the CLI dispatcher projects a non-zero exit + writes the message
+    // to stderr — returning `{ data: { error } }` was treated as success by
+    // the CLI output path, hiding the validation failure from callers.
+    throw new GSDError('workspace name required for init remove-workspace', ErrorClassification.Validation);
   }
 
   // T-14-01: Reject path traversal attempts
   if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-    return { data: { error: `Invalid workspace name: ${name} (path separators not allowed)` } };
+    throw new GSDError(
+      `Invalid workspace name: ${name} (path separators not allowed)`,
+      ErrorClassification.Validation,
+    );
   }
 
   const home = process.env.HOME || homedir();
@@ -1188,7 +1221,7 @@ export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
   const manifestPath = join(wsPath, 'WORKSPACE.md');
 
   if (!existsSync(wsPath)) {
-    return { data: { error: `Workspace not found: ${wsPath}` } };
+    throw new GSDError(`Workspace not found: ${wsPath}`, ErrorClassification.Validation);
   }
 
   const repos: Array<Record<string, unknown>> = [];
