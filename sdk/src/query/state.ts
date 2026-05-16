@@ -32,6 +32,7 @@ import {
   stateExtractField,
 } from './state-document.js';
 import { getMilestoneInfo, extractCurrentMilestone } from './roadmap.js';
+import { scanPhasePlans } from './plan-scan.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
@@ -110,7 +111,17 @@ export async function buildStateFrontmatter(
   const status = stateExtractField(bodyContent, 'Status');
   const progressRaw = stateExtractField(bodyContent, 'Progress');
   const lastActivity = stateExtractField(bodyContent, 'Last Activity');
-  const stoppedAt = stateExtractField(bodyContent, 'Stopped At') || stateExtractField(bodyContent, 'Stopped at');
+  // Bug #2444 parity with CJS `buildStateFrontmatter`: scope `Stopped At`
+  // extraction to the `## Session` section so historical plain-text mentions
+  // in earlier prose (e.g. "## Previous Session Notes / Stopped at: …") don't
+  // promote into the frontmatter. CJS scopes the regex to the section match;
+  // `stateExtractField` on the whole body would return the first plain match,
+  // which is the stale historical value.
+  const sessionMatch = bodyContent.match(/##\s*Session\s*\n([\s\S]*?)(?=\n##|$)/i);
+  const sessionSection = sessionMatch ? sessionMatch[1] : '';
+  const stoppedAt = sessionSection
+    ? (stateExtractField(sessionSection, 'Stopped At') || stateExtractField(sessionSection, 'Stopped at'))
+    : null;
   const pausedAt = stateExtractField(bodyContent, 'Paused At');
 
   // Bug #2613: read existing STATE.md frontmatter as preservation backstop.
@@ -153,12 +164,14 @@ export async function buildStateFrontmatter(
     let diskCompletedPhases = 0;
 
     for (const dir of phaseDirs) {
-      const files = await readdir(join(phasesDir, dir));
-      const plans = files.filter(f => /-PLAN\.md$/i.test(f)).length;
-      const summaries = files.filter(f => /-SUMMARY\.md$/i.test(f)).length;
-      diskTotalPlans += plans;
-      diskTotalSummaries += summaries;
-      if (plans > 0 && summaries >= plans) diskCompletedPhases++;
+      // Bug #3257 parity: route through scanPhasePlans so nested plans/
+      // subdirectories (the planner default layout) get counted. The naive
+      // top-level `-PLAN.md` filter undercounts every phase that uses the
+      // canonical `phases/NN-name/plans/<NN>-PLAN-MM-slug.md` shape.
+      const { planCount, summaryCount, completed } = scanPhasePlans(join(phasesDir, dir));
+      diskTotalPlans += planCount;
+      diskTotalSummaries += summaryCount;
+      if (completed) diskCompletedPhases++;
     }
 
     totalPhases = isDirInMilestone.phaseCount > 0

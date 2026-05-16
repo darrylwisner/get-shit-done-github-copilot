@@ -21,6 +21,7 @@ import { QueryRuntimeBridge } from '../query-runtime-bridge.js';
 import { GSDToolsError } from '../gsd-tools-error.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { createQueryNativeErrorFactory } from '../query-tools-error-factory.js';
+import { formatQueryRawOutput } from '../query-raw-output-projection.js';
 import type { RuntimeBridgeExecuteInput } from '../query-runtime-bridge.js';
 import type { RuntimeBridgeSyncResult, SyncErrorKind } from './index.js';
 
@@ -57,6 +58,12 @@ function getBridge(): QueryRuntimeBridge {
         request.registryArgs,
       );
     },
+    // #3631: forward raw-mode projection so mode:'raw' returns the per-command
+    // scalar string (next-decimal token, get-phase section, etc.) instead of
+    // falling back to generic JSON-stringify. Without this, family-router
+    // sdkHandlers requesting mode:'raw' under --raw receive a stringified
+    // JSON IR — the regression #3577 introduced for every family router.
+    formatNativeRaw: (registryCommand, data) => formatQueryRawOutput(registryCommand, data),
     // Subprocess fallback stubs — never called because allowFallbackToSubprocess=false
     execSubprocessJson: () =>
       Promise.reject(new Error('Subprocess fallback disabled in sync bridge worker')),
@@ -114,7 +121,20 @@ function getBridge(): QueryRuntimeBridge {
  * - GSDToolsError failure → native_failure
  * - Unknown Error → internal_error
  */
-function classifyError(error: unknown): { kind: SyncErrorKind; exitCode: number; message: string } {
+function readReason(error: unknown): string | undefined {
+  // Handlers can pin a CJS-style ERROR_REASON snake_case code on the GSDError
+  // they throw (e.g. configGet → 'config_key_not_found'). The worker
+  // propagates it through errorDetails so the CJS dispatcher can call
+  // `error(msg, reason)` and `--json-errors` clients see a typed reason
+  // rather than the generic 'unknown'. (Bugs #2943, #3086.)
+  if (error && typeof error === 'object' && 'reason' in error) {
+    const r = (error as { reason?: unknown }).reason;
+    if (typeof r === 'string' && r.length > 0) return r;
+  }
+  return undefined;
+}
+
+function classifyError(error: unknown): { kind: SyncErrorKind; exitCode: number; message: string; reason?: string } {
   if (error instanceof GSDToolsError) {
     const { classification, exitCode, message } = error;
 
@@ -131,8 +151,28 @@ function classifyError(error: unknown): { kind: SyncErrorKind; exitCode: number;
       return { kind: 'native_timeout', exitCode: exitCode ?? 1, message };
     }
 
-    // Check if cause is a TypeError → internal_error
+    // Unwrap the cause once.  The native direct adapter wraps every non-
+    // GSDToolsError thrown by a handler in a GSDToolsError via
+    // `createNativeFailureError`, preserving the original via `cause`.
+    // Classification of validation / blocked errors therefore has to walk
+    // through to the cause — otherwise every GSDError validation surfaces
+    // as `native_failure` and callers cannot distinguish "you gave me bad
+    // input" from "the SDK crashed."  (Phase 6 / #3592 contract bug.)
     const cause = (error as NodeJS.ErrnoException & { cause?: unknown }).cause;
+    if (cause instanceof GSDError) {
+      const reason = readReason(cause);
+      if (
+        cause.classification === ErrorClassification.Validation ||
+        cause.classification === ErrorClassification.Blocked
+      ) {
+        return { kind: 'validation_error', exitCode: 10, message: cause.message, reason };
+      }
+      // Execution-classified GSDError is a 'handler said no' result —
+      // exitCode 1, internal_error kind for taxonomy purposes, but pass
+      // the structured reason through so the CJS dispatcher can render
+      // the proper `--json-errors` shape.
+      return { kind: 'internal_error', exitCode: 1, message: cause.message, reason };
+    }
     if (cause instanceof TypeError) {
       return { kind: 'internal_error', exitCode: exitCode ?? 1, message };
     }
@@ -142,13 +182,14 @@ function classifyError(error: unknown): { kind: SyncErrorKind; exitCode: number;
 
   if (error instanceof GSDError) {
     const { classification, message } = error;
+    const reason = readReason(error);
     if (
       classification === ErrorClassification.Validation ||
       classification === ErrorClassification.Blocked
     ) {
-      return { kind: 'validation_error', exitCode: 10, message };
+      return { kind: 'validation_error', exitCode: 10, message, reason };
     }
-    return { kind: 'internal_error', exitCode: 1, message };
+    return { kind: 'internal_error', exitCode: 1, message, reason };
   }
 
   if (error instanceof TypeError) {
@@ -169,12 +210,14 @@ runAsWorker(async (input: RuntimeBridgeExecuteInput): Promise<RuntimeBridgeSyncR
     const data = await bridge.execute(input);
     return { ok: true, data, exitCode: 0 };
   } catch (error: unknown) {
-    const { kind, exitCode, message } = classifyError(error);
+    const { kind, exitCode, message, reason } = classifyError(error);
+    const errorDetails: { message: string; reason?: string } = { message };
+    if (reason) errorDetails.reason = reason;
     return {
       ok: false,
       exitCode,
       errorKind: kind,
-      errorDetails: { message },
+      errorDetails,
       stderrLines: [],
     };
   }
