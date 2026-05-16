@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { escapeRegex, normalizePhaseName, phaseMarkdownRegexSource, output, error, findPhaseInternal, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, phaseTokenMatches } = require('./core.cjs');
+const { escapeRegex, normalizePhaseName, phaseMarkdownRegexSource, phaseMarkdownRegexSourceExact, output, error, findPhaseInternal, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, phaseTokenMatches } = require('./core.cjs');
 const { platformWriteSync } = require('./shell-command-projection.cjs');
 const { planningPaths, withPlanningLock } = require('./planning-workspace.cjs');
 const scanPhasePlans = require('./plan-scan.cjs');
@@ -94,7 +94,7 @@ function searchPhaseInContent(content, escapedPhase, phaseNum) {
 
   // Find the end of this section (next ## or ### phase header, or end of file)
   const restOfContent = content.slice(headerIndex);
-  const nextHeaderMatch = restOfContent.match(/\n#{2,4}\s+Phase\s+\d/i);
+  const nextHeaderMatch = restOfContent.match(/\n#{2,4}\s+Phase\s+[\w][\w.-]*/i);
   const sectionEnd = nextHeaderMatch
     ? headerIndex + nextHeaderMatch.index
     : content.length;
@@ -139,6 +139,29 @@ function cmdRoadmapGetPhase(cwd, phaseNum, raw) {
     const rawContent = fs.readFileSync(roadmapPath, 'utf-8');
     const milestoneContent = extractCurrentMilestone(rawContent, cwd);
 
+    // #3599 two-pass: when the caller passes a project-code-prefixed ID like
+    // `PROJ-42`, try the exact-prefixed heading first (`### Phase PROJ-42:`).
+    // If no match, fall back to the #3537 padding-tolerant numeric form so
+    // a `CK-01` query still resolves to `### Phase 1:`. Doing this at the
+    // call site (instead of inside phaseMarkdownRegexSource) avoids the
+    // alternation-order ambiguity where a bare `### Phase 42:` heading in
+    // the same document would intercept the match for a `PROJ-42` query.
+    const fullContent = stripShippedMilestones(rawContent);
+
+    const exactSource = phaseMarkdownRegexSourceExact(phaseNum);
+    if (exactSource) {
+      const exactMilestone = searchPhaseInContent(milestoneContent, exactSource, phaseNum);
+      if (exactMilestone && !exactMilestone.error) {
+        output(exactMilestone, raw, exactMilestone.section);
+        return;
+      }
+      const exactFull = searchPhaseInContent(fullContent, exactSource, phaseNum);
+      if (exactFull && !exactFull.error) {
+        output(exactFull, raw, exactFull.section);
+        return;
+      }
+    }
+
     // #3537: padding-tolerant fragment so callers passing `02.7` still match
     // un-padded ROADMAP prose (`### Phase 2.7:`).
     const escapedPhase = phaseMarkdownRegexSource(phaseNum);
@@ -146,7 +169,6 @@ function cmdRoadmapGetPhase(cwd, phaseNum, raw) {
     // Search the current milestone slice first, then fall back to full roadmap.
     // A malformed_roadmap result (checklist-only) from the milestone should not
     // block finding a full header match in the wider roadmap content.
-    const fullContent = stripShippedMilestones(rawContent);
     const milestoneResult = searchPhaseInContent(milestoneContent, escapedPhase, phaseNum);
     const result = (milestoneResult && !milestoneResult.error)
       ? milestoneResult

@@ -15,6 +15,7 @@ function routePhaseCommand({ phase, args, cwd, raw, error }) {
     error,
     unknownMessage: (_subcommand, available) => `Unknown phase subcommand. Available: ${available.join(', ')}`,
     handlers: {
+      'mvp-mode': () => phase.cmdPhaseMvpMode(cwd, args.slice(2), raw),
       'next-decimal': () => phase.cmdPhaseNextDecimal(cwd, args[2], raw),
       add: () => {
         let customId = null;

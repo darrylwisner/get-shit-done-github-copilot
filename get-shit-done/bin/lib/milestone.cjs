@@ -9,6 +9,7 @@ const { platformWriteSync, platformEnsureDir } = require('./shell-command-projec
 const { planningPaths } = require('./planning-workspace.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const { writeStateMd, stateReplaceFieldWithFallback } = require('./state.cjs');
+const { formatGsdSlash, resolveRuntime } = require('./runtime-slash.cjs');
 
 function cmdRequirementsMarkComplete(cwd, reqIdsRaw, raw) {
   if (!reqIdsRaw || reqIdsRaw.length === 0) {
@@ -228,10 +229,10 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
     if (operatorPattern.test(stateContent)) {
       stateContent = stateContent.replace(
         operatorPattern,
-        `$1\n- Start the next milestone with /gsd:new-milestone\n\n`,
+        `$1\n- Start the next milestone with ${formatGsdSlash('new-milestone', resolveRuntime(cwd))}\n\n`,
       );
     } else {
-      stateContent = `${stateContent.trimEnd()}\n\n## Operator Next Steps\n\n- Start the next milestone with /gsd:new-milestone\n`;
+      stateContent = `${stateContent.trimEnd()}\n\n## Operator Next Steps\n\n- Start the next milestone with ${formatGsdSlash('new-milestone', resolveRuntime(cwd))}\n`;
     }
 
     writeStateMd(statePath, stateContent, cwd);

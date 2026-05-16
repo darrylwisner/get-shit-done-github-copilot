@@ -465,6 +465,7 @@ function loadConfig(cwd, options = {}) {
       firecrawl: get('firecrawl') ?? defaults.firecrawl,
       exa_search: get('exa_search') ?? defaults.exa_search,
       tdd_mode: get('tdd_mode', { section: 'workflow', field: 'tdd_mode' }) ?? false,
+      mvp_mode: get('mvp_mode', { section: 'workflow', field: 'mvp_mode' }) ?? false,
       text_mode: get('text_mode', { section: 'workflow', field: 'text_mode' }) ?? defaults.text_mode,
       auto_advance: get('auto_advance', { section: 'workflow', field: 'auto_advance' }) ?? false,
       _auto_chain_active: get('_auto_chain_active', { section: 'workflow', field: '_auto_chain_active' }) ?? false,
@@ -685,6 +686,25 @@ function phaseMarkdownRegexSource(phaseNum) {
   const letter = match[2] ? escapeRegex(match[2]) : '';
   const decimal = match[3] ? escapeRegex(match[3]) : '';
   return `0*${escapeRegex(integer)}${letter}${decimal}`;
+}
+
+/**
+ * #3599: when the caller passed a project-code-prefixed ID like `PROJ-42`,
+ * return the exact-escaped form so the caller can search the ROADMAP for
+ * `### Phase PROJ-42:` BEFORE falling back to the padding-tolerant numeric
+ * form. Returns null when the input has no project-code prefix — in that
+ * case the numeric form (`phaseMarkdownRegexSource`) is the only thing the
+ * caller needs.
+ *
+ * Two-pass at the call site preserves the #3537 contract (`CK-01` directory
+ * names mapping to `Phase 1:` prose) while letting `PROJ-42` resolve to its
+ * own prefixed heading without cross-matching a bare `### Phase 42:` that
+ * happens to share the trailing integer.
+ */
+function phaseMarkdownRegexSourceExact(phaseNum) {
+  const raw = String(phaseNum);
+  if (!/^[A-Z]{1,6}-(?=\d)/i.test(raw)) return null;
+  return escapeRegex(raw);
 }
 
 function comparePhaseNum(a, b) {
@@ -1748,6 +1768,18 @@ function getMilestonePhaseFilter(cwd, versionOverride) {
     // Try custom ID match (e.g. PROJ-42-description → PROJ-42)
     const customMatch = dirName.match(/^([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)/);
     if (customMatch && normalized.has(customMatch[1].toLowerCase())) return true;
+    // #3600: project-code-prefixed directory (`CK-01-name`) against a
+    // numeric ROADMAP heading (`### Phase 1:`). Strip the same prefix
+    // shape `normalizePhaseName` recognises (`^[A-Z]{1,6}-(?=\d)`) and
+    // retry the numeric match. This runs AFTER the custom-ID match so
+    // a roadmap that uses `Phase PROJ-42:` continues to win via the
+    // existing custom-ID path; the strip-and-retry only fires when the
+    // milestone is keyed on the bare numeric form.
+    const stripped = dirName.replace(/^[A-Z]{1,6}-(?=\d)/i, '');
+    if (stripped !== dirName) {
+      const sm = stripped.match(/^0*(\d+[A-Za-z]?(?:\.\d+)*)/);
+      if (sm && normalized.has(sm[1].toLowerCase())) return true;
+    }
     return false;
   }
   isDirInMilestone.phaseCount = milestonePhaseNums.size;
@@ -1836,6 +1868,7 @@ module.exports = {
   escapeRegex,
   normalizePhaseName,
   phaseMarkdownRegexSource,
+  phaseMarkdownRegexSourceExact,
   comparePhaseNum,
   searchPhaseInDir,
   extractPhaseToken,
