@@ -14,6 +14,7 @@ const { output, error, toPosixPath, getMilestoneInfo, generateSlugInternal } = r
 const { platformWriteSync, platformEnsureDir } = require('./shell-command-projection.cjs');
 const { planningRoot, setActiveWorkstream, getActiveWorkstream } = require('./planning-workspace.cjs');
 const { toWorkstreamSlug, hasInvalidPathSegment, isValidActiveWorkstreamName } = require('./workstream-name-policy.cjs');
+const { formatGsdSlash, resolveRuntime } = require('./runtime-slash.cjs');
 const {
   getOtherActiveWorkstreamInventories,
   inspectWorkstream,
@@ -85,7 +86,7 @@ function cmdWorkstreamCreate(cwd, name, options, raw) {
 
   const baseDir = planningRoot(cwd);
   if (!fs.existsSync(baseDir)) {
-    error('.planning/ directory not found — run /gsd:new-project first');
+    error(`.planning/ directory not found — run ${formatGsdSlash('new-project', resolveRuntime(cwd))} first`);
   }
 
   const wsRoot = path.join(baseDir, 'workstreams');

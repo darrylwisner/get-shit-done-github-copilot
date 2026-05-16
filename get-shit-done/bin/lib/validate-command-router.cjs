@@ -1,6 +1,7 @@
 'use strict';
 
 const { VALIDATE_SUBCOMMANDS } = require('./command-aliases.generated.cjs');
+const { formatGsdSlash, resolveRuntime } = require('./runtime-slash.cjs');
 
 function routeValidateCommand({ verify, args, cwd, raw, parseNamedArgs, output, error }) {
   const subcommand = args[1];
@@ -24,10 +25,11 @@ function routeValidateCommand({ verify, args, cwd, raw, parseNamedArgs, output, 
       return;
     }
     const { classifyContextUtilization, STATES } = require('./context-utilization.cjs');
+    const threadCmd = formatGsdSlash('thread', resolveRuntime(cwd));
     const RECOMMENDATIONS = {
       [STATES.HEALTHY]: null,
-      [STATES.WARNING]: 'Context is approaching the fracture zone — consider /gsd:thread to continue in a fresh window.',
-      [STATES.CRITICAL]: 'Reasoning quality may degrade past 70% utilization (fracture point). Run /gsd:thread now to preserve output quality.',
+      [STATES.WARNING]: `Context is approaching the fracture zone — consider ${threadCmd} to continue in a fresh window.`,
+      [STATES.CRITICAL]: `Reasoning quality may degrade past 70% utilization (fracture point). Run ${threadCmd} now to preserve output quality.`,
     };
     let classified;
     try {

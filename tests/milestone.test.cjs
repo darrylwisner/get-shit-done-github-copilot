@@ -244,7 +244,9 @@ describe('milestone complete command', () => {
     assert.ok(state.includes('Phase: Milestone v1.0 complete'));
     assert.ok(state.includes('Status: Awaiting next milestone'));
     assert.ok(!state.includes('Re-run /gsd:complete-milestone'));
-    assert.ok(state.includes('/gsd:new-milestone'));
+    // #3584: persisted ROADMAP/STATE strings now use the runtime-routable
+    // hyphen-form slash command (formatter resolves codex → $gsd-, others → /gsd-).
+    assert.ok(state.includes('/gsd-new-milestone'));
   });
 
   test('appends canonical narrative sections when STATE.md headings are missing (#3088)', () => {
@@ -261,7 +263,8 @@ describe('milestone complete command', () => {
     assert.ok(state.includes('## Current Position'));
     assert.ok(state.includes('Phase: Milestone v1.0 complete'));
     assert.ok(state.includes('## Operator Next Steps'));
-    assert.ok(state.includes('/gsd:new-milestone'));
+    // #3584: hyphen form is the runtime-routable shape for skills-based installs.
+    assert.ok(state.includes('/gsd-new-milestone'));
   });
 
   test('handles missing ROADMAP.md gracefully', () => {
