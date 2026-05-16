@@ -402,7 +402,7 @@ function buildPlanningArtifacts(gsd2Data) {
 /**
  * Format a dry-run preview string for display before writing.
  */
-function buildPreview(gsd2Data, artifacts, projectDir) {
+function buildPreview(gsd2Data, artifacts) {
   const lines = ['Preview — files that will be created in .planning/:'];
 
   for (const rel of artifacts.keys()) {
@@ -421,8 +421,7 @@ function buildPreview(gsd2Data, artifacts, projectDir) {
   lines.push('');
   lines.push('Cannot migrate automatically:');
   lines.push('  - GSD-2 cost/token ledger (no v1 equivalent)');
-  const { formatGsdSlash, resolveRuntime } = require('./runtime-slash.cjs');
-  lines.push(`  - GSD-2 database state (rebuilt from files on first ${formatGsdSlash('health', resolveRuntime(projectDir))})`);
+  lines.push('  - GSD-2 database state (rebuilt from files on first /gsd:health)');
   lines.push('  - VS Code extension state');
 
   return lines.join('\n');
@@ -472,9 +471,7 @@ function cmdFromGsd2(args, cwd, raw) {
 
   const gsd2Data = parseGsd2(gsdDir);
   const artifacts = buildPlanningArtifacts(gsd2Data);
-  // Use projectDir (resolved from --path) — not the process cwd — so the
-  // preview command targets the project actually being imported (#3584).
-  const preview = buildPreview(gsd2Data, artifacts, projectDir);
+  const preview = buildPreview(gsd2Data, artifacts);
 
   if (dryRun) {
     return output({ success: true, dryRun: true, preview }, raw);

@@ -191,11 +191,7 @@ describe('loadConfig', () => {
   it('pre-project: ignores user defaults and uses built-in defaults', async () => {
     await writeUserDefaults({ resolve_model_ids: 'omit' });
     const config = await loadConfig(tmpDir);
-    // BEHAVIOR CHANGE (Cycle 3, #3536): CONFIG_DEFAULTS now sourced from
-    // sdk/shared/config-defaults.manifest.json which includes resolve_model_ids: false.
-    // The key is NOT undefined — it has the manifest default (false), not the user
-    // default ('omit'), confirming that user-level ~/.gsd/defaults.json is still ignored.
-    expect((config as Record<string, unknown>).resolve_model_ids).toBe(false);
+    expect((config as Record<string, unknown>).resolve_model_ids).toBeUndefined();
     expect(config.model_profile).toBe('balanced');
     expect(config.workflow.plan_check).toBe(true);
   });
@@ -228,10 +224,8 @@ describe('loadConfig', () => {
 
     const config = await loadConfig(tmpDir);
     expect(config.model_profile).toBe('quality');
-    // User-defaults not layered when project config present.
-    // BEHAVIOR CHANGE (Cycle 3, #3536): resolve_model_ids is now false (manifest default),
-    // not undefined — confirming user defaults are still ignored (value is NOT 'omit').
-    expect((config as Record<string, unknown>).resolve_model_ids).toBe(false);
+    // User-defaults not layered when project config present
+    expect((config as Record<string, unknown>).resolve_model_ids).toBeUndefined();
   });
 
   it('ignores malformed ~/.gsd/defaults.json', async () => {

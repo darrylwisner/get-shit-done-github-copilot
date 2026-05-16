@@ -24,18 +24,6 @@ const {
   getActiveWorkstream,
   setActiveWorkstream,
 } = require('./planning-workspace.cjs');
-const { findProjectRoot } = require('./project-root.generated.cjs');
-
-// ─── Configuration Module (generated CJS mirror) ────────────────────────────
-// Cycle 4: import canonical defaults + normalization primitives from the
-// generated module; core.cjs no longer carries its own inline literal or its
-// own migration logic. The exported CONFIG_DEFAULTS remains a flat-key object
-// (shape unchanged) so legacy consumers (config.cjs, verify.cjs, tests) require
-// no changes. Values are sourced from the canonical nested manifest.
-const {
-  CONFIG_DEFAULTS: CANONICAL_CONFIG_DEFAULTS,
-  normalizeLegacyKeys,
-} = require('./configuration.generated.cjs');
 
 // ─── Path helpers ────────────────────────────────────────────────────────────
 
@@ -67,7 +55,89 @@ function detectSubRepos(cwd) {
   return results.sort();
 }
 
-// findProjectRoot is now re-exported from the generated CJS module above.
+/**
+ * Walk up from `startDir` to find the project root that owns `.planning/`.
+ *
+ * In multi-repo workspaces, Claude may open inside a sub-repo (e.g. `backend/`)
+ * instead of the project root. This function prevents `.planning/` from being
+ * created inside the sub-repo by locating the nearest ancestor that already has
+ * a `.planning/` directory.
+ *
+ * Detection strategy (checked in order for each ancestor):
+ * 1. Parent has `.planning/config.json` with `sub_repos` listing this directory
+ * 2. Parent has `.planning/config.json` with `multiRepo: true` (legacy format)
+ * 3. Parent has `.planning/` and current dir has its own `.git` (heuristic)
+ *
+ * Returns `startDir` unchanged when no ancestor `.planning/` is found (first-run
+ * or single-repo projects).
+ */
+function findProjectRoot(startDir) {
+  const resolved = path.resolve(startDir);
+  const root = path.parse(resolved).root;
+  const homedir = require('os').homedir();
+
+  // If startDir already contains .planning/, it IS the project root.
+  // Do not walk up to a parent workspace that also has .planning/ (#1362).
+  const ownPlanning = path.join(resolved, '.planning');
+  if (fs.existsSync(ownPlanning) && fs.statSync(ownPlanning).isDirectory()) {
+    return startDir;
+  }
+
+  // Check if startDir or any of its ancestors (up to AND including the
+  // candidate project root) contains a .git directory. This handles both
+  // `backend/` (direct sub-repo) and `backend/src/modules/` (nested inside),
+  // as well as the common case where .git lives at the same level as .planning/.
+  function isInsideGitRepo(candidateParent) {
+    let d = resolved;
+    while (d !== root) {
+      if (fs.existsSync(path.join(d, '.git'))) return true;
+      if (d === candidateParent) break;
+      d = path.dirname(d);
+    }
+    return false;
+  }
+
+  let dir = resolved;
+  while (dir !== root) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // filesystem root
+    if (parent === homedir) break; // never go above home
+
+    const parentPlanning = path.join(parent, '.planning');
+    if (fs.existsSync(parentPlanning) && fs.statSync(parentPlanning).isDirectory()) {
+      const configPath = path.join(parentPlanning, 'config.json');
+      try {
+        const raw = platformReadSync(configPath);
+        if (raw === null) throw new Error('missing');
+        const config = JSON.parse(raw);
+        const subRepos = config.sub_repos || config.planning?.sub_repos || [];
+
+        // Check explicit sub_repos list
+        if (Array.isArray(subRepos) && subRepos.length > 0) {
+          const relPath = path.relative(parent, resolved);
+          const topSegment = relPath.split(path.sep)[0];
+          if (subRepos.includes(topSegment)) {
+            return parent;
+          }
+        }
+
+        // Check legacy multiRepo flag
+        if (config.multiRepo === true && isInsideGitRepo(parent)) {
+          return parent;
+        }
+      } catch {
+        // config.json missing or malformed — fall back to .git heuristic
+      }
+
+      // Heuristic: parent has .planning/ and we're inside a git repo
+      if (isInsideGitRepo(parent)) {
+        return parent;
+      }
+    }
+    dir = parent;
+  }
+  return startDir;
+}
 
 // ─── Output helpers ───────────────────────────────────────────────────────────
 
@@ -209,49 +279,36 @@ function error(message, reason = ERROR_REASON.UNKNOWN) {
 // ─── File & Config utilities ──────────────────────────────────────────────────
 
 /**
- * Canonical config defaults — flat-key projection for CJS consumers.
- *
- * Cycle 4: Values are sourced from CANONICAL_CONFIG_DEFAULTS (the nested
- * manifest loaded by configuration.generated.cjs). The flat shape is
- * preserved here so legacy consumers (config.cjs, verify.cjs, tests that
- * regex-parse this source) continue to work without changes. The key names
- * and the `const CONFIG_DEFAULTS = {` pattern are intentionally kept.
- *
- * Mapping notes:
- *  - workflow.plan_check  → plan_checker (CJS flat name; verify.cjs uses this)
- *  - git.*               → flat git keys (branching_strategy, templates)
- *  - workflow.*          → flat names (research, verifier, …)
- *  - planning.sub_repos  → sub_repos
- *  - planning.commit_docs / search_gitignored → top-level flat keys
+ * Canonical config defaults. Single source of truth — imported by config.cjs and verify.cjs.
  */
 const CONFIG_DEFAULTS = {
-  model_profile: CANONICAL_CONFIG_DEFAULTS.model_profile,
-  commit_docs: CANONICAL_CONFIG_DEFAULTS.commit_docs,
-  search_gitignored: CANONICAL_CONFIG_DEFAULTS.search_gitignored,
-  branching_strategy: CANONICAL_CONFIG_DEFAULTS.git.branching_strategy,
-  phase_branch_template: CANONICAL_CONFIG_DEFAULTS.git.phase_branch_template,
-  milestone_branch_template: CANONICAL_CONFIG_DEFAULTS.git.milestone_branch_template,
-  quick_branch_template: CANONICAL_CONFIG_DEFAULTS.git.quick_branch_template,
-  research: CANONICAL_CONFIG_DEFAULTS.workflow.research,
-  plan_checker: CANONICAL_CONFIG_DEFAULTS.workflow.plan_check, // flat CJS name maps to workflow.plan_check
-  verifier: CANONICAL_CONFIG_DEFAULTS.workflow.verifier,
-  nyquist_validation: CANONICAL_CONFIG_DEFAULTS.workflow.nyquist_validation,
-  ai_integration_phase: CANONICAL_CONFIG_DEFAULTS.workflow.ai_integration_phase,
-  parallelization: CANONICAL_CONFIG_DEFAULTS.parallelization,
-  brave_search: CANONICAL_CONFIG_DEFAULTS.brave_search,
-  firecrawl: CANONICAL_CONFIG_DEFAULTS.firecrawl,
-  exa_search: CANONICAL_CONFIG_DEFAULTS.exa_search,
-  text_mode: CANONICAL_CONFIG_DEFAULTS.workflow.text_mode,
-  sub_repos: CANONICAL_CONFIG_DEFAULTS.planning.sub_repos,
-  resolve_model_ids: CANONICAL_CONFIG_DEFAULTS.resolve_model_ids,
-  context_window: CANONICAL_CONFIG_DEFAULTS.context_window,
-  phase_naming: CANONICAL_CONFIG_DEFAULTS.phase_naming,
-  project_code: CANONICAL_CONFIG_DEFAULTS.project_code,
-  subagent_timeout: CANONICAL_CONFIG_DEFAULTS.workflow.subagent_timeout,
-  security_enforcement: CANONICAL_CONFIG_DEFAULTS.workflow.security_enforcement,
-  security_asvs_level: CANONICAL_CONFIG_DEFAULTS.workflow.security_asvs_level,
-  security_block_on: CANONICAL_CONFIG_DEFAULTS.workflow.security_block_on,
-  post_planning_gaps: CANONICAL_CONFIG_DEFAULTS.workflow.post_planning_gaps,
+  model_profile: 'balanced',
+  commit_docs: true,
+  search_gitignored: false,
+  branching_strategy: 'none',
+  phase_branch_template: 'gsd/phase-{phase}-{slug}',
+  milestone_branch_template: 'gsd/{milestone}-{slug}',
+  quick_branch_template: null,
+  research: true,
+  plan_checker: true,
+  verifier: true,
+  nyquist_validation: true,
+  ai_integration_phase: true,
+  parallelization: true,
+  brave_search: false,
+  firecrawl: false,
+  exa_search: false,
+  text_mode: false, // when true, use plain-text numbered lists instead of AskUserQuestion menus
+  sub_repos: [],
+  resolve_model_ids: false, // false: return alias as-is | true: map to full Claude model ID | "omit": return '' (runtime uses its default)
+  context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
+  phase_naming: 'sequential', // 'sequential' (default, auto-increment) or 'custom' (arbitrary string IDs)
+  project_code: null, // optional short prefix for phase dirs (e.g., 'CK' → 'CK-01-foundation')
+  subagent_timeout: 300000, // 5 min default; increase for large codebases or slower models (ms)
+  security_enforcement: true, // workflow.security_enforcement — threat-model-anchored security verification via /gsd:secure-phase
+  security_asvs_level: 1, // workflow.security_asvs_level — OWASP ASVS verification level (1=opportunistic, 2=standard, 3=comprehensive)
+  security_block_on: 'high', // workflow.security_block_on — minimum severity that blocks phase advancement ('high' | 'medium' | 'low')
+  post_planning_gaps: true, // workflow.post_planning_gaps — unified post-planning gap report (#2493): scan REQUIREMENTS.md + CONTEXT.md decisions vs all PLAN.md files
 };
 
 /**
@@ -291,26 +348,13 @@ function loadConfig(cwd, options = {}) {
       const raw = platformReadSync(rootConfigPath);
       if (raw === null) throw new Error('missing');
       rootParsed = JSON.parse(raw);
-      // Cycle 4: delegate all legacy-key normalization to the Configuration Module.
-      // normalizeLegacyKeys handles branching_strategy → git.branching_strategy,
-      // sub_repos → planning.sub_repos, multiRepo, and depth → granularity.
-      const { parsed: rootNormalized, normalizations: rootNorms } = normalizeLegacyKeys(rootParsed);
-      if (rootNorms.length > 0) {
-        // Resolve filesystem-dependent normalizations (multiRepo → planning.sub_repos)
-        for (const norm of rootNorms) {
-          if (norm.requiresFilesystem && !rootNormalized.planning?.sub_repos) {
-            const detected = detectSubRepos(cwd);
-            if (detected.length > 0) {
-              if (!rootNormalized.planning) rootNormalized.planning = {};
-              rootNormalized.planning.sub_repos = detected;
-              rootNormalized.planning.commit_docs = false;
-            }
-          }
+      if (Object.prototype.hasOwnProperty.call(rootParsed, 'branching_strategy')) {
+        if (!rootParsed.git) rootParsed.git = {};
+        if (rootParsed.git.branching_strategy === undefined) {
+          rootParsed.git.branching_strategy = rootParsed.branching_strategy;
         }
-        rootParsed = rootNormalized;
+        delete rootParsed.branching_strategy;
         try { platformWriteSync(rootConfigPath, JSON.stringify(rootParsed, null, 2)); } catch {}
-      } else {
-        rootParsed = rootNormalized;
       }
     } catch {
       // Root config missing or unparseable — workstream config stands alone
@@ -327,35 +371,55 @@ function loadConfig(cwd, options = {}) {
     // for migrations and writes so we never persist merged values back to disk.
     const fileData = JSON.parse(raw);
 
-    // Cycle 4: Single normalizeLegacyKeys call replaces all four inline migration
-    // blocks (depth→granularity, multiRepo→planning.sub_repos, sub_repos→planning.sub_repos,
-    // branching_strategy→git.branching_strategy). The Module is pure (no I/O); disk
-    // writeback is handled below with the existing platformWriteSync pattern.
-    // Note: migrateOnDisk from the Module is async; loadConfig is sync — so we
-    // call normalizeLegacyKeys inline and do the writeback at the call site.
-    // Per brief §4.3: "use normalizeLegacyKeys directly and do writeback inline."
+    // Migrate deprecated "depth" key to "granularity" with value mapping
+    if ('depth' in fileData && !('granularity' in fileData)) {
+      const depthToGranularity = { quick: 'coarse', standard: 'standard', comprehensive: 'fine' };
+      fileData.granularity = depthToGranularity[fileData.depth] || fileData.depth;
+      delete fileData.depth;
+      try { platformWriteSync(configPath, JSON.stringify(fileData, null, 2)); } catch { /* intentionally empty */ }
+    }
+
+    // Auto-detect and sync sub_repos: scan for child directories with .git
     let configDirty = false;
-    {
-      const { parsed: normalized, normalizations } = normalizeLegacyKeys(fileData);
-      if (normalizations.length > 0) {
-        // Merge normalized values back into fileData (mutation-in-place for legacy code below)
-        Object.keys(fileData).forEach(k => delete fileData[k]);
-        Object.assign(fileData, normalized);
+
+    // Migrate legacy "multiRepo: true" boolean → planning.sub_repos array.
+    // Canonical location is planning.sub_repos (#2561); writing to top-level
+    // would be flagged as unknown by the validator below (#2638).
+    if (fileData.multiRepo === true && !fileData.sub_repos && !fileData.planning?.sub_repos) {
+      const detected = detectSubRepos(cwd);
+      if (detected.length > 0) {
+        if (!fileData.planning) fileData.planning = {};
+        fileData.planning.sub_repos = detected;
+        fileData.planning.commit_docs = false;
+        delete fileData.multiRepo;
         configDirty = true;
-        // Resolve filesystem-dependent normalizations (multiRepo → planning.sub_repos).
-        // Guard: only populate sub_repos from filesystem if not already set by normalization
-        // AND the original file didn't have sub_repos already (preserve existing intent).
-        for (const norm of normalizations) {
-          if (norm.requiresFilesystem && !fileData.planning?.sub_repos) {
-            const detected = detectSubRepos(cwd);
-            if (detected.length > 0) {
-              if (!fileData.planning) fileData.planning = {};
-              fileData.planning.sub_repos = detected;
-              fileData.planning.commit_docs = false;
-            }
-          }
-        }
       }
+    }
+
+    // Self-heal legacy/buggy installs: strip any stale top-level sub_repos,
+    // preserving its value as the planning.sub_repos seed if that slot is empty.
+    if (Object.prototype.hasOwnProperty.call(fileData, 'sub_repos')) {
+      if (!fileData.planning) fileData.planning = {};
+      if (!fileData.planning.sub_repos) {
+        fileData.planning.sub_repos = fileData.sub_repos;
+      }
+      delete fileData.sub_repos;
+      configDirty = true;
+    }
+
+    // #3523 — Migrate legacy top-level branching_strategy → git.branching_strategy.
+    // Canonical location is git.branching_strategy (per config-schema.cjs); writing
+    // at the top level trips the unknown-key warning even though loadConfig:485 actively
+    // reads it via the nested fallback. This migration mirrors the multiRepo → sub_repos
+    // precedent: graft then delete so the warning never fires again on this project.
+    // The nested value wins if already set (matches SDK mergeDefaults precedence, PR #3116).
+    if (Object.prototype.hasOwnProperty.call(fileData, 'branching_strategy')) {
+      if (!fileData.git) fileData.git = {};
+      if (fileData.git.branching_strategy === undefined) {
+        fileData.git.branching_strategy = fileData.branching_strategy;
+      }
+      delete fileData.branching_strategy;
+      configDirty = true;
     }
 
     // Keep planning.sub_repos in sync with actual filesystem

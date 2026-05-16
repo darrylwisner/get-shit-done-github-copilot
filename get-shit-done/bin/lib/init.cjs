@@ -10,7 +10,7 @@ const { planningPaths, planningDir, planningRoot } = require('./planning-workspa
 const { maskIfSecret } = require('./secrets.cjs');
 const scanPhasePlans = require('./plan-scan.cjs');
 const { stateExtractField } = require('./state-document.cjs');
-const { formatGsdSlash, resolveRuntime } = require('./runtime-slash.cjs');
+const { determinePhaseStatus } = require('./commands.cjs');
 
 // Accept all bold/colon variants of the Requirements header (#2769):
 // **Requirements:** / **Requirements**: / **Requirements** : render the
@@ -295,6 +295,20 @@ function cmdInitPlanPhase(cwd, phase, raw, options = {}) {
     phase_slug: phaseInfo?.phase_slug || null,
     padded_phase: phaseNumberPlan ? normalizePhaseName(phaseNumberPlan) : null,
     phase_req_ids,
+
+    // #3569: surface phase lifecycle status so /gsd:plan-phase can short-circuit
+    // on closed (Complete) phases instead of silently replanning over shipped
+    // code. Reuses determinePhaseStatus — the project-wide vocabulary
+    // (Pending | Planned | In Progress | Executed | Complete | Needs Review).
+    // No directory yet → Pending (phase has not been started).
+    phase_status: phaseDirPlan
+      ? determinePhaseStatus(
+          phaseInfo?.plans?.length || 0,
+          phaseInfo?.summaries?.length || 0,
+          path.join(cwd, phaseDirPlan),
+          'Pending',
+        )
+      : 'Pending',
 
     // Existing artifacts
     has_research: phaseInfo?.has_research || false,
@@ -1056,20 +1070,16 @@ function cmdInitMapCodebase(cwd, raw) {
 function cmdInitManager(cwd, raw) {
   const config = loadConfig(cwd);
   const milestone = getMilestoneInfo(cwd);
-  // Resolve the runtime once so every emitted slash-command reference uses
-  // the routable shape for this install (#3584). Hyphen form for skills-based
-  // runtimes, $gsd-<cmd> shell-var for codex.
-  const _slashRuntime = resolveRuntime(cwd);
 
   // Use planningPaths for forward-compatibility with workstream scoping (#1268)
   const paths = planningPaths(cwd);
 
   // Validate prerequisites
   if (!fs.existsSync(paths.roadmap)) {
-    error(`No ROADMAP.md found. Run ${formatGsdSlash('new-milestone', _slashRuntime)} first.`);
+    error('No ROADMAP.md found. Run /gsd:new-milestone first.');
   }
   if (!fs.existsSync(paths.state)) {
-    error(`No STATE.md found. Run ${formatGsdSlash('new-milestone', _slashRuntime)} first.`);
+    error('No STATE.md found. Run /gsd:new-milestone first.');
   }
   const rawContent = fs.readFileSync(paths.roadmap, 'utf-8');
   const content = extractCurrentMilestone(rawContent, cwd);
@@ -1249,7 +1259,7 @@ function cmdInitManager(cwd, raw) {
         phase_name: phase.name,
         action: 'execute',
         reason: `${phase.plan_count} plans ready, dependencies met`,
-        command: `${formatGsdSlash('execute-phase', _slashRuntime)} ${phase.number}`,
+        command: `/gsd:execute-phase ${phase.number}`,
       });
     } else if (phase.disk_status === 'discussed' || phase.disk_status === 'researched') {
       recommendedActions.push({
@@ -1257,7 +1267,7 @@ function cmdInitManager(cwd, raw) {
         phase_name: phase.name,
         action: 'plan',
         reason: 'Context gathered, ready for planning',
-        command: `${formatGsdSlash('plan-phase', _slashRuntime)} ${phase.number}`,
+        command: `/gsd:plan-phase ${phase.number}`,
       });
     } else if ((phase.disk_status === 'empty' || phase.disk_status === 'no_directory') && phase.is_next_to_discuss) {
       recommendedActions.push({
@@ -1265,7 +1275,7 @@ function cmdInitManager(cwd, raw) {
         phase_name: phase.name,
         action: 'discuss',
         reason: 'Unblocked, ready to gather context',
-        command: `${formatGsdSlash('discuss-phase', _slashRuntime)} ${phase.number}`,
+        command: `/gsd:discuss-phase ${phase.number}`,
       });
     }
   }

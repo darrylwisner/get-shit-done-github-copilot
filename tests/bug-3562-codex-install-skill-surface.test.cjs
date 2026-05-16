@@ -26,7 +26,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const { install } = require('../bin/install.js');
-const { createTempDir, cleanup, parseFrontmatter } = require('./helpers.cjs');
+const { createTempDir, cleanup } = require('./helpers.cjs');
 
 const HOOKS_DIST = path.join(__dirname, '..', 'hooks', 'dist');
 const BUILD_HOOKS_SCRIPT = path.join(__dirname, '..', 'scripts', 'build-hooks.js');
@@ -77,8 +77,16 @@ describe('#3562 — Codex install produces discoverable $gsd-* skill surface', {
     assert.ok(fs.existsSync(skillPath), 'precondition: SKILL.md exists');
 
     const content = fs.readFileSync(skillPath, 'utf8');
-    const frontmatter = parseFrontmatter(content);
-    assert.equal(frontmatter.name, 'gsd-help', 'SKILL.md frontmatter must declare name: gsd-help so $gsd-help resolves');
+    // SKILL.md is YAML frontmatter then body; convertClaudeCommandToCodexSkill
+    // emits at minimum a `name:` field on the leading frontmatter block.
+    assert.ok(
+      content.startsWith('---'),
+      'SKILL.md must begin with YAML frontmatter (---) for Codex discovery',
+    );
+    assert.ok(
+      /^name:\s*["']?gsd-help["']?\s*$/m.test(content),
+      'SKILL.md frontmatter must declare name: gsd-help so $gsd-help resolves',
+    );
   });
 
   test('multiple core $gsd-* skills are produced (not just gsd-help)', () => {

@@ -35,10 +35,7 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const COMMANDS_DIR = path.join(ROOT, 'commands', 'gsd');
-// After #3039, the canonical command reference is the `--full` mode file.
-// `workflows/help.md` is now a small dispatcher; the bidirectional parity
-// invariant lives with the comprehensive reference body.
-const HELP_MD = path.join(ROOT, 'get-shit-done', 'workflows', 'help', 'modes', 'full.md');
+const HELP_MD = path.join(ROOT, 'get-shit-done', 'workflows', 'help.md');
 const DO_MD = path.join(ROOT, 'get-shit-done', 'workflows', 'do.md');
 
 function parseFrontmatter(content) {
