@@ -116,9 +116,6 @@ function isPathMapped(file, structureMd) {
  * @param {string|null|undefined} input.structureMd - contents of STRUCTURE.md
  * @param {number} [input.threshold=3] - min number of drift elements that triggers action
  * @param {'warn'|'auto-remap'} [input.action='warn']
- * @param {string} [input.runtime='claude'] - runtime name (claude, codex, ...) used
- *   to format the slash-command in the remediation message. Caller resolves and
- *   passes this in to keep drift.cjs a pure library with no env/config reads.
  * @returns {object} result
  */
 function detectDrift(input) {
@@ -193,7 +190,7 @@ function detectDrift(input) {
       if (action === 'auto-remap') {
         spawnMapper = true;
       }
-      message = buildMessage(elements, affectedPaths, action, input.runtime);
+      message = buildMessage(elements, affectedPaths, action);
     }
 
     return {
@@ -231,7 +228,7 @@ function skipped(reason) {
   };
 }
 
-function buildMessage(elements, affectedPaths, action, runtime) {
+function buildMessage(elements, affectedPaths, action) {
   const byCat = {};
   for (const e of elements) {
     (byCat[e.category] ||= []).push(e.path);
@@ -256,14 +253,8 @@ function buildMessage(elements, affectedPaths, action, runtime) {
   if (action === 'auto-remap') {
     lines.push(`Auto-remap scheduled for paths: ${affectedPaths.join(', ')}`);
   } else {
-    // drift.cjs is a pure library — it must never read env/config. The
-    // caller (verify.cmdVerifyCodebaseDrift) resolves the runtime once and
-    // passes it in via input.runtime so emitted commands match the project
-    // the caller is targeting, not the current process directory.
-    const { formatGsdSlash } = require('./runtime-slash.cjs');
-    const mapCmd = formatGsdSlash('map-codebase', runtime || 'claude');
     lines.push(
-      `Run ${mapCmd} --paths ${affectedPaths.join(',')} to refresh planning context.`,
+      `Run /gsd:map-codebase --paths ${affectedPaths.join(',')} to refresh planning context.`,
     );
   }
   return lines.join('\n');

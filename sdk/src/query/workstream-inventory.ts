@@ -4,26 +4,51 @@
  * Owns discovery and read-only projection of .planning/workstreams/* state.
  * Query handlers should render outputs from this inventory instead of
  * rescanning workstream directories directly.
- *
- * Pure projection logic lives in ../workstream-inventory/builder.ts.
- * This module handles I/O orchestration only.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
+
+import { toPosixPath } from './helpers.js';
 import { scanPhasePlans } from './plan-scan.js';
 import { stateExtractField } from './state-document.js';
 import { readActiveWorkstream } from './active-workstream-store.js';
-import { buildWorkstreamInventory } from '../workstream-inventory/builder.js';
 
-// Re-export types from the builder so downstream consumers can import from here.
-export type {
-  WorkstreamPhaseInventory,
-  WorkstreamInventory,
-  WorkstreamInventoryList,
-} from '../workstream-inventory/builder.js';
+export interface WorkstreamPhaseInventory {
+  directory: string;
+  status: 'complete' | 'in_progress' | 'pending';
+  plan_count: number;
+  summary_count: number;
+}
 
-import type { WorkstreamInventory, WorkstreamInventoryList } from '../workstream-inventory/builder.js';
+export interface WorkstreamInventory {
+  name: string;
+  path: string;
+  active: boolean;
+  files: {
+    roadmap: boolean;
+    state: boolean;
+    requirements: boolean;
+  };
+  status: string;
+  current_phase: string | null;
+  last_activity: string | null;
+  phases: WorkstreamPhaseInventory[];
+  phase_count: number;
+  completed_phases: number;
+  roadmap_phase_count: number;
+  total_plans: number;
+  completed_plans: number;
+  progress_percent: number;
+}
+
+export interface WorkstreamInventoryList {
+  mode: 'flat' | 'workstream';
+  active: string | null;
+  workstreams: WorkstreamInventory[];
+  count: number;
+  message?: string;
+}
 
 export const planningRoot = (projectDir: string): string =>
   join(projectDir, '.planning');
@@ -61,7 +86,7 @@ export function countPhaseFiles(phaseDir: string): { planCount: number; summaryC
   return { planCount: scan.planCount, summaryCount: scan.summaryCount };
 }
 
-function readStateProjection(statePath: string): { status: string; current_phase: string | null; last_activity: string | null } {
+function readStateProjection(statePath: string): Pick<WorkstreamInventory, 'status' | 'current_phase' | 'last_activity'> {
   try {
     const stateContent = readFileSync(statePath, 'utf-8');
     return {
@@ -86,31 +111,58 @@ export function inspectWorkstream(
   const wsDir = join(workstreamsRoot(projectDir), name);
   if (!existsSync(wsDir)) return null;
 
-  const activeWorkstreamName = options.active === undefined ? readActiveWorkstream(projectDir) : options.active;
+  const active = options.active === undefined ? readActiveWorkstream(projectDir) : options.active;
   const p = wsPlanningPaths(projectDir, name);
-  const phaseDirNames = readSubdirectories(p.phases);
+  const phaseDirs = readSubdirectories(p.phases);
+  const phases: WorkstreamPhaseInventory[] = [];
+  let completedPhases = 0;
+  let totalPlans = 0;
+  let completedPlans = 0;
 
-  // Collect per-phase file counts
-  const phaseFilesCounts = phaseDirNames.map(dir => {
+  for (const dir of [...phaseDirs].sort()) {
     const counts = countPhaseFiles(join(p.phases, dir));
-    return { directory: dir, planCount: counts.planCount, summaryCount: counts.summaryCount };
-  });
+    const status: WorkstreamPhaseInventory['status'] =
+      counts.summaryCount >= counts.planCount && counts.planCount > 0
+        ? 'complete'
+        : counts.planCount > 0
+          ? 'in_progress'
+          : 'pending';
 
-  return buildWorkstreamInventory({
+    totalPlans += counts.planCount;
+    completedPlans += Math.min(counts.summaryCount, counts.planCount);
+    if (status === 'complete') completedPhases++;
+
+    phases.push({
+      directory: dir,
+      status,
+      plan_count: counts.planCount,
+      summary_count: counts.summaryCount,
+    });
+  }
+
+  const roadmapPhaseCount = countRoadmapPhases(p.roadmap, phaseDirs.length);
+  const state = readStateProjection(p.state);
+
+  return {
     name,
-    projectDir,
-    workstreamDir: wsDir,
-    phaseDirNames,
-    activeWorkstreamName,
-    phaseFilesCounts,
-    roadmapPhaseCount: countRoadmapPhases(p.roadmap, phaseDirNames.length),
-    stateProjection: readStateProjection(p.state),
-    filesExist: {
+    path: toPosixPath(relative(projectDir, wsDir)),
+    active: name === active,
+    files: {
       roadmap: existsSync(p.roadmap),
       state: existsSync(p.state),
       requirements: existsSync(p.requirements),
     },
-  });
+    status: state.status,
+    current_phase: state.current_phase,
+    last_activity: state.last_activity,
+    phases,
+    phase_count: phases.length,
+    completed_phases: completedPhases,
+    roadmap_phase_count: roadmapPhaseCount,
+    total_plans: totalPlans,
+    completed_plans: completedPlans,
+    progress_percent: roadmapPhaseCount > 0 ? Math.min(100, Math.round((completedPhases / roadmapPhaseCount) * 100)) : 0,
+  };
 }
 
 export function listWorkstreamInventories(projectDir: string): WorkstreamInventoryList {

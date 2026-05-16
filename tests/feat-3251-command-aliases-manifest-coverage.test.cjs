@@ -138,9 +138,9 @@ function createProject() {
   return dir;
 }
 
-function runGsdTools(args, projectDir) {
+function runGsdTools(args, cwd) {
   return spawnSync(process.execPath, [GSD_TOOLS, ...args], {
-    cwd: projectDir,
+    cwd,
     encoding: 'utf8',
     timeout: 30000,
     killSignal: 'SIGKILL',
