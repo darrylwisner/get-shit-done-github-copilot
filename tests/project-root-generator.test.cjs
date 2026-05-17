@@ -27,9 +27,8 @@ before(async () => {
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-function makeTmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-parity-'));
-}
+const { createTempDir } = require('./helpers.cjs');
+const makeTmp = () => createTempDir('gsd-parity-');
 
 function writeConfig(dir, content) {
   fs.mkdirSync(path.join(dir, '.planning'), { recursive: true });

@@ -361,7 +361,7 @@ The `gsd-planner` agent is decomposed into a core agent plus reference modules t
 
 ---
 
-## CLI Modules (70 shipped)
+## CLI Modules (71 shipped)
 
 Full listing: `get-shit-done/bin/lib/*.cjs`.
 
@@ -413,6 +413,7 @@ Full listing: `get-shit-done/bin/lib/*.cjs`.
 | `review-reviewer-selection.cjs` | Reviewer selection/normalization helpers for `/gsd-review` default reviewer policy and precedence |
 | `roadmap-command-router.cjs` | Thin CJS subcommand router adapter for `gsd-tools roadmap` |
 | `roadmap.cjs` | ROADMAP.md parsing, phase extraction, plan progress |
+| `runtime-artifact-layout.cjs` | Runtime artifact layout module — resolves the artifact directory shapes (commands, agents, skills) for each supported runtime; single source of truth for per-runtime artifact placement (#3663) |
 | `runtime-homes.cjs` | Canonical runtime → global config/skills directory mapping; first-class support for all 15 runtimes including Hermes nested layout and Cline rules-based exclusion (#3126) |
 | `runtime-slash.cjs` | Runtime-aware slash-command formatter — single source of truth for emitting `/gsd-<cmd>` (skills-based runtimes) and `$gsd-<cmd>` (codex) in user-facing output and persisted artifacts (#3584) |
 | `schema-detect.cjs` | CJS shim adapter — re-exports from `schema-detect.generated.cjs` (Phase 6/#3575 Shared Module migration) |

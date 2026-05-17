@@ -110,7 +110,7 @@ describe('lint-pr-check-project-dir', () => {
 
       assert.notStrictEqual(result.status, 0);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
     }
   });
 

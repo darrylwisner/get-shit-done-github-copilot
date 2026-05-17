@@ -32,23 +32,38 @@ function auditProductionVulns(cwd) {
   if (!fs.existsSync(path.join(cwd, 'node_modules'))) {
     return null; // signal "skip" to caller
   }
-  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const isWindows = process.platform === 'win32';
+  const npmCandidates = isWindows ? ['npm.cmd', 'npm'] : ['npm'];
+  const args = ['audit', '--omit=dev', '--json'];
   let out;
-  try {
-    out = execFileSync(
-      npmCmd,
-      ['audit', '--omit=dev', '--json'],
-      { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 }
-    );
-  } catch (e) {
-    // `npm audit` exits non-zero when advisories are present; the JSON is
-    // still on stdout in that case. Recover and let the assertion classify.
-    if (e && typeof e.stdout !== 'undefined') {
-      out = Buffer.isBuffer(e.stdout) ? e.stdout.toString('utf-8') : String(e.stdout);
-    } else {
-      throw e;
+  let lastErr = null;
+  for (const npmCmd of npmCandidates) {
+    try {
+      out = execFileSync(
+        npmCmd,
+        args,
+        {
+          cwd,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 60_000,
+          shell: isWindows,
+        }
+      );
+      lastErr = null;
+      break;
+    } catch (e) {
+      // `npm audit` exits non-zero when advisories are present; the JSON is
+      // still on stdout in that case. Recover and let the assertion classify.
+      if (e && typeof e.stdout !== 'undefined' && e.stdout !== undefined && e.stdout !== null) {
+        out = Buffer.isBuffer(e.stdout) ? e.stdout.toString('utf-8') : String(e.stdout);
+        lastErr = null;
+        break;
+      }
+      lastErr = e;
     }
   }
+  if (lastErr) throw lastErr;
   const parsed = JSON.parse(out);
   // `null` is reserved for the "node_modules missing → skip" signal above.
   // Any other unexpected JSON shape is a real failure of the audit harness

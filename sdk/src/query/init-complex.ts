@@ -99,6 +99,27 @@ function gitWorktreeInfo(base: string): { inside: boolean; worktreeRoot: string 
   }
 }
 
+function detectNestedSubdir(base: string, info: { inside: boolean; worktreeRoot: string | null }): boolean {
+  if (!info.inside) return false;
+  try {
+    const prefix = execSync('git rev-parse --show-prefix', {
+      cwd: base,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).trim().replace(/\\/g, '/');
+    if (prefix.length > 0) return prefix !== '.' && prefix !== './';
+    return false;
+  } catch {}
+
+  if (!info.worktreeRoot) return false;
+  const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
+  const root = normalize(info.worktreeRoot);
+  const cwd = normalize(base);
+  return root !== cwd;
+}
+
 
 const NEW_PROJECT_REQUIRED_AGENTS = [
   'gsd-project-researcher',
@@ -283,6 +304,7 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
   ]);
   const runtime = detectRuntime(config as { runtime?: unknown });
   const agentsDir = resolveAgentsDir(runtime);
+  const gitInfo = gitWorktreeInfo(projectDir);
   const missingRequiredAgents = NEW_PROJECT_REQUIRED_AGENTS.filter(
     agent => !hasAgentDefinition(agentsDir, agent),
   );
@@ -309,12 +331,9 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
       (hasExistingCode || hasPackageFile) && !pathExists(projectDir, '.planning/codebase'),
 
     // Bug #3491: detect parent worktree to avoid nested .git init.
-    has_git: (() => gitWorktreeInfo(projectDir).inside)(),
-    git_worktree_root: (() => gitWorktreeInfo(projectDir).worktreeRoot)(),
-    in_nested_subdir: (() => {
-      const info = gitWorktreeInfo(projectDir);
-      return info.inside && info.worktreeRoot !== null && info.worktreeRoot !== projectDir;
-    })(),
+    has_git: gitInfo.inside,
+    git_worktree_root: gitInfo.worktreeRoot,
+    in_nested_subdir: detectNestedSubdir(projectDir, gitInfo),
 
     brave_search_available: hasBraveSearch,
     firecrawl_available: hasFirecrawl,

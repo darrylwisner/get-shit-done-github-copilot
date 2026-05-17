@@ -13,20 +13,24 @@
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const BRIDGE_PATH = path.join(REPO_ROOT, 'sdk', 'dist', 'runtime-bridge-sync', 'index.js');
+// Node's ESM loader rejects Windows absolute paths with `import()` — must be a
+// file:// URL. pathToFileURL is a no-op for POSIX paths (produces file:///abs/...).
+const BRIDGE_URL = pathToFileURL(BRIDGE_PATH).href;
 
 describe('runtime-bridge-sync CJS smoke test', () => {
   test('executeForCjs is exported and is a function', async () => {
     // Use dynamic import because Node 24 supports require() of ESM but
     // the module is ESM (NodeNext output). Dynamic import works in all contexts.
-    const mod = await import(BRIDGE_PATH);
+    const mod = await import(BRIDGE_URL);
     assert.strictEqual(typeof mod.executeForCjs, 'function', 'executeForCjs must be a function');
   });
 
   test('executeForCjs returns ok:true for generate-slug (success path)', async () => {
-    const { executeForCjs } = await import(BRIDGE_PATH);
+    const { executeForCjs } = await import(BRIDGE_URL);
 
     const result = executeForCjs({
       registryCommand: 'generate-slug',
@@ -52,7 +56,7 @@ describe('runtime-bridge-sync CJS smoke test', () => {
   });
 
   test('executeForCjs returns ok:false for unknown command', async () => {
-    const { executeForCjs } = await import(BRIDGE_PATH);
+    const { executeForCjs } = await import(BRIDGE_URL);
 
     const result = executeForCjs({
       registryCommand: '__smoke_test_unknown_command__',
@@ -73,7 +77,7 @@ describe('runtime-bridge-sync CJS smoke test', () => {
   });
 
   test('executeForCjs result shape matches RuntimeBridgeSyncResult discriminated union', async () => {
-    const { executeForCjs } = await import(BRIDGE_PATH);
+    const { executeForCjs } = await import(BRIDGE_URL);
 
     // Success shape
     const success = executeForCjs({

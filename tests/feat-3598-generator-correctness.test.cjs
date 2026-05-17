@@ -45,6 +45,10 @@ function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+function normalizeEol(text) {
+  return String(text).replace(/\r\n/g, '\n');
+}
+
 /** Read a directory recursively into a Map<relPath, sha256>. */
 function snapshotDir(dir) {
   const out = new Map();
@@ -98,7 +102,7 @@ describe('feat-3598: build*Cjs() output matches committed .generated.cjs (stale-
       assert.equal(typeof fresh, 'string', `${g.exportName}() must return a string`);
       const committedPath = path.join(REPO_ROOT, g.committed);
       const committed = fs.readFileSync(committedPath, 'utf-8');
-      assert.equal(fresh, committed,
+      assert.equal(normalizeEol(fresh), normalizeEol(committed),
         `${g.committed} drifted from generator output — run "cd sdk && npm run gen:${g.script.replace(/^gen-/, '').replace(/\.mjs$/, '')}" to regenerate`);
     });
   }
