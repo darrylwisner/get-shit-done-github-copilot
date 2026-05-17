@@ -20,9 +20,8 @@ const SDK_SHARED_DIR = path.join(REPO_ROOT, 'sdk', 'shared');
 
 const { install } = require('../bin/install.js');
 
-function makeTmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-3571-'));
-}
+const { createTempDir } = require('./helpers.cjs');
+const makeTmpDir = () => createTempDir('gsd-3571-');
 
 function silenceConsole(fn) {
   const original = {
@@ -45,23 +44,28 @@ function silenceConsole(fn) {
 describe('bug #3571: configuration generated manifests resolve in install layout', () => {
   let tmpRoot;
   let savedHome;
+  let savedUserProfile;
   let savedExplicitConfigDir;
 
   beforeEach(() => {
     tmpRoot = makeTmpDir();
     savedHome = process.env.HOME;
+    // On Windows, os.homedir() reads USERPROFILE; install() resolves via it.
+    savedUserProfile = process.env.USERPROFILE;
     savedExplicitConfigDir = process.env.GSD_EXPLICIT_CONFIG_DIR;
     delete process.env.GSD_EXPLICIT_CONFIG_DIR;
   });
 
   afterEach(() => {
     process.env.HOME = savedHome;
+    if (savedUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = savedUserProfile;
     if (savedExplicitConfigDir === undefined) {
       delete process.env.GSD_EXPLICIT_CONFIG_DIR;
     } else {
       process.env.GSD_EXPLICIT_CONFIG_DIR = savedExplicitConfigDir;
     }
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   test('co-located bin/shared manifests let configuration.generated.cjs load without sdk/shared', () => {
@@ -93,6 +97,7 @@ describe('bug #3571: configuration generated manifests resolve in install layout
 
   test('post-install: install() copies configuration manifests to co-located bin/shared', () => {
     process.env.HOME = tmpRoot;
+    process.env.USERPROFILE = tmpRoot;
 
     silenceConsole(() => {
       install(true, 'codex');

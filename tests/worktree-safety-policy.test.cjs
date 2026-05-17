@@ -13,6 +13,8 @@ const {
   snapshotWorktreeInventory,
 } = require('../get-shit-done/bin/lib/worktree-safety.cjs');
 
+const isWindows = process.platform === 'win32';
+
 describe('worktree-safety policy module', () => {
   test('resolveWorktreeContext prefers current directory when .planning exists', () => {
     const context = resolveWorktreeContext('/repo/wt', {
@@ -24,7 +26,9 @@ describe('worktree-safety policy module', () => {
     assert.strictEqual(context.mode, 'current_directory');
   });
 
-  test('resolveWorktreeContext maps linked worktree to common-dir parent', () => {
+  test('resolveWorktreeContext maps linked worktree to common-dir parent',
+    { skip: isWindows ? 'POSIX-rooted fixture paths cannot be expressed on Windows path.resolve; resolveWorktreeContext uses platform-native path module and would prepend a drive letter to "/repo" inputs. Behaviour is covered indirectly by real-fs worktree tests.' : false },
+    () => {
     const context = resolveWorktreeContext('/repo/wt', {
       existsSync: () => false,
       execGit: (args) => {

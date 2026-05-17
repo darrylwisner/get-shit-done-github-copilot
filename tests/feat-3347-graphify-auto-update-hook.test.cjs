@@ -36,6 +36,8 @@ const os = require('node:os');
 const ROOT = path.join(__dirname, '..');
 const HOOK = path.join(ROOT, 'hooks', 'gsd-graphify-update.sh');
 
+const isWindows = process.platform === 'win32';
+
 function createTempGitRepo(opts = {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-3347-'));
   cp.execFileSync('git', ['init', '-b', opts.defaultBranch || 'main'], {
@@ -119,7 +121,9 @@ function cleanup(tmpDir) {
   fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
 }
 
-describe('#3347 hook — bail paths (no side effects)', () => {
+describe('#3347 hook — bail paths (no side effects)',
+  { skip: isWindows ? 'POSIX-only: harness spawns bash + kill -0 + sleep; the hook itself is a bash script under test' : false },
+  () => {
   test('non-Bash tool call exits 0 with no status file', (t) => {
     const tmpDir = createTempGitRepo({
       config: { graphify: { enabled: true, auto_update: true } },
@@ -218,7 +222,9 @@ describe('#3347 hook — bail paths (no side effects)', () => {
   });
 });
 
-describe('#3347 hook — dispatch path (all gates pass)', () => {
+describe('#3347 hook — dispatch path (all gates pass)',
+  { skip: isWindows ? 'POSIX-only: harness spawns bash + kill -0 + sleep; the hook itself is a bash script under test' : false },
+  () => {
   test('writes status file with status=running synchronously before returning', (t) => {
     const tmpDir = createTempGitRepo({
       config: { graphify: { enabled: true, auto_update: true } },
@@ -374,7 +380,9 @@ describe('#3347 hook — dispatch path (all gates pass)', () => {
   });
 });
 
-describe('#3347 hook — HEAD-advancing command matchers', () => {
+describe('#3347 hook — HEAD-advancing command matchers',
+  { skip: isWindows ? 'POSIX-only: harness spawns bash to invoke the .sh hook under test' : false },
+  () => {
   for (const cmd of [
     'git commit -m fix',
     'git merge feature',

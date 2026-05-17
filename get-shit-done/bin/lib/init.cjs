@@ -76,6 +76,77 @@ function withProjectRoot(cwd, result) {
   return result;
 }
 
+/**
+ * Return git-worktree state for init payloads with robust nested-subdir
+ * detection across Windows short/long path forms and slash variants.
+ */
+function getInitGitState(cwd) {
+  const info = gitWorktreeInfoInternal(cwd);
+  const worktreeRoot = info.worktreeRoot;
+  const normalizeForCompare = (p) => {
+    if (typeof p !== 'string' || p.length === 0) return null;
+    let resolved;
+    try {
+      resolved = fs.realpathSync.native(p);
+    } catch {
+      resolved = path.resolve(p);
+    }
+    resolved = path.resolve(resolved);
+    if (process.platform === 'win32') {
+      return resolved.replace(/\//g, '\\').toLowerCase();
+    }
+    return resolved;
+  };
+
+  let inNestedSubdir = false;
+  if (info.inside) {
+    let resolvedByGitPrefix = false;
+    try {
+      const prefixResult = execGit(['rev-parse', '--show-prefix'], { cwd, timeout: 5000 });
+      if (prefixResult.exitCode === 0) {
+        const prefix = String(prefixResult.stdout || '').trim().replace(/\\/g, '/');
+        inNestedSubdir = prefix.length > 0 && prefix !== '.' && prefix !== './';
+        resolvedByGitPrefix = true;
+      }
+    } catch {}
+
+    if (!resolvedByGitPrefix) {
+      const rootNorm = normalizeForCompare(worktreeRoot);
+      const cwdNorm = normalizeForCompare(cwd);
+      if (rootNorm && cwdNorm) {
+        if (rootNorm === cwdNorm) {
+          inNestedSubdir = false;
+        } else {
+          const rel = path.relative(rootNorm, cwdNorm);
+          const relNorm = process.platform === 'win32' ? rel.replace(/\//g, '\\') : rel;
+          inNestedSubdir =
+            relNorm !== '' &&
+            relNorm !== '.' &&
+            !relNorm.startsWith('..') &&
+            !path.isAbsolute(relNorm);
+        }
+      } else {
+        inNestedSubdir = worktreeRoot !== null;
+      }
+    }
+  }
+
+  // Defensive final guard: if git reports the same root path as cwd (after
+  // slash/case normalization), we are at the worktree root, never nested.
+  if (inNestedSubdir && typeof worktreeRoot === 'string') {
+    const toComparableRaw = (p) => p.replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
+    if (toComparableRaw(worktreeRoot) === toComparableRaw(String(cwd))) {
+      inNestedSubdir = false;
+    }
+  }
+
+  return {
+    has_git: info.inside,
+    git_worktree_root: worktreeRoot,
+    in_nested_subdir: inNestedSubdir,
+  };
+}
+
 function cmdInitExecutePhase(cwd, phase, raw, options = {}) {
   if (!phase) {
     error('phase required for init execute-phase');
@@ -475,16 +546,7 @@ function cmdInitNewProject(cwd, raw) {
     needs_codebase_map: (hasCode || hasPackageFile) && !pathExistsInternal(cwd, '.planning/codebase'),
 
     // Git state (Bug #3491: detect parent worktree to avoid nested .git init)
-    ...(() => {
-      const info = gitWorktreeInfoInternal(cwd);
-      const worktreeRoot = info.worktreeRoot;
-      const inNestedSubdir = info.inside && worktreeRoot !== null && worktreeRoot !== cwd;
-      return {
-        has_git: info.inside,
-        git_worktree_root: worktreeRoot,
-        in_nested_subdir: inNestedSubdir,
-      };
-    })(),
+    ...getInitGitState(cwd),
 
     // Enhanced search
     brave_search_available: hasBraveSearch,
@@ -618,17 +680,7 @@ function cmdInitIngestDocs(cwd, raw) {
   const result = {
     project_exists: pathExistsInternal(cwd, '.planning/PROJECT.md'),
     planning_exists: fs.existsSync(planningRoot(cwd)),
-    ...(() => {
-      // Bug #3491 — see cmdInitNewProject above. Same shallow-check bug.
-      const info = gitWorktreeInfoInternal(cwd);
-      const worktreeRoot = info.worktreeRoot;
-      const inNestedSubdir = info.inside && worktreeRoot !== null && worktreeRoot !== cwd;
-      return {
-        has_git: info.inside,
-        git_worktree_root: worktreeRoot,
-        in_nested_subdir: inNestedSubdir,
-      };
-    })(),
+    ...getInitGitState(cwd),
     project_path: '.planning/PROJECT.md',
     commit_docs: config.commit_docs,
   };

@@ -85,7 +85,7 @@ describe('gsd-settings-advanced — file scaffolding', () => {
 
   test('command frontmatter has name, description, allowed-tools', () => {
     const text = fs.readFileSync(COMMAND_PATH, 'utf-8');
-    const fmMatch = text.match(/^---\n([\s\S]*?)\n---/);
+    const fmMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     assert.ok(fmMatch, 'command file missing frontmatter block');
     const fm = fmMatch[1];
     assert.match(fm, /name:\s*gsd:config/, 'frontmatter missing name (gsd:config)');

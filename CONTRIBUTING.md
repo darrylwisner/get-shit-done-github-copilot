@@ -189,6 +189,8 @@ When unsure whether a change is user-facing, **update the docs**.
 
 All tests use Node.js built-in test runner (`node:test`) and assertion library (`node:assert`). **Do not use Jest, Mocha, Chai, or any external test framework.**
 
+> **Suite grouping.** Tests live in named suites (`unit`, `integration`, `install`, `security`, `slow`) selected by **filename suffix**: a file named `foo.security.test.cjs` belongs to the `security` suite; a file with no suffix (`foo.test.cjs`) belongs to `unit`. See [docs/TESTING-SUITES.md](docs/TESTING-SUITES.md) for the full policy, CI matrix, and per-suite scripts (`npm run test:unit`, `npm run test:security`, `npm run test:coverage:unit`, …). Default `npm test` still runs every test — backwards compatible.
+
 ### Required Imports
 
 ```javascript

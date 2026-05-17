@@ -64,7 +64,11 @@ Install profile: standard  (from .gsd-profile)
 1. Read current surface: `readSurface(runtimeConfigDir)` → if null, seed from `readActiveProfile(runtimeConfigDir)`.
 2. Set `surfaceState.baseProfile = name`.
 3. `writeSurface(runtimeConfigDir, surfaceState)`.
-4. Resolve and re-apply: `applySurface(runtimeConfigDir, commandsDir, agentsDir, manifest, CLUSTERS)`.
+4. Resolve and re-apply:
+   ```js
+   const layout = resolveRuntimeArtifactLayout(runtime, runtimeConfigDir, scope);
+   applySurface(runtimeConfigDir, layout, manifest, CLUSTERS);
+   ```
 5. Confirm: "Surface updated to profile `<name>`. N skills enabled."
 
 ---
@@ -77,7 +81,11 @@ Valid cluster names: `core_loop`, `audit_review`, `milestone`, `research_ideate`
 1. Validate cluster name against `Object.keys(CLUSTERS)`.
 2. Read or initialize surface state.
 3. Add cluster to `surfaceState.disabledClusters` (deduplicate).
-4. `writeSurface` → `applySurface`.
+4. `writeSurface` → resolve layout → `applySurface`:
+   ```js
+   const layout = resolveRuntimeArtifactLayout(runtime, runtimeConfigDir, scope);
+   applySurface(runtimeConfigDir, layout, manifest, CLUSTERS);
+   ```
 5. Confirm: "Disabled cluster `<cluster>`. N skills removed from surface."
 
 ---
@@ -86,7 +94,11 @@ Valid cluster names: `core_loop`, `audit_review`, `milestone`, `research_ideate`
 
 1. Read surface state; if null, nothing to enable — print "No surface delta active."
 2. Remove cluster from `surfaceState.disabledClusters`.
-3. `writeSurface` → `applySurface`.
+3. `writeSurface` → resolve layout → `applySurface`:
+   ```js
+   const layout = resolveRuntimeArtifactLayout(runtime, runtimeConfigDir, scope);
+   applySurface(runtimeConfigDir, layout, manifest, CLUSTERS);
+   ```
 4. Confirm: "Enabled cluster `<cluster>`. N skills added back to surface."
 
 ---
@@ -106,9 +118,9 @@ Valid cluster names: `core_loop`, `audit_review`, `milestone`, `research_ideate`
 # Claude Code
 RUNTIME_CONFIG_DIR=~/.claude/skills
 
-# Resolve commandsDir and agentsDir
-COMMANDS_DIR=~/.claude/commands/gsd
-AGENTS_DIR=~/.claude/agents
+# Artifact destinations are derived from runtime layout
+# via resolveRuntimeArtifactLayout(runtime, RUNTIME_CONFIG_DIR, scope)
+# then applySurface(RUNTIME_CONFIG_DIR, layout, manifest, CLUSTERS)
 ```
 
 All paths can be overridden by reading the `CLAUDE_CONFIG_DIR` env var if set.

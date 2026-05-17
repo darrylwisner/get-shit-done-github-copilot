@@ -153,7 +153,7 @@ describe('Bug #3362 / #3413: Windows hook commands are runtime-aware', () => {
 
 describe('Bug #2979: buildHookCommand for .sh hooks still uses bare "bash" (POSIX std PATH always has /bin)', () => {
   test('.sh hook runner is exactly "bash" — bash is in /usr/bin:/bin and resolves under minimal PATH', () => {
-    const cmd = buildHookCommand('/tmp/.claude', 'gsd-session-state.sh');
+    const cmd = buildHookCommand('/tmp/.claude', 'gsd-session-state.sh', { platform: 'linux' });
     const parsed = parseHookCommand(cmd);
     assert.equal(parsed.runner, 'bash');
   });
@@ -364,7 +364,7 @@ describe('Bug #2979 (#3002 CR): rewriteLegacyManagedNodeHookCommands rewrites ba
       },
     };
     const runner = '"/usr/local/bin/node"';
-    const changed = rewriteLegacyManagedNodeHookCommands(settings, runner);
+    const changed = rewriteLegacyManagedNodeHookCommands(settings, runner, { platform: 'linux' });
     assert.equal(changed, true);
     assert.equal(
       settings.hooks.SessionStart[0].hooks[0].command,
@@ -381,7 +381,7 @@ describe('Bug #2979 (#3002 CR): rewriteLegacyManagedNodeHookCommands rewrites ba
       },
     };
     const runner = '"/usr/local/bin/node"';
-    const changed = rewriteLegacyManagedNodeHookCommands(settings, runner);
+    const changed = rewriteLegacyManagedNodeHookCommands(settings, runner, { platform: 'linux' });
     assert.equal(changed, true);
     assert.equal(
       settings.hooks.SessionStart[0].hooks[0].command,

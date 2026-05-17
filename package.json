@@ -82,6 +82,13 @@
     "changeset": "node scripts/changeset/new.cjs",
     "changelog:render": "node scripts/changeset/cli.cjs render",
     "test": "node scripts/run-tests.cjs",
-    "test:coverage": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs"
+    "test:unit": "node scripts/run-tests.cjs --suite unit",
+    "test:integration": "node scripts/run-tests.cjs --suite integration",
+    "test:install": "node scripts/run-tests.cjs --suite install",
+    "test:security": "node scripts/run-tests.cjs --suite security",
+    "test:slow": "node scripts/run-tests.cjs --suite slow",
+    "test:coverage": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs",
+    "test:coverage:unit": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs --suite unit",
+    "test:coverage:all": "npm run test:coverage"
   }
 }

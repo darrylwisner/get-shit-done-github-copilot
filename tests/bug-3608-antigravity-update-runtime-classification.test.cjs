@@ -89,7 +89,7 @@ describe('bug #3608: update.md models Antigravity as a first-class runtime', () 
     // Extract the inference block — the if/elif ladder that maps env vars to runtime.
     // Match from the comment marker through the closing `fi` of the inference block.
     const blockMatch = content.match(
-      /If runtime is still unknown, infer from runtime env vars[\s\S]*?\nfi\n/,
+      /If runtime is still unknown, infer from runtime env vars[\s\S]*?\r?\nfi\r?\n/,
     );
     assert.ok(blockMatch, 'env-var inference block not found');
 

@@ -134,19 +134,21 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 REBUILD_SCRIPT="$HOOK_DIR/lib/gsd-graphify-rebuild.sh"
 [ -f "$REBUILD_SCRIPT" ] || exit 0
 
-# Detach the rebuild. Portable double-fork via subshell + disown — works on
-# macOS (no setsid) and Linux. Redirect all I/O to /dev/null so the hook
-# returns instantly even if the child keeps stdout/stderr handles open.
-(
-  bash "$REBUILD_SCRIPT" \
-    "$STATUS_FILE" \
-    "$LOCK_FILE" \
-    "$HEAD_SHA" \
-    "$MS_START" \
-    "$GRAPHIFY_BIN" \
-    </dev/null >/dev/null 2>&1 &
-  disown
-) &
-disown
+# Detach the rebuild. Spawn as a regular background job so we can capture
+# its PID via $! and write it to the lock file synchronously here in the
+# parent. This eliminates a startup race where a caller (e.g. test cleanup)
+# observing an absent lock could not distinguish "subprocess finished" from
+# "subprocess hasn't started yet." With the lock written before this hook
+# returns, lock-presence is a reliable in-flight signal.
+bash "$REBUILD_SCRIPT" \
+  "$STATUS_FILE" \
+  "$LOCK_FILE" \
+  "$HEAD_SHA" \
+  "$MS_START" \
+  "$GRAPHIFY_BIN" \
+  </dev/null >/dev/null 2>&1 &
+REBUILD_PID=$!
+echo "$REBUILD_PID" > "$LOCK_FILE"
+disown "$REBUILD_PID" 2>/dev/null || true
 
 exit 0
