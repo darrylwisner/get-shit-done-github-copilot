@@ -5,7 +5,7 @@
     "worktree":               { "current": 13, "issue": "TBD" },
     "milestone":              { "current": 10, "issue": "TBD" },
     "roadmap":                { "current": 9,  "issue": "TBD" },
-    "verify":                 { "current": 9,  "issue": "TBD" },
+    "verify":                 { "current": 10, "issue": "3767" },
     "install":                { "current": 9,  "issue": "TBD" },
     "init":                   { "current": 8,  "issue": "TBD" },
     "state":                  { "current": 9,  "issue": "TBD" },

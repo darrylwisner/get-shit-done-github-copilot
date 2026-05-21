@@ -622,7 +622,12 @@ Check if phase has frontend indicators:
 
 ```bash
 PHASE_SECTION=$(gsd-sdk query roadmap.get-phase "${PHASE}" 2>/dev/null)
-echo "$PHASE_SECTION" | grep -iE "UI|interface|frontend|component|layout|page|screen|view|form|dashboard|widget" > /dev/null 2>&1
+# Shell-free word-boundary gate (#3718): Node.js helper — no locale env-var dependency.
+# Reads via stdin to avoid OS ARG_MAX limits on large phase text.
+# Path anchored to repo root; falls back to CWD if git is unavailable
+# Exit codes mirror grep: 0 = UI tokens found, 1 = not found.
+GSD_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+printf '%s' "$PHASE_SECTION" | node "${GSD_REPO_ROOT}/bin/lib/ui-safety-gate.cjs" > /dev/null 2>&1
 HAS_UI=$?
 ```
 
