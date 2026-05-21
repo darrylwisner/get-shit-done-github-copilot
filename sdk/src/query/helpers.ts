@@ -109,14 +109,28 @@ export function detectRuntime(config?: { runtime?: unknown }): Runtime {
  *
  * Precedence:
  *   1. `GSD_AGENTS_DIR` — explicit SDK override (wins over runtime selection)
- *   2. `<getRuntimeConfigDir(runtime)>/agents` — installer-parity default
+ *   2. `<getRuntimeConfigDir(runtime)>/agents` — installer-parity default (when the dir exists)
+ *   3. `<projectDir>/.claude/agents` — repo-local fallback for `--local` Claude installs
+ *      (only probed when the global runtime dir is absent or empty, and `projectDir` is given)
  *
  * Defaults to Claude when no runtime is passed, matching prior behavior
  * (see `init-runner.ts`, which is Claude-only by design).
+ *
+ * The repo-local fallback was added for bug #3751: Claude Code `--local` installs
+ * place agent definitions under `./.claude/agents` rather than `~/.claude/agents`,
+ * but the SDK agent-detection path only probed the global directory.
  */
-export function resolveAgentsDir(runtime: Runtime = 'claude'): string {
+export function resolveAgentsDir(runtime: Runtime = 'claude', projectDir?: string): string {
   if (process.env.GSD_AGENTS_DIR) return process.env.GSD_AGENTS_DIR;
-  return join(getRuntimeConfigDir(runtime), 'agents');
+  const globalDir = join(getRuntimeConfigDir(runtime), 'agents');
+  if (existsSync(globalDir)) return globalDir;
+  // Repo-local fallback: <projectDir>/.claude/agents for --local Claude installs (#3751).
+  // Only applicable when a projectDir is known; other runtimes don't use .claude/.
+  if (projectDir && runtime === 'claude') {
+    const localDir = join(projectDir, '.claude', 'agents');
+    if (existsSync(localDir)) return localDir;
+  }
+  return globalDir;
 }
 
 /**
@@ -296,12 +310,17 @@ export function extractPhaseToken(dirName: string): string {
  */
 export function phaseTokenMatches(dirName: string, normalized: string): boolean {
   const token = extractPhaseToken(dirName);
-  if (token.toUpperCase() === normalized.toUpperCase()) return true;
+  // Normalize the extracted token so that single-digit phase numbers compare
+  // correctly against their padded counterparts (e.g. "1" matches "01").
+  // Without this, parsePhasesFromFiles("…/1-setup/file") produces "1" which
+  // normalizePhaseName pads to "01", causing phaseTokenMatches("1-setup","01")
+  // to miss the directory entirely (bug #3749 integration path).
+  if (normalizePhaseName(token).toUpperCase() === normalized.toUpperCase()) return true;
   // Strip optional project_code prefix from dir and retry
   const stripped = dirName.replace(/^[A-Z]{1,6}-(?=\d)/i, '');
   if (stripped !== dirName) {
     const strippedToken = extractPhaseToken(stripped);
-    if (strippedToken.toUpperCase() === normalized.toUpperCase()) return true;
+    if (normalizePhaseName(strippedToken).toUpperCase() === normalized.toUpperCase()) return true;
   }
   return false;
 }

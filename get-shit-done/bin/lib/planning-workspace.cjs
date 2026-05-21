@@ -371,6 +371,35 @@ function setActiveWorkstream(cwd, name) {
   createPlanningWorkspace(cwd).activeWorkstream.set(name);
 }
 
+/**
+ * Locate the CONTEXT.md file in a phase directory, handling both the bare
+ * form (`CONTEXT.md`) and the padded-prefix convention (`NN-CONTEXT.md`,
+ * `NN.N-CONTEXT.md`, etc.) used by gsd-discuss-phase output.
+ *
+ * Returns the filename (not the full path) of the first match, or null if
+ * no CONTEXT.md exists in the directory.
+ *
+ * Canonical dual-form predicate extracted here to eliminate the 5-site
+ * duplication that previously existed across init.cjs, roadmap.cjs,
+ * core.cjs, gap-checker.cjs (#3739).
+ *
+ * @param {string|string[]} absDirOrFiles - Absolute path to the phase directory,
+ *   OR an already-read files array (avoids a redundant readdirSync at call sites
+ *   that already hold a directory listing).
+ * @returns {string|null}
+ */
+function findContextMdIn(absDirOrFiles) {
+  try {
+    const files = Array.isArray(absDirOrFiles)
+      ? absDirOrFiles
+      : fs.readdirSync(absDirOrFiles);
+    if (files.includes('CONTEXT.md')) return 'CONTEXT.md';
+    return files.find(f => f.endsWith('-CONTEXT.md')) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   createPlanningWorkspace,
   createSharedPointerAdapter,
@@ -382,4 +411,5 @@ module.exports = {
   withPlanningLock,
   getActiveWorkstream,
   setActiveWorkstream,
+  findContextMdIn,
 };
