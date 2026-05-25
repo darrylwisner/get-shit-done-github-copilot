@@ -17,7 +17,6 @@
  * ```
  */
 
-import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
@@ -48,53 +47,9 @@ interface PhaseInfo {
   has_verification: boolean;
   has_reviews: boolean;
   archived?: string;
-  /**
-   * #2893 — non-canonical plan filename warning (singular). Present only when
-   * a plan-shaped file in this phase dir is not the canonical
-   * `{padded_phase}-{NN}-PLAN.md` shape; the executor surfaces this so users
-   * see a loud signal instead of plan_count: 0 with no clue why.
-   */
-  warning?: string;
 }
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
-
-/**
- * #2893 — canonical plan filename predicate and the diagnostic "looks like a
- * plan but isn't canonical" net. Centralised so every read site (find-phase,
- * phase-plan-index, phases list --type plans) emits the same warning message.
- *
- * Mirrors get-shit-done/bin/lib/phase.cjs lines 17–52.
- */
-export const isCanonicalPlanFile = (f: string): boolean => f.endsWith('-PLAN.md') || f === 'PLAN.md';
-
-const PLAN_OUTLINE_RE = /-PLAN-OUTLINE\.md$/i;
-const PLAN_PRE_BOUNCE_RE = /-PLAN.*\.pre-bounce\.md$/i;
-const looksLikePlanFile = (f: string): boolean =>
-  /\.md$/i.test(f)
-  && /PLAN/i.test(f)
-  && !PLAN_OUTLINE_RE.test(f)
-  && !PLAN_PRE_BOUNCE_RE.test(f);
-
-/**
- * Build the canonical "non-canonical plan files" warning string used by every
- * SDK read site. Returns null when there are no offenders.
- *
- * Format mirrors describeNonCanonicalPlans in phase.cjs so consumers see the
- * same message regardless of which entry point they call.
- */
-export function describeNonCanonicalPlans(dirFiles: string[], matchedFiles: string[]): string | null {
-  const matched = new Set(matchedFiles);
-  const offenders = dirFiles.filter((f) => looksLikePlanFile(f) && !matched.has(f));
-  if (offenders.length === 0) return null;
-  return (
-    `Found ${offenders.length} plan-shaped file(s) in this phase that don't match the canonical `
-    + `naming convention "{padded_phase}-{NN}-PLAN.md" (or bare "PLAN.md") and were skipped: `
-    + offenders.map((f) => `"${f}"`).join(', ')
-    + `. Rename to the canonical form (e.g. "01-01-PLAN.md") so the executor can detect them. `
-    + `See agents/gsd-planner.md write_phase_prompt step for the full contract.`
-  );
-}
 
 /**
  * Get file stats for a phase directory.
@@ -108,17 +63,15 @@ async function getPhaseFileStats(phaseDir: string): Promise<{
   hasContext: boolean;
   hasVerification: boolean;
   hasReviews: boolean;
-  allFiles: string[];
 }> {
   const files = await readdir(phaseDir);
   return {
-    plans: files.filter(isCanonicalPlanFile),
+    plans: files.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md'),
     summaries: files.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md'),
     hasResearch: files.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md'),
     hasContext: files.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md'),
     hasVerification: files.some(f => f.endsWith('-VERIFICATION.md') || f === 'VERIFICATION.md'),
     hasReviews: files.some(f => f.endsWith('-REVIEWS.md') || f === 'REVIEWS.md'),
-    allFiles: files,
   };
 }
 
@@ -158,12 +111,9 @@ async function searchPhaseInDir(baseDir: string, relBase: string, normalized: st
     const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
     const phaseDir = join(baseDir, match);
 
-    const { plans: unsortedPlans, summaries: unsortedSummaries, hasResearch, hasContext, hasVerification, hasReviews, allFiles } = await getPhaseFileStats(phaseDir);
+    const { plans: unsortedPlans, summaries: unsortedSummaries, hasResearch, hasContext, hasVerification, hasReviews } = await getPhaseFileStats(phaseDir);
     const plans = unsortedPlans.sort();
     const summaries = unsortedSummaries.sort();
-    // #2893 parity — emit the same warning shape as cmdPhasePlanIndex when a
-    // plan-shaped file would be skipped by the canonical filter.
-    const planNamingWarning = describeNonCanonicalPlans(allFiles, plans);
 
     const completedPlanIds = new Set(
       summaries.flatMap((s) => {
@@ -178,7 +128,7 @@ async function searchPhaseInDir(baseDir: string, relBase: string, normalized: st
       return !completedPlanIds.has(planId) && !completedPlanIds.has(canonical);
     });
 
-    const result: PhaseInfo = {
+    return {
       found: true,
       directory: toPosixPath(join(relBase, match)),
       phase_number: phaseNumber,
@@ -192,8 +142,6 @@ async function searchPhaseInDir(baseDir: string, relBase: string, normalized: st
       has_verification: hasVerification,
       has_reviews: hasReviews,
     };
-    if (planNamingWarning) result.warning = planNamingWarning;
-    return result;
   } catch {
     return null;
   }
@@ -205,63 +153,6 @@ async function searchPhaseInDir(baseDir: string, relBase: string, normalized: st
 function extractObjective(content: string): string | null {
   const m = content.match(/<objective>\s*\n?\s*(.+)/);
   return m ? m[1].trim() : null;
-}
-
-// ─── Exported internal helper ──────────────────────────────────────────────
-
-/**
- * Locate a phase by number without the QueryHandler wrapper.
- *
- * Returns the PhaseInfo (including phase_number, phase_slug) for the given
- * phase identifier, or null when the phase cannot be found.  Searches current
- * phases first, then archived milestone phase directories (newest-first) —
- * identical logic to the `findPhase` QueryHandler and the CJS
- * `findPhaseInternal` from core.cjs lines 838-874.
- *
- * Exported so that `commit.ts` can call it without going through the full
- * QueryHandler dispatch stack (which would require a registered query context).
- *
- * @param projectDir - Project root directory
- * @param phase      - Phase identifier string (e.g. "1", "02", "2.1")
- * @param workstream - Optional workstream scope
- */
-export async function findPhaseByNumber(
-  projectDir: string,
-  phase: string,
-  workstream?: string,
-): Promise<PhaseInfo | null> {
-  if (!phase) return null;
-
-  const phasesDir = planningPaths(projectDir, workstream).phases;
-  const normalized = normalizePhaseName(phase);
-  const relPhasesDir = relPlanningPath(workstream) + '/phases';
-
-  const current = await searchPhaseInDir(phasesDir, relPhasesDir, normalized);
-  if (current) return current;
-
-  const milestonesDir = join(projectDir, '.planning', 'milestones');
-  try {
-    const milestoneEntries = await readdir(milestonesDir, { withFileTypes: true });
-    const archiveDirs = milestoneEntries
-      .filter(e => e.isDirectory() && /^v[\d.]+-phases$/.test(e.name))
-      .map(e => e.name)
-      .sort()
-      .reverse();
-
-    for (const archiveName of archiveDirs) {
-      const versionMatch = archiveName.match(/^(v[\d.]+)-phases$/);
-      const version = versionMatch ? versionMatch[1] : archiveName;
-      const archivePath = join(milestonesDir, archiveName);
-      const relBase = '.planning/milestones/' + archiveName;
-      const result = await searchPhaseInDir(archivePath, relBase, normalized);
-      if (result) {
-        result.archived = version;
-        return result;
-      }
-    }
-  } catch { /* milestones dir doesn't exist — not an error */ }
-
-  return null;
 }
 
 // ─── Exported handlers ─────────────────────────────────────────────────────
@@ -289,15 +180,23 @@ export const findPhase: QueryHandler = async (args, projectDir, workstream) => {
   const phasesDir = planningPaths(projectDir, workstream).phases;
   const normalized = normalizePhaseName(phase);
 
-  // Track every directory we actually probed so the not-found payload can
-  // surface them to the caller for diagnostics (#3164 acceptance criterion).
-  const searchedDirectories: string[] = [];
+  const notFound: PhaseInfo = {
+    found: false,
+    directory: null,
+    phase_number: null,
+    phase_name: null,
+    phase_slug: null,
+    plans: [],
+    summaries: [],
+    incomplete_plans: [],
+    has_research: false,
+    has_context: false,
+    has_verification: false,
+    has_reviews: false,
+  };
 
   // Search current phases first
   const relPhasesDir = relPlanningPath(workstream) + '/phases';
-  if (existsSync(phasesDir)) {
-    searchedDirectories.push(relPhasesDir);
-  }
   const current = await searchPhaseInDir(phasesDir, relPhasesDir, normalized);
   if (current) return { data: current };
 
@@ -316,7 +215,6 @@ export const findPhase: QueryHandler = async (args, projectDir, workstream) => {
       const version = versionMatch ? versionMatch[1] : archiveName;
       const archivePath = join(milestonesDir, archiveName);
       const relBase = '.planning/milestones/' + archiveName;
-      searchedDirectories.push(relBase);
       const result = await searchPhaseInDir(archivePath, relBase, normalized);
       if (result) {
         result.archived = version;
@@ -325,21 +223,6 @@ export const findPhase: QueryHandler = async (args, projectDir, workstream) => {
     }
   } catch { /* milestones dir doesn't exist */ }
 
-  const notFound: PhaseInfo & { searched_directories: string[] } = {
-    found: false,
-    directory: null,
-    phase_number: null,
-    phase_name: null,
-    phase_slug: null,
-    plans: [],
-    summaries: [],
-    incomplete_plans: [],
-    has_research: false,
-    has_context: false,
-    has_verification: false,
-    has_reviews: false,
-    searched_directories: searchedDirectories,
-  };
   return { data: notFound };
 };
 
@@ -402,20 +285,13 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
 
   // Get all files in phase directory
   const phaseFiles = await readdir(phaseDir);
-  const planFiles = phaseFiles.filter(isCanonicalPlanFile).sort();
+  const planFiles = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').sort();
   const summaryFiles = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
-  // #3430 — identify non-canonical plan-shaped files that were skipped so
-  // callers get an explicit warning rather than a silent plan_count: 0.
-  // Uses a concise format ("Ignored noncanonical plan files: <name,...>")
-  // for the warnings[] array; find-phase / phases-list use the verbose
-  // describeNonCanonicalPlans format which includes remediation guidance.
-  const matchedPlanSet = new Set(planFiles);
-  const nonCanonicalPlanFiles = phaseFiles.filter(
-    f => looksLikePlanFile(f) && !matchedPlanSet.has(f),
-  );
-  const planNamingWarning = nonCanonicalPlanFiles.length > 0
-    ? `Ignored noncanonical plan files: ${nonCanonicalPlanFiles.join(', ')}`
-    : null;
+  const nonCanonicalPlanFiles = phaseFiles.filter((f) => (
+    f.toLowerCase().endsWith('.md')
+    && /(^|-)plan(-|\.)/i.test(f)
+    && !(f.endsWith('-PLAN.md') || f === 'PLAN.md')
+  )).sort();
 
   // Build set of plan IDs with summaries — match the planId derivation logic
   const completedPlanIds = new Set(
@@ -607,6 +483,10 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
   let hasCheckpoints = false;
   const warnings: string[] = [];
 
+  if (nonCanonicalPlanFiles.length > 0) {
+    warnings.push(`Ignored noncanonical plan files: ${nonCanonicalPlanFiles.join(', ')}`);
+  }
+
   // Surface unresolved depends_on references from Pass 2 — without this, a dropped
   // short-form edge silently collapses the dependent plan into wave 1 and the only
   // signal is a misleading "declared wave: N but depends_on DAG places it in wave 1"
@@ -653,12 +533,6 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
       waves[waveKey] = [];
     }
     waves[waveKey].push(raw.id);
-  }
-
-  // #3430 — non-canonical plan filename warning flows through the same
-  // `warnings` array as other diagnostics (unresolved deps, wave mismatches).
-  if (planNamingWarning) {
-    warnings.push(planNamingWarning);
   }
 
   const result: Record<string, unknown> = {

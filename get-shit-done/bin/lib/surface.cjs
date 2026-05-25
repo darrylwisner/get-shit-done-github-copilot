@@ -3,7 +3,7 @@
  * Runtime surface module — ADR-0011 Phase 2 (Option B).
  *
  * Manages the runtime enable/disable surface state (the `.gsd-surface.json` marker in
- * each runtime's config dir root (e.g., ~/.claude)) independently of the install-time profile marker
+ * each runtime's skills dir) independently of the install-time profile marker
  * (`.gsd-profile`). Runtime config locations are resolved by callers.
  *
  * Effective skill set = base profile ∪ explicitAdds − disabledClusters − explicitRemoves,
@@ -13,9 +13,8 @@
  *   readSurface(runtimeConfigDir)
  *   writeSurface(runtimeConfigDir, surfaceState)
  *   resolveSurface(runtimeConfigDir, manifest, clusterMap)
- *   applySurface(runtimeConfigDir, layout, manifest, clusterMap)
- *   listSurface(runtimeConfigDir, layout, manifest, clusterMap)
- *   pruneSkillDirs(skillsDir, retainedNames, prefix, manifest)
+ *   applySurface(runtimeConfigDir, commandsDir, agentsDir, manifest, clusterMap)
+ *   listSurface(runtimeConfigDir, manifest, clusterMap)
  */
 
 const fs = require('fs');
@@ -32,7 +31,6 @@ const {
   PROFILES,
 } = require('./install-profiles.cjs');
 const { CLUSTERS, allClusteredSkills } = require('./clusters.cjs');
-const { findInstallSourceRoot } = require('./runtime-artifact-layout.cjs');
 
 const SURFACE_FILE_NAME = '.gsd-surface.json';
 
@@ -196,176 +194,146 @@ function resolveSurface(runtimeConfigDir, manifest, clusterMap) {
 // ---------------------------------------------------------------------------
 
 /**
- * Re-stage the active surface using the resolved layout.
- * Iterates layout.kinds and syncs each artifact kind to its destination.
+ * Re-stage the active surface to commandsDir and agentsDir in-place.
+ * Only touches files matching `gsd-` prefix or `*.md` in commandsDir.
+ * Never touches non-`gsd-*` files.
+ *
+ * Steps:
+ *  1. Resolve surface → active skill/agent sets
+ *  2. Stage to temp dirs via stageSkillsForProfile / stageAgentsForProfile
+ *  3. Find the install source (where skill files live)
+ *  4. Sync: copy missing, delete superseded (gsd-only)
  *
  * @param {string} runtimeConfigDir
- * @param {import('./runtime-artifact-layout.cjs').Layout} layout
+ * @param {string} commandsDir  runtime commands/gsd dir (resolved per-runtime by callers)
+ * @param {string} agentsDir    runtime agents dir (resolved per-runtime by callers)
  * @param {Map<string, string[]>} manifest
  * @param {Object} [clusterMap]
  */
-function applySurface(runtimeConfigDir, layout, manifest, clusterMap) {
-  if (path.resolve(runtimeConfigDir) !== path.resolve(layout.configDir)) {
-    throw new TypeError('applySurface runtimeConfigDir must match layout.configDir');
-  }
-  const resolved = resolveSurface(layout.configDir, manifest, clusterMap);
-  for (const kind of layout.kinds) {
-    const staged = kind.stage(resolved);
-    const dest = path.join(layout.configDir, kind.destSubpath);
-    _syncGsdDir(staged, dest, kind, manifest);
-  }
-  return resolved;
-}
+function applySurface(runtimeConfigDir, commandsDir, agentsDir, manifest, clusterMap) {
+  const resolved = resolveSurface(runtimeConfigDir, manifest, clusterMap);
 
-/**
- * Prune GSD-managed skill directories from a skills directory.
- *
- * Removes every directory in `skillsDir` that is GSD-owned but NOT listed
- * in `retainedNames`. User-owned dirs (not matching the GSD ownership criteria)
- * are always preserved.
- *
- * Ownership criteria:
- *   - Non-empty prefix (e.g. 'gsd-'): dir name starts with that prefix AND
- *     appears in the manifest (manifest membership is required). Dirs that match
- *     the prefix but are NOT in the manifest are treated as user-owned and
- *     preserved — this prevents data loss for user-created gsd-* directories.
- *     A warning is written to stderr when such a dir is encountered.
- *   - Empty prefix (Hermes): dir name appears as a canonical skill stem in the
- *     manifest. User dirs not in the manifest are preserved.
- *   - Empty prefix without manifest, or manifest not a Map: conservative; no
- *     dirs are removed.
- *
- * This is the single point of truth for skill-dir pruning. Both _syncGsdDir
- * (surface apply) and callers that need stand-alone pruning use this function.
- *
- * @param {string} skillsDir        directory that contains the gsd-STEM sub-dirs
- * @param {Set<string>} retainedNames set of directory names to keep (e.g. 'gsd-help')
- * @param {string} prefix           GSD dir prefix, e.g. 'gsd-' (or '' for Hermes)
- * @param {Map<string, string[]>} [manifest] optional; required for Hermes empty-prefix case
- *                                  and for manifest-membership gate in prefixed case.
- *                                  Must be a Map; any other type is treated as missing.
- */
-function pruneSkillDirs(skillsDir, retainedNames, prefix, manifest) {
-  if (!fs.existsSync(skillsDir)) return;
+  // Find install source
+  const srcCommandsDir = _findInstallSource(runtimeConfigDir);
 
-  // Finding 2: guard against callers passing a truthy non-Map as manifest.
-  // A non-Map manifest would throw on .keys(); treat it as absent and be conservative.
-  const safeManifest = (manifest instanceof Map) ? manifest : null;
+  // Stage skills
+  const stagedSkills = stageSkillsForProfile(srcCommandsDir, resolved);
 
-  // Build the canonical stem set from the manifest (used for both prefixed and Hermes paths).
-  // Deletion requires manifest membership — without a valid manifest, be conservative.
-  const canonicalStems = safeManifest
-    ? new Set([...safeManifest.keys()].filter(k => !k.startsWith('_calls_agents_')))
-    : null;
+  // Sync commandsDir from stagedSkills
+  _syncGsdDir(stagedSkills, commandsDir, 'commands');
 
-  for (const entry of fs.readdirSync(skillsDir)) {
-    const entryPath = path.join(skillsDir, entry);
-    if (!fs.statSync(entryPath).isDirectory()) continue;
-
-    let isGsdOwned;
-    if (prefix !== '') {
-      if (!entry.startsWith(prefix)) {
-        // Does not match prefix at all — user-owned, preserve.
-        continue;
-      }
-      if (!canonicalStems) {
-        // No manifest available: cannot confirm ownership — preserve conservatively.
-        continue;
-      }
-      // Finding 1 fix: prefix match is necessary but NOT sufficient.
-      // The dir must also be in the manifest to be considered GSD-owned.
-      // A user-created gsd-* dir that isn't in the manifest is preserved with a warning.
-      if (!canonicalStems.has(entry.slice(prefix.length))) {
-        process.stderr.write(
-          `[gsd] Warning: ${entry} matches GSD prefix '${prefix}' but is not in the manifest — preserving (user-owned or unknown)\n`
-        );
-        continue;
-      }
-      isGsdOwned = true;
-    } else if (canonicalStems) {
-      // Hermes: GSD-owned iff the directory name appears in the canonical manifest.
-      isGsdOwned = canonicalStems.has(entry);
-    } else {
-      // No manifest available: be conservative, don't remove anything.
-      continue;
-    }
-
-    if (!isGsdOwned) continue;         // Hermes path only: preserve user-owned dirs not in manifest
-    if (retainedNames.has(entry)) continue; // GSD-owned and in retain set
-    try {
-      fs.rmSync(entryPath, { recursive: true, force: true });
-    } catch (err) {
-      process.stderr.write(`surface: failed to prune ${entryPath}: ${err.message}\n`);
+  // Stage and sync agents
+  if (agentsDir && fs.existsSync(agentsDir)) {
+    const srcAgentsDir = _findAgentsSource(runtimeConfigDir);
+    if (srcAgentsDir) {
+      const stagedAgents = stageAgentsForProfile(srcAgentsDir, resolved);
+      _syncGsdDir(stagedAgents, agentsDir, 'agents');
     }
   }
 }
 
 /**
  * Sync destination directory from staged source.
- *
- * For 'commands' kind: iterate *.md files in destDir, remove if not in staged set.
- * For 'agents' kind: same, but only remove files starting with 'gsd-' prefix.
- * For 'skills' kind: iterate directories in destDir matching kind.prefix; add missing
- *   by copying recursively; remove dirs not in staged set. Preserves dirs not matching
- *   the prefix (user-owned skills). Pruning is delegated to pruneSkillDirs().
- *
- * For Hermes (empty prefix): uses manifest membership to discriminate GSD-owned vs
- * user-owned dirs. GSD-owned = stem in manifest; removal targets = in manifest AND
- * not in staged set. User-owned (not in manifest) are always preserved.
+ * Adds files present in staged but missing in dest.
+ * Removes gsd-prefixed .md files in dest not present in staged.
+ * Never touches non-gsd files.
  *
  * @param {string} stagedDir source (staged temp dir or original)
  * @param {string} destDir runtime destination
- * @param {import('./runtime-artifact-layout.cjs').ArtifactKind|'commands'|'agents'} kind
- * @param {Map<string, string[]>} [manifest] optional; required for Hermes empty-prefix removal
+ * @param {'commands'|'agents'} context
  */
-function _syncGsdDir(stagedDir, destDir, kind, manifest) {
+function _syncGsdDir(stagedDir, destDir, context) {
   if (!fs.existsSync(stagedDir)) return;
   fs.mkdirSync(destDir, { recursive: true });
 
-  // Normalize: allow legacy string context for backward-compat with internal callers
-  const kindName = (typeof kind === 'string') ? kind : kind.kind;
-  const kindPrefix = (typeof kind === 'object' && kind !== null) ? kind.prefix : 'gsd-';
+  const stagedFiles = new Set(
+    fs.readdirSync(stagedDir).filter(f => f.endsWith('.md'))
+  );
 
-  if (kindName === 'skills') {
-    // Skills kind: work with directories, not files.
-    // Each staged entry is a directory named ${prefix}${stem}.
-    const stagedDirs = new Set(
-      fs.readdirSync(stagedDir).filter(entry => {
-        return fs.statSync(path.join(stagedDir, entry)).isDirectory();
-      })
-    );
-
-    // Copy missing dirs from staged to dest (always overwrite to ensure content is current)
-    for (const dirName of stagedDirs) {
-      const destSubDir = path.join(destDir, dirName);
-      fs.cpSync(path.join(stagedDir, dirName), destSubDir, { recursive: true });
-    }
-
-    // Prune GSD-owned dirs that are no longer in the staged set.
-    // pruneSkillDirs() is the single point of truth for this logic.
-    pruneSkillDirs(destDir, stagedDirs, kindPrefix, manifest);
-  } else {
-    // commands / agents kind: work with .md files
-    const stagedFiles = new Set(
-      fs.readdirSync(stagedDir).filter(f => f.endsWith('.md'))
-    );
-
-    // Copy files from staged to dest (overwrite to keep content current)
-    for (const file of stagedFiles) {
-      fs.copyFileSync(path.join(stagedDir, file), path.join(destDir, file));
-    }
-
-    // Remove gsd-only files from dest that aren't in staged set
-    // For commands dir: all .md files are gsd skills
-    // For agents dir: only gsd-* files
-    const destEntries = fs.readdirSync(destDir).filter(f => f.endsWith('.md'));
-    for (const file of destEntries) {
-      if (kindName === 'agents' && !file.startsWith('gsd-')) continue;
-      if (!stagedFiles.has(file)) {
-        try { fs.unlinkSync(path.join(destDir, file)); } catch {}
-      }
+  // Copy missing files from staged to dest
+  for (const file of stagedFiles) {
+    const destFile = path.join(destDir, file);
+    if (!fs.existsSync(destFile)) {
+      fs.copyFileSync(path.join(stagedDir, file), destFile);
+    } else {
+      // Overwrite to ensure content is current
+      fs.copyFileSync(path.join(stagedDir, file), destFile);
     }
   }
+
+  // Remove gsd-only files from dest that aren't in staged set
+  // For commands dir: all .md files are gsd skills
+  // For agents dir: only gsd-* files
+  const destEntries = fs.readdirSync(destDir).filter(f => f.endsWith('.md'));
+  for (const file of destEntries) {
+    if (context === 'agents' && !file.startsWith('gsd-')) continue;
+    if (!stagedFiles.has(file)) {
+      try { fs.unlinkSync(path.join(destDir, file)); } catch {}
+    }
+  }
+}
+
+/**
+ * Find the install source commands/gsd directory.
+ * Checks the runtime's `.gsd-source` marker (sibling of the surface state file),
+ * then walks up from __dirname to find the installed package source.
+ *
+ * @param {string} runtimeConfigDir
+ * @returns {string} path to install source commands/gsd
+ */
+function _findInstallSource(runtimeConfigDir) {
+  // Check for .gsd-source marker
+  const sourceMarker = path.join(runtimeConfigDir, '.gsd-source');
+  if (fs.existsSync(sourceMarker)) {
+    try {
+      const src = fs.readFileSync(sourceMarker, 'utf8').trim();
+      if (src && fs.existsSync(src)) return src;
+    } catch {}
+  }
+
+  // Walk up from this module's dir to find commands/gsd
+  let dir = __dirname;
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, 'commands', 'gsd');
+    if (fs.existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  // Fallback: the runtimeConfigDir itself
+  return path.join(runtimeConfigDir, '..', 'commands', 'gsd');
+}
+
+/**
+ * Find the install source agents directory.
+ *
+ * @param {string} runtimeConfigDir
+ * @returns {string|null}
+ */
+function _findAgentsSource(runtimeConfigDir) {
+  // Prefer .gsd-source sibling marker (commands/gsd) and derive agents from it.
+  const sourceMarker = path.join(runtimeConfigDir, '.gsd-source');
+  if (fs.existsSync(sourceMarker)) {
+    try {
+      const commandsSrc = fs.readFileSync(sourceMarker, 'utf8').trim();
+      if (commandsSrc && fs.existsSync(commandsSrc)) {
+        const commandsParent = path.dirname(commandsSrc); // .../commands
+        const candidate = path.resolve(commandsParent, '..', 'agents');
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    } catch {}
+  }
+
+  let dir = __dirname;
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, 'agents');
+    if (fs.existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -376,7 +344,7 @@ function _syncGsdDir(stagedDir, destDir, kind, manifest) {
  * List the currently enabled and disabled skills with token cost.
  *
  * Token cost = sum of description lengths ÷ 4 (mirrors audit script).
- * Descriptions are read from the install source (findInstallSourceRoot).
+ * Descriptions are read from the installed commandsDir skill files.
  *
  * @param {string} runtimeConfigDir
  * @param {Map<string, string[]>} manifest
@@ -398,7 +366,7 @@ function listSurface(runtimeConfigDir, manifest, clusterMap) {
   const disabled = allStems.filter(s => !enabledSet.has(s)).sort();
 
   // Compute token cost by reading descriptions from the install source
-  const srcCommandsDir = findInstallSourceRoot(runtimeConfigDir);
+  const srcCommandsDir = _findInstallSource(runtimeConfigDir);
   let tokenCost = 0;
   for (const stem of enabled) {
     const filePath = path.join(srcCommandsDir, `${stem}.md`);
@@ -424,7 +392,7 @@ module.exports = {
   resolveSurface,
   applySurface,
   listSurface,
-  // Exported for testing and for callers that need stand-alone pruning
-  pruneSkillDirs,
+  // Exported for testing
+  _findInstallSource,
   _syncGsdDir,
 };

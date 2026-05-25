@@ -60,8 +60,9 @@ const {
 } = require('../get-shit-done/bin/lib/model-profiles.cjs');
 const { isValidConfigKey } = require('../get-shit-done/bin/lib/config-schema.cjs');
 
-const { createTempDir } = require('./helpers.cjs');
-const makeTmp = (prefix) => createTempDir(`gsd-3024-${prefix}-`);
+function makeTmp(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), `gsd-3024-${prefix}-`));
+}
 function writeConfig(dir, config) {
   const planningDir = path.join(dir, '.planning');
   fs.mkdirSync(planningDir, { recursive: true });

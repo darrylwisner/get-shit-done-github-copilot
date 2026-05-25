@@ -122,8 +122,6 @@ Contributor requirements (summary):
 - Do not rewrite maintainer intent in `CONTEXT.md`/ADRs as part of drive-by cleanup; propose focused updates tied to approved scope.
 - If using an AI assistant, prompt it to read `CONTEXT.md` and the relevant ADRs before writing any code or docs, and verify it used the correct vocabulary before opening the PR.
 
-**CJS↔SDK seam.** When working on `bin/lib/*.cjs` or `sdk/src/**`, read [`docs/agents/cjs-sdk-seam.md`](docs/agents/cjs-sdk-seam.md). It documents the canonical pattern for Shared Modules (data manifest + source-of-truth file + generator + freshness check + Adapters) and the hand-sync pair lint that blocks new drift. New `<name>.cjs` ↔ `<name>.ts` pairs require either migration to a Shared Module or an explicit allowlist entry with justification in `scripts/shared-module-handsync-allowlist.json`. Adding an allowlist entry requires maintainer review via CODEOWNERS.
-
 **Every PR must link to an approved issue.** PRs without a linked issue are closed without review, no exceptions.
 
 - **No draft PRs** — draft PRs are automatically closed. Only open a PR when it is complete, tested, and ready for review. If your work is not finished, keep it on your local branch until it is.
@@ -151,45 +149,9 @@ Fragments are consolidated into `CHANGELOG.md` at release time by the release wo
 
 **Opt-out:** PRs with no user-facing impact (test refactors, lint config changes, CI tweaks, formatting-only changes) can add the `no-changelog` label. The lint honors it. When unsure whether a change is user-facing, **add the fragment**.
 
-## Documentation Updates — Update the Relevant Docs
-
-If your PR adds, changes, deprecates, or removes user-visible behavior, you **must** update the relevant documentation in `docs/`. CI will fail any PR whose changeset fragment is typed `Added`, `Changed`, `Deprecated`, or `Removed` without also modifying at least one file under `docs/` ([#3213](https://github.com/gsd-build/get-shit-done/issues/3213)).
-
-`Fixed` and `Security` fragments do not trigger this lint — bug fixes restore documented behavior, they do not introduce new behavior to document. (Edit the docs anyway if a fix corrects something the docs got wrong.)
-
-### Which docs to update
-
-| Change type | Required doc updates |
-|---|---|
-| New command or flag | `docs/COMMANDS.md`, `docs/FEATURES.md` |
-| Changed command behavior or output | `docs/USER-GUIDE.md`, `docs/COMMANDS.md` |
-| Configuration / schema change | `docs/CONFIGURATION.md` |
-| Architectural change | `docs/ARCHITECTURE.md`, `docs/adr/` |
-| Agent or skill change | `docs/AGENTS.md` |
-| Removed command, flag, or workflow | All docs that referenced it |
-
-### Language policy
-
-All content in `docs/` and the root `README.md` **must be written in English**. English is the canonical source. The translated READMEs (`README.pt-BR.md`, `README.zh-CN.md`, `README.ja-JP.md`, `README.ko-KR.md`) are community-maintained translations and do not need to be updated by every PR.
-
-### CI enforcement
-
-The `Docs Required` workflow (`scripts/lint-docs-required.cjs`) reads the changeset fragments touched in the PR diff. If any has type `Added` / `Changed` / `Deprecated` / `Removed`, it requires at least one file under `docs/` to also appear in the diff.
-
-### Opt-outs (with paper trail)
-
-When a change genuinely has no user-facing documentation impact (infrastructure rewrite, internal refactor, test-only addition, CI fix), use one of:
-
-- **Label:** add the `no-docs` label to the PR. Leave a comment explaining why no docs update was needed.
-- **Per-fragment marker:** add `<!-- docs-exempt: <reason> -->` **on its own line** inside the body of each triggering changeset fragment (typically at the end). The reason is **required and must be non-empty** — a bare `<!-- docs-exempt -->` or `<!-- docs-exempt: -->` is rejected (no audit trail = no exemption). The marker is extracted at parse time by `scripts/changeset/parse.cjs` and stripped from the body before the CHANGELOG.md and GitHub release-notes serializers see it — it leaves a paper trail in the source fragment without leaking into published release notes. Inline mentions of the marker syntax (e.g. inside backticks) are intentionally ignored; the parser only acts on a marker that occupies its own line. Both routes leave a paper trail; the label is global, the marker is per-fragment for mixed PRs.
-
-When unsure whether a change is user-facing, **update the docs**.
-
 ## Testing Standards
 
 All tests use Node.js built-in test runner (`node:test`) and assertion library (`node:assert`). **Do not use Jest, Mocha, Chai, or any external test framework.**
-
-> **Suite grouping.** Tests live in named suites (`unit`, `integration`, `install`, `security`, `slow`) selected by **filename suffix**: a file named `foo.security.test.cjs` belongs to the `security` suite; a file with no suffix (`foo.test.cjs`) belongs to `unit`. See [docs/TESTING-SUITES.md](docs/TESTING-SUITES.md) for the full policy, CI matrix, and per-suite scripts (`npm run test:unit`, `npm run test:security`, `npm run test:coverage:unit`, …). Default `npm test` still runs every test — backwards compatible.
 
 ### Required Imports
 

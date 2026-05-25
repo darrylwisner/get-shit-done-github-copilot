@@ -109,28 +109,14 @@ export function detectRuntime(config?: { runtime?: unknown }): Runtime {
  *
  * Precedence:
  *   1. `GSD_AGENTS_DIR` — explicit SDK override (wins over runtime selection)
- *   2. `<getRuntimeConfigDir(runtime)>/agents` — installer-parity default (when the dir exists)
- *   3. `<projectDir>/.claude/agents` — repo-local fallback for `--local` Claude installs
- *      (only probed when the global runtime dir is absent or empty, and `projectDir` is given)
+ *   2. `<getRuntimeConfigDir(runtime)>/agents` — installer-parity default
  *
  * Defaults to Claude when no runtime is passed, matching prior behavior
  * (see `init-runner.ts`, which is Claude-only by design).
- *
- * The repo-local fallback was added for bug #3751: Claude Code `--local` installs
- * place agent definitions under `./.claude/agents` rather than `~/.claude/agents`,
- * but the SDK agent-detection path only probed the global directory.
  */
-export function resolveAgentsDir(runtime: Runtime = 'claude', projectDir?: string): string {
+export function resolveAgentsDir(runtime: Runtime = 'claude'): string {
   if (process.env.GSD_AGENTS_DIR) return process.env.GSD_AGENTS_DIR;
-  const globalDir = join(getRuntimeConfigDir(runtime), 'agents');
-  if (existsSync(globalDir)) return globalDir;
-  // Repo-local fallback: <projectDir>/.claude/agents for --local Claude installs (#3751).
-  // Only applicable when a projectDir is known; other runtimes don't use .claude/.
-  if (projectDir && runtime === 'claude') {
-    const localDir = join(projectDir, '.claude', 'agents');
-    if (existsSync(localDir)) return localDir;
-  }
-  return globalDir;
+  return join(getRuntimeConfigDir(runtime), 'agents');
 }
 
 /**
@@ -310,17 +296,12 @@ export function extractPhaseToken(dirName: string): string {
  */
 export function phaseTokenMatches(dirName: string, normalized: string): boolean {
   const token = extractPhaseToken(dirName);
-  // Normalize the extracted token so that single-digit phase numbers compare
-  // correctly against their padded counterparts (e.g. "1" matches "01").
-  // Without this, parsePhasesFromFiles("…/1-setup/file") produces "1" which
-  // normalizePhaseName pads to "01", causing phaseTokenMatches("1-setup","01")
-  // to miss the directory entirely (bug #3749 integration path).
-  if (normalizePhaseName(token).toUpperCase() === normalized.toUpperCase()) return true;
+  if (token.toUpperCase() === normalized.toUpperCase()) return true;
   // Strip optional project_code prefix from dir and retry
   const stripped = dirName.replace(/^[A-Z]{1,6}-(?=\d)/i, '');
   if (stripped !== dirName) {
     const strippedToken = extractPhaseToken(stripped);
-    if (normalizePhaseName(strippedToken).toUpperCase() === normalized.toUpperCase()) return true;
+    if (strippedToken.toUpperCase() === normalized.toUpperCase()) return true;
   }
   return false;
 }
@@ -633,26 +614,6 @@ export async function resolvePathUnderProject(projectDir: string, userPath: stri
     throw new GSDError('path escapes project directory', ErrorClassification.Validation);
   }
   return realCandidate;
-}
-
-/**
- * Resolve a user-supplied file path the way CJS frontmatter handlers do.
- *
- * Mirrors `path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath)`
- * from get-shit-done/bin/lib/frontmatter.cjs (lines 323, 340, 354, 369).
- * Does NOT enforce the "under project root" prefix check — frontmatter
- * verbs accept arbitrary absolute paths (the user is naming a file outside
- * `.planning/`, often a phase-scoped plan in an external location, or a
- * tmpdir inside `/var/folders` whose path includes spaces).
- *
- * Bug #3509 parity: tests on macOS use `os.tmpdir()` directories that
- * resolve outside the project root; the project-scoped variant was
- * rejecting them with "path escapes project directory". Use this helper
- * for the frontmatter family. Use `resolvePathUnderProject` for commands
- * that must stay inside the project (e.g. template output, decisions).
- */
-export function resolveFrontmatterPath(projectDir: string, userPath: string): string {
-  return isAbsolute(userPath) ? normalize(userPath) : resolve(projectDir, userPath);
 }
 
 // ─── sanitizeForDisplay (security.cjs) ───────────────────────────────────────

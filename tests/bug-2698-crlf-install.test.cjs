@@ -43,7 +43,6 @@ const { execFileSync } = require('child_process');
 const INSTALL_SRC = path.join(__dirname, '..', 'bin', 'install.js');
 const BUILD_SCRIPT = path.join(__dirname, '..', 'scripts', 'build-hooks.js');
 const { install, GSD_CODEX_MARKER } = require(INSTALL_SRC);
-const { cleanup } = require('./helpers.cjs');
 
 // Ensure hooks/dist/ is populated before install tests
 before(() => {
@@ -61,8 +60,7 @@ describe('#2698: CRLF stale gsd-update-check block is removed on Codex reinstall
   });
 
   afterEach(() => {
-    // Use the shared 5s Windows-EBUSY retry budget instead of inline 1s.
-    cleanup(tmpDir);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   // Helper: pre-populate .codex/config.toml with a GSD marker + stale hooks block

@@ -41,17 +41,11 @@ const WORKFLOW_PATH = path.join(
 
 // ─── Helper: create outer git repo with a nested workstream subdir ─────────
 
-// On Windows the runtime emits forward slashes (git's convention) while
-// path.join produces backslashes — normalize both sides via the shared
-// toPosixPath helper before any equality comparison.
-const { toPosixPath: normalizePath } = require('./helpers.cjs');
-
 function createOuterRepoWithSubdir(prefix = 'bug-3491-') {
   const outer = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  // macOS /tmp -> /private/tmp; on Windows the runner's %TEMP% is the 8.3
-  // short-name (RUNNER~1) and the runtime resolves to the long form.
-  // realpathSync.native handles both; then normalize separators for compare.
-  const outerReal = fs.realpathSync.native(outer);
+  // macOS /tmp -> /private/tmp; resolve to the canonical path so comparisons
+  // against `git rev-parse --show-toplevel` succeed regardless of symlink.
+  const outerReal = fs.realpathSync(outer);
   execSync('git init', { cwd: outerReal, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: outerReal, stdio: 'pipe' });
   execSync('git config user.name "Test"', { cwd: outerReal, stdio: 'pipe' });
@@ -86,8 +80,8 @@ test('bug-3491: init new-project reports has_git: true inside parent git worktre
     // The workflow needs the worktree root and a nesting flag to decide
     // whether to skip `git init` and emit a friendly warning.
     assert.strictEqual(
-      normalizePath(payload.git_worktree_root),
-      normalizePath(outer),
+      payload.git_worktree_root,
+      outer,
       `expected git_worktree_root to be the outer repo (${outer}), got: ${payload.git_worktree_root}`,
     );
     assert.strictEqual(
@@ -108,7 +102,7 @@ test('bug-3491: init new-project reports has_git: true at worktree root with in_
 
     const payload = JSON.parse(result.output);
     assert.strictEqual(payload.has_git, true, 'has_git must be true at the worktree root');
-    assert.strictEqual(normalizePath(payload.git_worktree_root), normalizePath(outer));
+    assert.strictEqual(payload.git_worktree_root, outer);
     assert.strictEqual(
       payload.in_nested_subdir,
       false,
@@ -120,7 +114,7 @@ test('bug-3491: init new-project reports has_git: true at worktree root with in_
 });
 
 test('bug-3491: init new-project reports has_git: false outside any git worktree', () => {
-  const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'bug-3491-bare-')));
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bug-3491-bare-')));
   try {
     const result = runGsdTools('init new-project', tmp);
     assert.ok(result.success, `init new-project failed: ${result.error}`);
@@ -145,7 +139,7 @@ test('bug-3491: init ingest-docs mirrors the same has_git semantics', () => {
       true,
       'init ingest-docs must also detect parent worktree (#3491 related path)',
     );
-    assert.strictEqual(normalizePath(payload.git_worktree_root), normalizePath(outer));
+    assert.strictEqual(payload.git_worktree_root, outer);
     assert.strictEqual(payload.in_nested_subdir, true);
   } finally {
     cleanup(outer);

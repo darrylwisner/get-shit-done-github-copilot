@@ -13,15 +13,10 @@ import { skillManifest } from './skill-manifest.js';
 import { auditOpen } from './audit-open.js';
 import { detectCustomFiles } from './detect-custom-files.js';
 import { uatRenderCheckpoint, auditUat } from './uat.js';
-// intel.* handlers intentionally NOT imported — intel (bin/lib/intel.cjs) is
-// out-of-seam (CJS-only) per ADR/PRD docs/adr/3524-cjs-sdk-hard-seam.md §3
-// and docs/prd/3524-cjs-sdk-hard-seam.md L160. Dispatch is handled directly
-// by the `case 'intel':` branch in get-shit-done/bin/gsd-tools.cjs which
-// requires('./lib/intel.cjs') and calls the CJS functions in-process.
+import { intelStatus, intelDiff, intelSnapshot, intelValidate, intelQuery, intelExtractExports, intelPatchMeta, intelUpdate } from './intel.js';
 import { writeProfile, generateClaudeProfile, generateDevPreferences, generateClaudeMd } from './profile-output.js';
 import { phaseMvpMode, taskIsBehaviorAdding, userStoryValidate } from './mvp.js';
-import { worktreeCleanupWave, worktreeReapOrphans } from './worktree.js';
-import { promptBudget } from './prompt-budget.js';
+import { worktreeCleanupWave } from './worktree.js';
 
 export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler]> = [
   ['agent-skills', agentSkills],
@@ -67,8 +62,6 @@ export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler
   ['workstream progress', workstreamProgress],
   ['worktree.cleanup-wave', worktreeCleanupWave],
   ['worktree cleanup-wave', worktreeCleanupWave],
-  ['worktree.reap-orphans', worktreeReapOrphans],
-  ['worktree reap-orphans', worktreeReapOrphans],
   ['docs-init', docsInit],
   ['websearch', websearch],
   ['learnings.copy', learningsCopy],
@@ -91,8 +84,22 @@ export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler
   ['audit-uat', auditUat],
   ['uat.render-checkpoint', uatRenderCheckpoint],
   ['uat render-checkpoint', uatRenderCheckpoint],
-  // intel.* entries removed — see import-section comment above. Intel verbs
-  // dispatch via bin/gsd-tools.cjs `case 'intel':` direct to bin/lib/intel.cjs.
+  ['intel.diff', intelDiff],
+  ['intel diff', intelDiff],
+  ['intel.snapshot', intelSnapshot],
+  ['intel snapshot', intelSnapshot],
+  ['intel.validate', intelValidate],
+  ['intel validate', intelValidate],
+  ['intel.status', intelStatus],
+  ['intel status', intelStatus],
+  ['intel.query', intelQuery],
+  ['intel query', intelQuery],
+  ['intel.extract-exports', intelExtractExports],
+  ['intel extract-exports', intelExtractExports],
+  ['intel.patch-meta', intelPatchMeta],
+  ['intel patch-meta', intelPatchMeta],
+  ['intel.update', intelUpdate],
+  ['intel update', intelUpdate],
   ['generate-claude-profile', generateClaudeProfile],
   ['generate-dev-preferences', generateDevPreferences],
   ['write-profile', writeProfile],
@@ -107,5 +114,4 @@ export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler
   ['task is-behavior-adding', taskIsBehaviorAdding],
   ['user-story.validate', userStoryValidate],
   ['user-story validate', userStoryValidate],
-  ['prompt-budget', promptBudget],
 ] as const;

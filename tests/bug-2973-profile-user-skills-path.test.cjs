@@ -153,89 +153,58 @@ describe('Bug #2973: installer migrates existing legacy dev-preferences.md to sk
   });
 });
 
-// ─── #3003 CR follow-up: installRuntimeArtifacts preserves user-owned skills ──
-//
-// Production install() calls installRuntimeArtifacts() without a prior
-// uninstallRuntimeArtifacts(). This means _copyStaged overlays new skills
-// on top of the existing skills/ directory — it does NOT wipe first.
-// As a result, user-owned gsd-dev-preferences/SKILL.md is preserved across
-// a plain install because _copyStaged only cpSync's newly staged skill dirs.
-//
-// NOTE: If callers run uninstallRuntimeArtifacts() before installRuntimeArtifacts()
-// (e.g. full reinstall), gsd-dev-preferences IS wiped by uninstall and NOT
-// restored by install (#3664 production gap — tracked separately).
+// ─── #3003 CR follow-up: copyCommandsAsClaudeSkills preserves user-owned skills ──
 
-describe('Bug #2973 (#3003 CR): installRuntimeArtifacts preserves user-owned gsd-dev-preferences across install', () => {
-  test('user-customized skills/gsd-dev-preferences/SKILL.md survives a plain install (no pre-uninstall)', () => {
-    // Production install() does NOT call uninstallRuntimeArtifacts() first.
-    // installRuntimeArtifacts → _copyStaged overlays only staged skill dirs;
-    // gsd-dev-preferences (not in source) is left untouched.
+describe('Bug #2973 (#3003 CR): copyCommandsAsClaudeSkills snapshots gsd-dev-preferences across the wipe', () => {
+  test('user-customized skills/gsd-dev-preferences/SKILL.md survives a wipe-and-replace install', () => {
     const inst = require(INSTALL);
-    const { loadSkillsManifest, resolveProfile } = require(path.join(ROOT, 'get-shit-done', 'bin', 'lib', 'install-profiles.cjs'));
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-2973-wipe-'));
     try {
-      const configDir = path.join(tmp, 'config');
-      fs.mkdirSync(configDir, { recursive: true });
-
-      // Set up a minimal source dir (plan-phase only; no dev-preferences).
-      const srcDir = path.join(tmp, 'src-commands');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(path.join(srcDir, 'plan-phase.md'), '---\nname: gsd:plan-phase\ndescription: Plan\n---\n\nPlan body.\n');
-      fs.writeFileSync(path.join(configDir, '.gsd-source'), srcDir + '\n');
-
-      const skillsDir = path.join(configDir, 'skills');
+      const skillsDir = path.join(tmp, 'skills');
       const userSkillDir = path.join(skillsDir, 'gsd-dev-preferences');
       fs.mkdirSync(userSkillDir, { recursive: true });
       const userContent = '# my customized dev preferences\n\nstack: rust\n';
       fs.writeFileSync(path.join(userSkillDir, 'SKILL.md'), userContent);
 
-      // Plain install (matching production install() call site).
-      const manifest = loadSkillsManifest();
-      const resolvedProfile = resolveProfile({ modes: [], manifest });
-      inst.installRuntimeArtifacts('claude', configDir, 'global', resolvedProfile);
+      // Source dir mimicking commands/gsd/ — does NOT contain dev-preferences
+      // because dev-preferences is user-generated, not shipped.
+      const srcDir = path.join(tmp, 'src-commands');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(path.join(srcDir, 'plan-phase.md'), '# plan-phase\n');
+
+      // Without the CR fix, the wipe loop deletes gsd-dev-preferences/
+      // and the user's content is lost (no source to restore from).
+      inst.copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
 
       const skillFile = path.join(userSkillDir, 'SKILL.md');
       assert.equal(fs.existsSync(skillFile), true,
-        'gsd-dev-preferences/SKILL.md must survive a plain install (#3003 CR)');
+        'gsd-dev-preferences/SKILL.md must survive the wipe (#3003 CR)');
       assert.equal(fs.readFileSync(skillFile, 'utf-8'), userContent,
-        'user content must be byte-identical after the install');
+        'user content must be byte-identical after the wipe-restore cycle');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  test('non-user-owned gsd-* skills are wiped and recreated via uninstall+install cycle', () => {
-    // Stale artifacts (e.g. STALE-MARKER.txt left from a previous version)
-    // are removed when the caller runs uninstallRuntimeArtifacts() before
-    // installRuntimeArtifacts() — the full uninstall+reinstall cycle.
-    // uninstallRuntimeArtifacts removes all gsd-* entries; installRuntimeArtifacts
-    // then writes fresh ones from source.
+  test('non-user-owned gsd-* skills are still wiped and recreated from source', () => {
+    // The existing wipe behavior must still work for skills the package
+    // owns. Otherwise the preservation list could grow stale by accident.
     const inst = require(INSTALL);
-    const { loadSkillsManifest, resolveProfile } = require(path.join(ROOT, 'get-shit-done', 'bin', 'lib', 'install-profiles.cjs'));
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-2973-wipe-shipped-'));
     try {
-      const configDir = path.join(tmp, 'config');
-      fs.mkdirSync(configDir, { recursive: true });
-
-      const srcDir = path.join(tmp, 'src-commands');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(path.join(srcDir, 'plan-phase.md'), '---\nname: gsd:plan-phase\ndescription: Plan fresh\n---\n\nFresh body.\n');
-      fs.writeFileSync(path.join(configDir, '.gsd-source'), srcDir + '\n');
-
-      const skillsDir = path.join(configDir, 'skills');
+      const skillsDir = path.join(tmp, 'skills');
       const staleSkillDir = path.join(skillsDir, 'gsd-plan-phase');
       fs.mkdirSync(staleSkillDir, { recursive: true });
       fs.writeFileSync(path.join(staleSkillDir, 'STALE-MARKER.txt'), 'wipe me');
 
-      const manifest = loadSkillsManifest();
-      const resolvedProfile = resolveProfile({ modes: [], manifest });
+      const srcDir = path.join(tmp, 'src-commands');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(path.join(srcDir, 'plan-phase.md'), '# plan-phase fresh\n');
 
-      // Full uninstall+install cycle (e.g. --reinstall flow)
-      inst.uninstallRuntimeArtifacts('claude', configDir, 'global');
-      inst.installRuntimeArtifacts('claude', configDir, 'global', resolvedProfile);
+      inst.copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
 
       assert.equal(fs.existsSync(path.join(staleSkillDir, 'STALE-MARKER.txt')), false,
-        'stale shipped-skill content must be wiped by uninstall (preservation is opt-in by name)');
+        'stale shipped-skill content must be wiped (preservation is opt-in by name)');
       assert.equal(fs.existsSync(path.join(staleSkillDir, 'SKILL.md')), true,
         'fresh SKILL.md from source must be installed after wipe');
     } finally {

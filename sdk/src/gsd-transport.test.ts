@@ -205,10 +205,7 @@ describe('GSDTransport', () => {
     expect(result).toBe('');
     expect(adapters.execSubprocessRaw).not.toHaveBeenCalled();
   });
-  it('routes natively when workstream present (Phase 6 fix)', async () => {
-    // Phase 6 fix: GSDTransport no longer forces subprocess for workstream-scoped
-    // requests. The per-request dispatchNative closure (Phase 5.1) correctly
-    // threads workstream to registry.dispatch(), so native dispatch is used.
+  it('forces subprocess when workstream present', async () => {
     const registry = new QueryRegistry();
     registry.register('state.load', async () => ({ data: { ok: true } }));
 
@@ -232,10 +229,9 @@ describe('GSDTransport', () => {
       allowFallbackToSubprocess: true,
     });
 
-    // Native dispatch is used — subprocess is NOT called.
-    expect(result).toEqual({ ok: true });
-    expect(adapters.dispatchNative).toHaveBeenCalledOnce();
-    expect(adapters.execSubprocessJson).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: 'ws-subprocess' });
+    expect(adapters.dispatchNative).not.toHaveBeenCalled();
+    expect(adapters.execSubprocessJson).toHaveBeenCalledOnce();
   });
 
   it('fails when command is unregistered and subprocess fallback is disabled', async () => {
@@ -264,9 +260,7 @@ describe('GSDTransport', () => {
     expect(adapters.execSubprocessJson).not.toHaveBeenCalled();
   });
 
-  it('routes natively when workstream present and mode is raw (Phase 6 fix)', async () => {
-    // Phase 6 fix: workstream no longer forces subprocess. Native dispatch is used
-    // even in raw mode — formatNativeRaw (if set) handles the output projection.
+  it('forces raw subprocess path when workstream present and mode is raw', async () => {
     const registry = new QueryRegistry();
     registry.register('commit', async () => ({ data: { hash: 'abc' } }));
 
@@ -290,10 +284,9 @@ describe('GSDTransport', () => {
       allowFallbackToSubprocess: true,
     });
 
-    // Native dispatch is used — toRaw serializes data to JSON.
-    expect(typeof result).toBe('string');
-    expect(adapters.dispatchNative).toHaveBeenCalledOnce();
-    expect(adapters.execSubprocessRaw).not.toHaveBeenCalled();
+    expect(result).toBe('raw-subprocess');
+    expect(adapters.dispatchNative).not.toHaveBeenCalled();
+    expect(adapters.execSubprocessRaw).toHaveBeenCalledOnce();
     expect(adapters.execSubprocessJson).not.toHaveBeenCalled();
   });
 });

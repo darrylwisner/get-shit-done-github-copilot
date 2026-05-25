@@ -5,19 +5,7 @@ import { acquireStateLock, releaseStateLock } from './state-mutation.js';
 /**
  * Replace a pattern only in the current milestone section of ROADMAP.md.
  *
- * Port of replaceInCurrentMilestone from core.cjs lines 1013-1022.
- *
- * Semantics:
- *   • No `</details>` in the content  → plain `content.replace(pattern, replacement)`.
- *   • Otherwise → split at the last `</details>` and replace only in the
- *     content AFTER it.
- *   • If the after-slice produces no replacement (pattern not found there),
- *     fall back to replacing inside the last `<details>...</details>` block.
- *     This handles the case where the active milestone is itself wrapped in
- *     a `<details>` block (e.g. collapsed by the user or during a milestone
- *     transition). Earlier shipped-milestone blocks are left untouched because
- *     only the last `<details>` block is targeted by the fallback.
- *     (Fixes #2641.)
+ * Port of replaceInCurrentMilestone from core.cjs line 1197-1206.
  */
 export function replaceInCurrentMilestone(
   content: string,
@@ -31,23 +19,30 @@ export function replaceInCurrentMilestone(
   const offset = lastDetailsClose + '</details>'.length;
   const before = content.slice(0, offset);
   const after = content.slice(offset);
-  const afterReplaced = after.replace(pattern, replacement);
-  if (afterReplaced !== after) {
-    // Pattern matched in the after-slice (normal case: active milestone is
-    // outside/after the last </details>).
-    return before + afterReplaced;
+
+  const replacedAfter = after.replace(pattern, replacement);
+  if (replacedAfter !== after) {
+    return before + replacedAfter;
   }
-  // Pattern did not match after the last </details>. Fall back to replacing
-  // inside the last <details> block (active milestone is wrapped in <details>).
-  const lastDetailsOpen = content.lastIndexOf('<details>');
-  if (lastDetailsOpen === -1 || lastDetailsOpen >= lastDetailsClose) {
-    // Malformed or no proper block — return unchanged.
-    return content;
+
+  const detailsBlockRe = /<details>[\s\S]*?<\/details>/gi;
+  const spans: { start: number; end: number; text: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = detailsBlockRe.exec(content)) !== null) {
+    spans.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
   }
-  const blockBefore = content.slice(0, lastDetailsOpen);
-  const blockInner = content.slice(lastDetailsOpen, offset);
-  const blockAfter = content.slice(offset);
-  return blockBefore + blockInner.replace(pattern, replacement) + blockAfter;
+
+  if (spans.length === 0) {
+    return content.replace(pattern, replacement);
+  }
+
+  const lastSpan = spans[spans.length - 1];
+  const updatedLastBlock = lastSpan.text.replace(pattern, replacement);
+  return (
+    content.slice(0, lastSpan.start) +
+    updatedLastBlock +
+    content.slice(lastSpan.end)
+  );
 }
 
 /**

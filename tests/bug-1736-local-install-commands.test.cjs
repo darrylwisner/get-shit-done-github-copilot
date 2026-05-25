@@ -21,8 +21,7 @@ const { execFileSync } = require('child_process');
 
 const INSTALL_SRC = path.join(__dirname, '..', 'bin', 'install.js');
 const BUILD_SCRIPT = path.join(__dirname, '..', 'scripts', 'build-hooks.js');
-const { install } = require(INSTALL_SRC);
-const { cleanup } = require('./helpers.cjs');
+const { install, copyCommandsAsClaudeSkills } = require(INSTALL_SRC);
 
 // ─── Ensure hooks/dist/ is populated before install tests ────────────────────
 // With --test-concurrency=4, other install tests (bug-1834, bug-1924) run
@@ -47,9 +46,7 @@ describe('#1736: local Claude install populates .claude/commands/gsd/', () => {
   });
 
   afterEach(() => {
-    // Use the shared helper which has a 5s Windows-EBUSY retry budget
-    // (20×250ms). The inline 1s budget here was insufficient on cold runners.
-    cleanup(tmpDir);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   test('local install creates .claude/commands/gsd/ directory', (t) => {

@@ -199,82 +199,6 @@ const { routePhasesCommand } = require('./lib/phases-command-router.cjs');
 const { routeValidateCommand } = require('./lib/validate-command-router.cjs');
 const { routeRoadmapCommand } = require('./lib/roadmap-command-router.cjs');
 
-// ─── SDK bridge (Phase 6 inline family / non-family delegation) ───────────────
-// For inline case blocks that have SDK counterparts (frontmatter, config, and
-// non-family commands), we attempt to dispatch via executeForCjs (the sync
-// bridge). CJS handlers are retained as fallback when SDK is unavailable.
-//
-// NOTE: migrate-config, detect-custom-files, config-path, and find-phase
-// are CJS-native special cases; see comments inline.
-
-// Shared loader for the synchronous SDK runtime bridge; see
-// `bin/lib/cjs-sdk-bridge.cjs`. All canonical-command CJS dispatchers (the
-// per-family routers and the non-family helper below) consume the same loader
-// so a change to the SDK-load contract lands in one place.
-const { tryLoadSdk: _tryLoadSdkBridge, getExecuteForCjs } = require('./lib/cjs-sdk-bridge.cjs');
-
-/**
- * Attempt SDK dispatch for a non-family command.
- *
- * Returns true when the SDK was available and handled the command (success or
- * typed error). Returns false when the SDK is unavailable, signalling the
- * caller to fall through to the CJS handler.
- *
- * @param {object} opts
- * @param {string} opts.registryCommand - canonical command name in the SDK registry
- * @param {string[]} opts.registryArgs - args to pass to the SDK handler
- * @param {string} opts.legacyCommand - original gsd-tools command name (for error messages)
- * @param {string[]} opts.legacyArgs - original args (for error messages)
- * @param {string} opts.cwd - project dir
- * @param {boolean} opts.raw - raw output mode
- * @param {Function} opts.error - error reporter
- * @param {Function} opts.output - output emitter (core.output)
- */
-function _dispatchNonFamily({ registryCommand, registryArgs, legacyCommand, legacyArgs, cwd, raw, error, output }) {
-  if (!_tryLoadSdkBridge()) return false;
-  const result = getExecuteForCjs()({
-    registryCommand,
-    registryArgs,
-    legacyCommand,
-    legacyArgs,
-    // Always request typed JSON from the bridge; CJS `output(data, raw)` handles
-    // user-facing rendering. Passing `mode: 'raw'` would make the bridge
-    // pre-render result.data to a JSON string that the CJS output path then
-    // double-stringifies (returning a JSON string of a JSON string).
-    mode: 'json',
-    projectDir: cwd,
-    workstream: process.env.GSD_WORKSTREAM || undefined,
-  });
-  if (!result.ok) {
-    const message = (result.errorDetails && result.errorDetails.message)
-      || `${legacyCommand} (${registryCommand}) failed (${result.errorKind})`;
-    // Propagate the structured reason code through to CJS `error()` so the
-    // `--json-errors` JSON-shaped stderr carries the typed reason (e.g.
-    // 'config_key_not_found') instead of the generic 'unknown'.  Handlers
-    // tag the GSDError with `.reason` and the worker forwards it via
-    // errorDetails.reason. (Bugs #2943, #3086.)
-    const reason = result.errorDetails && result.errorDetails.reason;
-    if (reason) {
-      error(message, reason);
-    } else {
-      error(message);
-    }
-    return true; // handled (error reported)
-  }
-  // CJS parity for --raw output (config.cjs:525 `output(value, raw, String(value))`):
-  // when the caller asked for --raw and the SDK returned a scalar, pass that
-  // scalar through as `rawValue` so core.output() emits the bare string
-  // representation instead of JSON-stringifying it.  Non-scalar shapes fall
-  // through to the structured JSON path, matching `output(obj, raw)`.
-  const data = result.data;
-  if (raw && (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean')) {
-    output(data, raw, String(data));
-  } else {
-    output(data, raw);
-  }
-  return true;
-}
-
 // ─── Arg parsing helpers ──────────────────────────────────────────────────────
 
 /**
@@ -443,12 +367,12 @@ async function main() {
   // phase / roadmap / milestone / progress / etc.
   const TOP_LEVEL_USAGE = 'Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>] [--ws <name>] [--json-errors]\n' +
     'Commands: agent-skills, audit-open, audit-uat, check-commit, commit, commit-to-subrepo, ' +
-    'config-ensure-section, config-get, config-new-project, config-path, config-set, migrate-config, ' +
+    'config-ensure-section, config-get, config-new-project, config-path, config-set, ' +
     'current-timestamp, detect-custom-files, docs-init, extract-messages, find-phase, ' +
     'from-gsd2, frontmatter, gap-analysis, generate-claude-md, generate-claude-profile, ' +
     'generate-dev-preferences, generate-slug, graphify, history-digest, init, intel, ' +
     'learnings, list-todos, milestone, phase, phase-plan-index, phases, profile-questionnaire, ' +
-    'profile-sample, progress, prompt-budget, requirements, resolve-model, roadmap, scaffold, state, ' +
+    'profile-sample, progress, requirements, resolve-model, roadmap, scaffold, state, ' +
     'template, validate, verify, verify-path-exists, verify-summary, workstream, worktree\n\n' +
     'Global flags:\n' +
     '  --raw              Emit raw output without post-processing\n' +
@@ -494,7 +418,7 @@ async function main() {
   const SKIP_ROOT_RESOLUTION = new Set([
     'generate-slug', 'current-timestamp', 'verify-path-exists',
     'verify-summary', 'template', 'frontmatter', 'detect-custom-files',
-    'worktree', 'prompt-budget',
+    'worktree',
   ]);
   if (!SKIP_ROOT_RESOLUTION.has(command)) {
     cwd = findProjectRoot(cwd);
@@ -503,16 +427,14 @@ async function main() {
   // When --pick is active, intercept stdout to extract the requested field.
   if (pickField) {
     const origWriteSync = fs.writeSync;
-    let captured = '';
+    const chunks = [];
     fs.writeSync = function (fd, data, ...rest) {
-      if (fd === 1) {
-        captured += String(data);
-        return;
-      }
+      if (fd === 1) { chunks.push(String(data)); return; }
       return origWriteSync.call(fs, fd, data, ...rest);
     };
     const cleanup = () => {
       fs.writeSync = origWriteSync;
+      const captured = chunks.join('');
       let jsonStr = captured;
       if (jsonStr.startsWith('@file:')) {
         jsonStr = fs.readFileSync(jsonStr.slice(6), 'utf-8');
@@ -542,12 +464,9 @@ async function main() {
   // every workflow to have a bash-specific `if [[ "$INIT" == @file:* ]]` check
   // that breaks on PowerShell and other non-bash shells.
   const origWriteSync2 = fs.writeSync;
-  let captured = '';
+  const outChunks = [];
   fs.writeSync = function (fd, data, ...rest) {
-    if (fd === 1) {
-      captured += String(data);
-      return;
-    }
+    if (fd === 1) { outChunks.push(String(data)); return; }
     return origWriteSync2.call(fs, fd, data, ...rest);
   };
   try {
@@ -555,6 +474,7 @@ async function main() {
   } finally {
     fs.writeSync = origWriteSync2;
   }
+  let captured = outChunks.join('');
   if (captured.startsWith('@file:')) {
     captured = fs.readFileSync(captured.slice(6), 'utf-8');
   }
@@ -604,19 +524,7 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     }
 
     case 'find-phase': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      // SDK handler: findPhase in sdk/src/query/phase.ts.
-      const handled = _dispatchNonFamily({
-        registryCommand: 'find-phase',
-        registryArgs: args.slice(1),
-        legacyCommand: 'find-phase',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) phase.cmdFindPhase(cwd, args[1], raw);
+      phase.cmdFindPhase(cwd, args[1], raw);
       break;
     }
 
@@ -682,31 +590,8 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     }
 
     case 'frontmatter': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      // SDK handler: sdk/src/query/frontmatter.ts + frontmatter-mutation.ts.
-      // CJS fallback: frontmatter.cjs (cooperating sibling).
       const subcommand = args[1];
       const file = args[2];
-      const FRONTMATTER_SDK_MAP = {
-        get: 'frontmatter.get',
-        set: 'frontmatter.set',
-        merge: 'frontmatter.merge',
-        validate: 'frontmatter.validate',
-      };
-      if (subcommand in FRONTMATTER_SDK_MAP) {
-        const handled = _dispatchNonFamily({
-          registryCommand: FRONTMATTER_SDK_MAP[subcommand],
-          registryArgs: args.slice(2),
-          legacyCommand: 'frontmatter',
-          legacyArgs: args.slice(1),
-          cwd,
-          raw,
-          error,
-          output: core.output,
-        });
-        if (handled) break;
-      }
-      // CJS fallback (SDK unavailable or unknown subcommand)
       if (subcommand === 'get') {
         frontmatter.cmdFrontmatterGet(cwd, file, parseNamedArgs(args, ['field']).field, raw);
       } else if (subcommand === 'set') {
@@ -734,36 +619,12 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     }
 
     case 'generate-slug': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      // SDK handler: generateSlug in sdk/src/query/utils.ts.
-      const handled = _dispatchNonFamily({
-        registryCommand: 'generate-slug',
-        registryArgs: args.slice(1),
-        legacyCommand: 'generate-slug',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) commands.cmdGenerateSlug(args[1], raw);
+      commands.cmdGenerateSlug(args[1], raw);
       break;
     }
 
     case 'current-timestamp': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      // SDK handler: currentTimestamp in sdk/src/query/utils.ts.
-      const handled = _dispatchNonFamily({
-        registryCommand: 'current-timestamp',
-        registryArgs: args.slice(1),
-        legacyCommand: 'current-timestamp',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) commands.cmdCurrentTimestamp(args[1] || 'full', raw);
+      commands.cmdCurrentTimestamp(args[1] || 'full', raw);
       break;
     }
 
@@ -778,113 +639,32 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     }
 
     case 'config-ensure-section': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs. The catalog rebinds
-      // 'config-ensure-section' to configNewProject in
-      // sdk/src/query/command-static-catalog-foundation.ts, restoring the
-      // legacy "no-arg full default init" contract on the SDK path
-      // (configEnsureSection itself stays available as an unbound single-
-      // section helper for future SDK callers).
-      const handled = _dispatchNonFamily({
-        registryCommand: 'config-ensure-section',
-        registryArgs: args.slice(1),
-        legacyCommand: 'config-ensure-section',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) config.cmdConfigEnsureSection(cwd, raw);
+      config.cmdConfigEnsureSection(cwd, raw);
       break;
     }
 
     case 'config-set': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      const handled = _dispatchNonFamily({
-        registryCommand: 'config-set',
-        registryArgs: args.slice(1),
-        legacyCommand: 'config-set',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) config.cmdConfigSet(cwd, args[1], args[2], raw);
+      config.cmdConfigSet(cwd, args[1], args[2], raw);
       break;
     }
 
     case "config-set-model-profile": {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      const handled = _dispatchNonFamily({
-        registryCommand: 'config-set-model-profile',
-        registryArgs: args.slice(1),
-        legacyCommand: 'config-set-model-profile',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) config.cmdConfigSetModelProfile(cwd, args[1], raw);
+      config.cmdConfigSetModelProfile(cwd, args[1], raw);
       break;
     }
 
     case 'config-get': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      // The SDK handler supports --default via the registry args (args.slice(1)
-      // contains the key; defaultValue is handled by the SDK via the --default
-      // flag which was already stripped from args and held in defaultValue).
-      // Pass the full original args.slice(1) so the SDK sees the key; the
-      // defaultValue from the flag is in the global defaultValue variable above.
-      // Since the SDK handler reads --default from registryArgs, re-inject it.
-      const configGetSdkArgs = defaultValue !== undefined
-        ? [args[1], '--default', defaultValue]
-        : args.slice(1);
-      const handled = _dispatchNonFamily({
-        registryCommand: 'config-get',
-        registryArgs: configGetSdkArgs,
-        legacyCommand: 'config-get',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) config.cmdConfigGet(cwd, args[1], raw, defaultValue);
+      config.cmdConfigGet(cwd, args[1], raw, defaultValue);
       break;
     }
 
     case 'config-new-project': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      const handled = _dispatchNonFamily({
-        registryCommand: 'config-new-project',
-        registryArgs: args.slice(1),
-        legacyCommand: 'config-new-project',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) config.cmdConfigNewProject(cwd, args[1], raw);
+      config.cmdConfigNewProject(cwd, args[1], raw);
       break;
     }
 
     case 'config-path': {
-      // CJS-native: config-path returns the filesystem path to config.json.
-      // The SDK handler (configPath) also exists but requires a projectDir that
-      // is already resolved. Both produce identical output; keeping CJS here is
-      // simpler and avoids sync-bridge overhead for a trivial path lookup.
       config.cmdConfigPath(cwd, raw);
-      break;
-    }
-
-    case 'migrate-config': {
-      // CJS-native: migrate-config wraps the Configuration Module migrateOnDisk()
-      // which is async and mutates the filesystem. No SDK counterpart exists in
-      // the command registry (it's a one-shot migration utility). Must await.
-      await config.cmdMigrateConfig(cwd, raw);
       break;
     }
 
@@ -1207,10 +987,8 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
       const worktreeSafety = require('./lib/worktree-safety.cjs');
       if (subcommand === 'cleanup-wave') {
         worktreeSafety.cmdWorktreeCleanupWave(cwd, args.slice(2));
-      } else if (subcommand === 'reap-orphans') {
-        worktreeSafety.cmdWorktreeReapOrphans(cwd);
       } else {
-        error('Unknown worktree subcommand. Available: cleanup-wave, reap-orphans', ERROR_REASON.SDK_UNKNOWN_COMMAND);
+        error('Unknown worktree subcommand. Available: cleanup-wave', ERROR_REASON.SDK_UNKNOWN_COMMAND);
       }
       break;
     }
@@ -1292,19 +1070,7 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     // ─── Documentation ────────────────────────────────────────────────────
 
     case 'docs-init': {
-      // Phase 6 (#3575): dispatch via SDK executeForCjs when available.
-      // SDK handler: docsInit in sdk/src/query/docs-init.ts.
-      const handled = _dispatchNonFamily({
-        registryCommand: 'docs-init',
-        registryArgs: args.slice(1),
-        legacyCommand: 'docs-init',
-        legacyArgs: args.slice(1),
-        cwd,
-        raw,
-        error,
-        output: core.output,
-      });
-      if (!handled) docs.cmdDocsInit(cwd, raw);
+      docs.cmdDocsInit(cwd, raw);
       break;
     }
 
@@ -1337,11 +1103,6 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     }
 
     // ─── detect-custom-files ───────────────────────────────────────────────
-    // CJS-native: no SDK counterpart exists in the command registry.
-    // detect-custom-files reads a gsd-file-manifest.json against the
-    // live filesystem to identify user-added files. It is installer-specific
-    // logic that has no async query equivalent in the SDK.
-    //
     // Detect user-added files inside GSD-managed directories that are not
     // tracked in gsd-file-manifest.json. Used by the update workflow to back
     // up custom files before the installer wipes those directories.
@@ -1374,7 +1135,7 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
 
       let manifest;
       try {
-        manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'));
+        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       } catch {
         const out = { custom_files: [], custom_count: 0, manifest_found: false, error: 'manifest parse error' };
         process.stdout.write(JSON.stringify(out, null, 2));
@@ -1393,27 +1154,31 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
         'skills',
       ];
 
-      function collectCustomFiles(dir, baseDir, manifestKeys, out) {
-        if (!fs.existsSync(dir)) return;
+      function walkDir(dir, baseDir) {
+        const results = [];
+        if (!fs.existsSync(dir)) return results;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
           const fullPath = path.join(dir, entry.name);
           if (entry.isDirectory()) {
-            collectCustomFiles(fullPath, baseDir, manifestKeys, out);
-            continue;
-          }
-          // Use forward slashes for cross-platform manifest key compatibility
-          const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
-          if (!manifestKeys.has(relPath)) {
-            out.push(relPath);
+            results.push(...walkDir(fullPath, baseDir));
+          } else {
+            // Use forward slashes for cross-platform manifest key compatibility
+            const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+            results.push(relPath);
           }
         }
+        return results;
       }
 
       const customFiles = [];
       for (const managedDir of GSD_MANAGED_DIRS) {
         const absDir = path.join(resolvedConfigDir, managedDir);
         if (!fs.existsSync(absDir)) continue;
-        collectCustomFiles(absDir, resolvedConfigDir, manifestKeys, customFiles);
+        for (const relPath of walkDir(absDir, resolvedConfigDir)) {
+          if (!manifestKeys.has(relPath)) {
+            customFiles.push(relPath);
+          }
+        }
       }
 
       const out = {
@@ -1431,177 +1196,6 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     case 'from-gsd2': {
       const gsd2Import = require('./lib/gsd2-import.cjs');
       gsd2Import.cmdFromGsd2(args.slice(1), cwd, raw);
-      break;
-    }
-
-    // ─── Prompt Budget ────────────────────────────────────────────────────
-    //
-    // Assemble and deterministically trim review prompt sections to fit a
-    // token budget. Used by the /gsd-review workflow before dispatching to
-    // small-context local model servers (Ollama, llama.cpp, LM Studio).
-    //
-    // Required flags:
-    //   --budget <N>            Token budget (integer > 0)
-    //   --instructions-file <path>  Review instructions
-    //   --roadmap-file <path>   Roadmap section
-    //   --plan-file <path>      Plan file (may be repeated)
-    //   --output-prompt <path>  Write trimmed prompt here
-    //   --output-metadata <path> Write metadata JSON here
-    //
-    // Optional flags:
-    //   --safety-margin-pct <N>     Default 10
-    //   --project-md-head-lines <N> Default 40
-    //   --project-file <path>
-    //   --context-file <path>
-    //   --research-file <path>
-    //   --requirements-file <path>
-    //
-    // Exit codes:
-    //   0  success (trim or no-trim)
-    //   1  invocation error (missing required arg, missing file, invalid budget)
-    //   2  hardFailed: prompt cannot fit effective budget after trim policy
-
-    case 'prompt-budget': {
-      const promptBudget = require('./lib/prompt-budget.cjs');
-
-      // ── Collect multi-value --plan-file flags ──────────────────────────
-      const planFiles = [];
-      for (let i = 1; i < args.length; i++) {
-        if (args[i] === '--plan-file' && args[i + 1] && !args[i + 1].startsWith('--')) {
-          planFiles.push(args[i + 1]);
-          i++;
-        }
-      }
-
-      // ── Parse single-value flags ───────────────────────────────────────
-      const flagMap = new Map();
-      for (let i = 1; i < args.length; i++) {
-        const current = args[i];
-        const next = args[i + 1];
-        if (!current.startsWith('--')) continue;
-        if (!next || next.startsWith('--')) {
-          if (!flagMap.has(current)) flagMap.set(current, null);
-          continue;
-        }
-        if (!flagMap.has(current)) flagMap.set(current, next);
-        i++;
-      }
-      const getFlag = (flag) => flagMap.get(flag) ?? null;
-
-      const budgetStr = getFlag('--budget');
-      const instructionsFile = getFlag('--instructions-file');
-      const roadmapFile = getFlag('--roadmap-file');
-      const outputPromptFile = getFlag('--output-prompt');
-      const outputMetadataFile = getFlag('--output-metadata');
-      const safetyMarginStr = getFlag('--safety-margin-pct');
-      const projectMdHeadLinesStr = getFlag('--project-md-head-lines');
-      const projectFile = getFlag('--project-file');
-      const contextFile = getFlag('--context-file');
-      const researchFile = getFlag('--research-file');
-      const requirementsFile = getFlag('--requirements-file');
-
-      // ── Validate required args ─────────────────────────────────────────
-      if (!budgetStr) {
-        process.stderr.write('Error: --budget <N> is required\n');
-        process.exit(1);
-      }
-      const budget = parseInt(budgetStr, 10);
-      if (!Number.isFinite(budget) || budget <= 0) {
-        process.stderr.write('Error: --budget must be a positive integer\n');
-        process.exit(1);
-      }
-      if (!instructionsFile) {
-        process.stderr.write('Error: --instructions-file <path> is required\n');
-        process.exit(1);
-      }
-      if (!roadmapFile) {
-        process.stderr.write('Error: --roadmap-file <path> is required\n');
-        process.exit(1);
-      }
-      if (planFiles.length === 0) {
-        process.stderr.write('Error: at least one --plan-file <path> is required\n');
-        process.exit(1);
-      }
-      if (!outputPromptFile) {
-        process.stderr.write('Error: --output-prompt <path> is required\n');
-        process.exit(1);
-      }
-      if (!outputMetadataFile) {
-        process.stderr.write('Error: --output-metadata <path> is required\n');
-        process.exit(1);
-      }
-
-      // ── Validate and read required files ──────────────────────────────
-      async function readRequired(filePath, flagName) {
-        const resolved = path.resolve(filePath);
-        try {
-          return await fs.promises.readFile(resolved, 'utf8');
-        } catch (err) {
-          if (err && err.code === 'ENOENT') {
-            process.stderr.write(`Error: file not found for ${flagName}: ${resolved}\n`);
-            process.exit(1);
-          }
-          process.stderr.write(`Error: cannot read file for ${flagName}: ${resolved}\n`);
-          process.exit(1);
-        }
-      }
-
-      async function readOptional(filePath) {
-        if (!filePath) return null;
-        const resolved = path.resolve(filePath);
-        try {
-          return await fs.promises.readFile(resolved, 'utf8');
-        } catch (err) {
-          if (err && err.code === 'ENOENT') return null;
-          process.stderr.write(`Error: cannot read optional file: ${resolved}\n`);
-          process.exit(1);
-        }
-      }
-
-      const instructions = await readRequired(instructionsFile, '--instructions-file');
-      const roadmap = await readRequired(roadmapFile, '--roadmap-file');
-      const plans = await Promise.all(planFiles.map(async (p) => {
-        const resolved = path.resolve(p);
-        try {
-          const content = await fs.promises.readFile(resolved, 'utf8');
-          return { file: path.basename(p), content };
-        } catch (err) {
-          if (err && err.code === 'ENOENT') {
-            process.stderr.write(`Error: plan file not found: ${resolved}\n`);
-            process.exit(1);
-          }
-          process.stderr.write(`Error: cannot read plan file: ${resolved}\n`);
-          process.exit(1);
-        }
-      }));
-
-      const projectMd = await readOptional(projectFile);
-      const context = await readOptional(contextFile);
-      const research = await readOptional(researchFile);
-      const requirements = await readOptional(requirementsFile);
-
-      // ── Build options ─────────────────────────────────────────────────
-      const options = {};
-      if (safetyMarginStr !== null) {
-        const pct = parseInt(safetyMarginStr, 10);
-        if (Number.isFinite(pct)) options.safetyMarginPct = pct;
-      }
-      if (projectMdHeadLinesStr !== null) {
-        const lines = parseInt(projectMdHeadLinesStr, 10);
-        if (Number.isFinite(lines)) options.projectMdHeadLines = lines;
-      }
-
-      // ── Call applyBudget ──────────────────────────────────────────────
-      const sections = { instructions, roadmap, plans, projectMd, context, research, requirements };
-      const { prompt, metadata } = promptBudget.applyBudget({ sections, budget, options });
-
-      // ── Write outputs ─────────────────────────────────────────────────
-      await fs.promises.writeFile(path.resolve(outputMetadataFile), JSON.stringify(metadata, null, 2));
-      await fs.promises.writeFile(path.resolve(outputPromptFile), prompt);
-
-      if (metadata.hardFailed) {
-        process.exit(2);
-      }
       break;
     }
 

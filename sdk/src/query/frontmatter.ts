@@ -19,7 +19,7 @@
 import { readFile } from 'node:fs/promises';
 import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
-import { escapeRegex, resolveFrontmatterPath } from './helpers.js';
+import { escapeRegex, resolvePathUnderProject } from './helpers.js';
 
 // ─── splitInlineArray ───────────────────────────────────────────────────────
 
@@ -363,10 +363,15 @@ export const frontmatterGet: QueryHandler = async (args, projectDir) => {
     throw new GSDError('file path contains null bytes', ErrorClassification.Validation);
   }
 
-  // CJS parity (frontmatter.cjs:323): no project-root prefix check — accept
-  // any absolute path (and macOS tmpdir paths whose names contain spaces).
-  // Bug #3509.
-  const fullPath = resolveFrontmatterPath(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {
@@ -376,12 +381,7 @@ export const frontmatterGet: QueryHandler = async (args, projectDir) => {
   }
 
   const fm = extractFrontmatter(content);
-  // CLI invocation is `frontmatter get <file> --field <name>`; the CJS router
-  // passes args.slice(2) = [file, '--field', name] to the SDK. Previously the
-  // handler treated args[1] as the field name and saw `'--field'`. Parse the
-  // flag so both invocation shapes work (positional second arg AND --field).
-  const fieldFlagIdx = args.indexOf('--field');
-  const field = fieldFlagIdx >= 0 ? args[fieldFlagIdx + 1] : args[1];
+  const field = args[1];
 
   if (field) {
     const value = fm[field];

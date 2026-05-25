@@ -171,14 +171,9 @@ describe('pruneOrphanedWorktrees', () => {
     execSync('git worktree add "' + worktreeDir + '" -b fix/stale-ref', { cwd: repoDir, stdio: 'pipe' });
     assert.ok(fs.existsSync(worktreeDir), 'worktree dir should exist before manual deletion');
 
-    // Use the canonicalPath helper so Windows 8.3 short-name (RUNNER~1) vs
-    // long-form (runneradmin) and slash-direction differences both collapse
-    // to the same key before comparison. git stores the long-form path in
-    // its administrative files; substring matching on the raw path fails.
-    // Capture the canonical key BEFORE deletion since canonicalPath calls
-    // realpathSync.native which fails on missing paths.
-    const wantedKey = canonicalPath(worktreeDir);
-    assert.ok(listedWorktreePaths(repoDir).has(wantedKey), 'worktree should appear in list before deletion');
+    // Verify it appears in git worktree list
+    const beforeList = execSync('git worktree list --porcelain', { cwd: repoDir, encoding: 'utf8' });
+    assert.ok(beforeList.includes(worktreeDir), 'worktree should appear in list before deletion');
 
     // Manually delete the worktree directory (simulate orphan)
     fs.rmSync(worktreeDir, { recursive: true, force: true });
@@ -187,10 +182,11 @@ describe('pruneOrphanedWorktrees', () => {
     const pruneOrphanedWorktrees = getPruneOrphanedWorktrees();
     pruneOrphanedWorktrees(repoDir);
 
-    // Assert: git worktree list no longer shows the stale entry.
+    // Assert: git worktree list no longer shows the stale entry
+    const afterList = execSync('git worktree list --porcelain', { cwd: repoDir, encoding: 'utf8' });
     assert.ok(
-      !listedWorktreePaths(repoDir).has(wantedKey),
-      'git worktree list still shows stale entry after prune'
+      !afterList.includes(worktreeDir),
+      'git worktree list still shows stale entry after prune:\n' + afterList
     );
   });
 });

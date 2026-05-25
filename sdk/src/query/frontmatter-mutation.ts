@@ -20,7 +20,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter } from './frontmatter.js';
-import { normalizeMd, resolveFrontmatterPath } from './helpers.js';
+import { normalizeMd, resolvePathUnderProject } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── FRONTMATTER_SCHEMAS ──────────────────────────────────────────────────
@@ -193,10 +193,15 @@ export const frontmatterSet: QueryHandler = async (args, projectDir) => {
     throw new GSDError('file path contains null bytes', ErrorClassification.Validation);
   }
 
-  // CJS parity (frontmatter.cjs:340/354/369): no project-root prefix check.
-  // Bug #3509 — accept absolute paths outside the project (tmpdirs whose
-  // names include spaces fail the under-project test on macOS).
-  const fullPath = resolveFrontmatterPath(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {
@@ -240,10 +245,15 @@ export const frontmatterMerge: QueryHandler = async (args, projectDir) => {
     throw new GSDError('file path contains null bytes', ErrorClassification.Validation);
   }
 
-  // CJS parity (frontmatter.cjs:340/354/369): no project-root prefix check.
-  // Bug #3509 — accept absolute paths outside the project (tmpdirs whose
-  // names include spaces fail the under-project test on macOS).
-  const fullPath = resolveFrontmatterPath(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {
@@ -308,10 +318,15 @@ export const frontmatterValidate: QueryHandler = async (args, projectDir) => {
     );
   }
 
-  // CJS parity (frontmatter.cjs:340/354/369): no project-root prefix check.
-  // Bug #3509 — accept absolute paths outside the project (tmpdirs whose
-  // names include spaces fail the under-project test on macOS).
-  const fullPath = resolveFrontmatterPath(projectDir, filePath);
+  let fullPath: string;
+  try {
+    fullPath = await resolvePathUnderProject(projectDir, filePath);
+  } catch (err) {
+    if (err instanceof GSDError) {
+      return { data: { error: err.message, path: filePath } };
+    }
+    throw err;
+  }
 
   let content: string;
   try {

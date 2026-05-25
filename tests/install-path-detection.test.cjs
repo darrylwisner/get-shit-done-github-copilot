@@ -17,8 +17,6 @@ const os = require('os');
 const path = require('path');
 
 const INSTALL_PATH = path.join(__dirname, '..', 'bin', 'install.js');
-
-const isWindows = process.platform === 'win32';
 const PROJECTION_PATH = path.join(
   __dirname,
   '..',
@@ -42,9 +40,7 @@ function cleanup(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-describe('installer HOME-relative PATH detection (#2620)',
-  { skip: isWindows ? 'POSIX-only: parses sh-style "export PATH=" rc files; Windows has no rc files and uses registry Path' : false },
-  () => {
+describe('installer HOME-relative PATH detection (#2620)', () => {
   let installer;
   let projection;
   before(() => {
