@@ -16,7 +16,7 @@
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
 import { MODEL_PROFILES } from './config-query.js';
@@ -28,90 +28,6 @@ import { resolveBundledAgentsDir } from '../sdk-package-compatibility.js';
 
 /** Max length for key_links regex patterns (ReDoS mitigation). */
 const MAX_KEY_LINK_PATTERN_LEN = 512;
-
-const PHASE_TOKEN_FROM_DIR_RE = /^(?:[A-Z]{1,6}-)?(\d+[A-Z]?(?:\.\d+)*)(?:-|$)/i;
-const MILESTONE_ARCHIVE_DIR_RE = /^v\d+.*-phases$/i;
-
-/**
- * List milestone-archive directories under `.planning/milestones/`, sorted by
- * version (numeric — `v1.10` after `v1.2`).  Mirrors `listMilestoneArchiveDirs`
- * in verify.cjs.
- */
-async function listMilestoneArchiveDirs(planBase: string): Promise<string[]> {
-  const milestonesDir = join(planBase, 'milestones');
-  try {
-    const entries = await readdir(milestonesDir, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isDirectory() && MILESTONE_ARCHIVE_DIR_RE.test(e.name))
-      .map((e) => join(milestonesDir, e.name))
-      .sort((a, b) => basename(a).localeCompare(basename(b), undefined, { numeric: true }));
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Pick the active milestone archive dir, preferring the version named in
- * STATE.md when it maps to an on-disk archive; falling back to the highest
- * (most recent) version-ish name.  Mirrors `getActiveMilestoneArchiveDir`
- * in verify.cjs.
- */
-async function getActiveMilestoneArchiveDir(planBase: string): Promise<string | null> {
-  const archiveDirs = await listMilestoneArchiveDirs(planBase);
-  if (archiveDirs.length === 0) return null;
-
-  try {
-    const statePath = join(planBase, 'STATE.md');
-    if (existsSync(statePath)) {
-      const state = await readFile(statePath, 'utf-8');
-      const m = state.match(/^\s*(?:\*\*)?milestone(?:\*\*)?:\s*([^\s\r\n#]+).*$/mi);
-      if (m && m[1]) {
-        const milestone = m[1].trim();
-        const candidate = join(planBase, 'milestones', `${milestone}-phases`);
-        if (archiveDirs.includes(candidate)) return candidate;
-      }
-    }
-  } catch { /* intentionally empty */ }
-
-  return archiveDirs[archiveDirs.length - 1];
-}
-
-/**
- * Walk every milestone archive directory and call `onPhase` with the phase
- * token (e.g. `64`, `64A`, `64.1`) extracted from each archived phase dir's
- * name. Used by Check 4 (W002) and Check 8 (W006) so both treat archived
- * phases as valid on-disk locations — bug #3652.
- */
-async function forEachArchivedPhaseToken(
-  planBase: string,
-  onPhase: (token: string) => void,
-): Promise<void> {
-  for (const archiveDir of await listMilestoneArchiveDirs(planBase)) {
-    try {
-      const entries = await readdir(archiveDir, { withFileTypes: true });
-      for (const e of entries) {
-        if (!e.isDirectory()) continue;
-        const m = e.name.match(PHASE_TOKEN_FROM_DIR_RE);
-        if (m) onPhase(m[1]);
-      }
-    } catch { /* archive dir absent/unreadable */ }
-  }
-}
-
-/**
- * Collect the active phase roots to validate against.  When the flat
- * `.planning/phases/` directory exists, it counts.  When an active
- * milestone archive (e.g. `.planning/milestones/v1.7-phases/`) exists, it
- * counts as well.  Mirrors `collectPhaseRoots` in verify.cjs:437.  Bug #3164.
- */
-async function collectPhaseRoots(planBase: string): Promise<string[]> {
-  const roots: string[] = [];
-  const flatPhasesDir = join(planBase, 'phases');
-  if (existsSync(flatPhasesDir)) roots.push(flatPhasesDir);
-  const activeArchive = await getActiveMilestoneArchiveDir(planBase);
-  if (activeArchive) roots.push(activeArchive);
-  return roots;
-}
 
 /**
  * Canonical plan stem used for PLAN/SUMMARY matching.
@@ -303,40 +219,23 @@ export const validateConsistency: QueryHandler = async (_args, projectDir, works
     roadmapPhases.add(m[1]);
   }
 
-  // Get phases on disk — flat layout AND active milestone archive (bug #3164).
-  // CJS uses `collectDiskPhases(planBase)` + `collectPhaseRoots(planBase)`.
-  // Each root contributes its phase tokens to diskPhases.  Plan-level scans
-  // below walk every root, not just the flat one.
+  // Get phases on disk
   const diskPhases = new Set<string>();
-  const phaseRoots = await collectPhaseRoots(paths.planning);
-  /** Map of root → its phase-directory entries (for downstream plan scans). */
-  const rootDirs = new Map<string, string[]>();
-  for (const root of phaseRoots) {
-    try {
-      const entries = await readdir(root, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
-      rootDirs.set(root, dirs);
-      for (const dir of dirs) {
-        const dm = dir.match(PHASE_TOKEN_FROM_DIR_RE);
-        if (dm) diskPhases.add(dm[1]);
-      }
-    } catch {
-      rootDirs.set(root, []);
+  let diskDirs: string[] = [];
+  try {
+    const entries = await readdir(paths.phases, { withFileTypes: true });
+    diskDirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+    for (const dir of diskDirs) {
+      const dm = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+      if (dm) diskPhases.add(dm[1]);
     }
+  } catch {
+    // phases directory doesn't exist
   }
 
-  // Check: phases in ROADMAP but not on disk.  CJS parity: compare against
-  // both the as-written form and the canonical normalized form, AND strip the
-  // optional project-code prefix on disk dirs (handled by
-  // PHASE_TOKEN_FROM_DIR_RE above) so `CK-64-…` is recognised as phase 64.
+  // Check: phases in ROADMAP but not on disk
   for (const p of roadmapPhases) {
-    const normalizedP = normalizePhaseName(p);
-    const unpaddedP = String(parseInt(p, 10));
-    if (
-      !diskPhases.has(p) &&
-      !diskPhases.has(normalizedP) &&
-      !diskPhases.has(unpaddedP)
-    ) {
+    if (!diskPhases.has(p) && !diskPhases.has(normalizePhaseName(p))) {
       warnings.push(`Phase ${p} in ROADMAP.md but no directory on disk`);
     }
   }
@@ -371,63 +270,60 @@ export const validateConsistency: QueryHandler = async (_args, projectDir, works
     }
   }
 
-  // Check plan numbering and summaries within each phase across every active
-  // phase root.  Bug #3164 \u2014 projects on the milestone-archive layout have
-  // phases under `.planning/milestones/<version>-phases/<phase>/`, not the
-  // flat `.planning/phases/` directory.
-  for (const root of phaseRoots) {
-    const dirs = rootDirs.get(root) ?? [];
-    // Label paths relative to planning/ so warnings carry the archive prefix
-    // (e.g. `milestones/v1.7-phases/65-current`) instead of bare phase names.
-    const relRoot = root.startsWith(paths.planning + '/')
-      ? root.slice(paths.planning.length + 1)
-      : root;
+  // Check plan numbering and summaries within each phase
+  for (const dir of diskDirs) {
+    let phaseFiles: string[];
+    try {
+      phaseFiles = await readdir(join(paths.phases, dir));
+    } catch {
+      continue;
+    }
 
-    for (const dir of dirs) {
-      const phaseLabel = relRoot === 'phases' ? dir : `${relRoot}/${dir}`;
-      let phaseFiles: string[];
+    const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md')).sort();
+    const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md'));
+
+    // Extract plan numbers and check for gaps
+    const planNums = plans.map(p => {
+      const pm = p.match(/-(\d{2})-PLAN\.md$/);
+      return pm ? parseInt(pm[1], 10) : null;
+    }).filter((n): n is number => n !== null);
+
+    for (let i = 1; i < planNums.length; i++) {
+      if (planNums[i] !== planNums[i - 1] + 1) {
+        warnings.push(`Gap in plan numbering in ${dir}: plan ${planNums[i - 1]} \u2192 ${planNums[i]}`);
+      }
+    }
+
+    // Check: summaries without matching plans
+    const planIds = new Set(plans.map(p => p.replace('-PLAN.md', '')));
+    const summaryIds = new Set(summaries.map(s => s.replace('-SUMMARY.md', '')));
+
+    for (const sid of summaryIds) {
+      if (!planIds.has(sid)) {
+        warnings.push(`Summary ${sid}-SUMMARY.md in ${dir} has no matching PLAN.md`);
+      }
+    }
+  }
+
+  // Check frontmatter completeness in plans
+  for (const dir of diskDirs) {
+    let phaseFiles: string[];
+    try {
+      phaseFiles = await readdir(join(paths.phases, dir));
+    } catch {
+      continue;
+    }
+
+    const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md'));
+    for (const plan of plans) {
       try {
-        phaseFiles = await readdir(join(root, dir));
+        const content = await readFile(join(paths.phases, dir, plan), 'utf-8');
+        const fm = extractFrontmatter(content);
+        if (!fm.wave) {
+          warnings.push(`${dir}/${plan}: missing 'wave' in frontmatter`);
+        }
       } catch {
-        continue;
-      }
-
-      const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md')).sort();
-      const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md'));
-
-      // Extract plan numbers and check for gaps
-      const planNums = plans.map(p => {
-        const pm = p.match(/-(\d{2})-PLAN\.md$/);
-        return pm ? parseInt(pm[1], 10) : null;
-      }).filter((n): n is number => n !== null);
-
-      for (let i = 1; i < planNums.length; i++) {
-        if (planNums[i] !== planNums[i - 1] + 1) {
-          warnings.push(`Gap in plan numbering in ${phaseLabel}: plan ${planNums[i - 1]} \u2192 ${planNums[i]}`);
-        }
-      }
-
-      // Check: summaries without matching plans
-      const planIds = new Set(plans.map(p => p.replace('-PLAN.md', '')));
-      const summaryIds = new Set(summaries.map(s => s.replace('-SUMMARY.md', '')));
-
-      for (const sid of summaryIds) {
-        if (!planIds.has(sid)) {
-          warnings.push(`Summary ${sid}-SUMMARY.md in ${phaseLabel} has no matching PLAN.md`);
-        }
-      }
-
-      // Check frontmatter completeness in plans (same scope as above).
-      for (const plan of plans) {
-        try {
-          const content = await readFile(join(root, dir, plan), 'utf-8');
-          const fm = extractFrontmatter(content);
-          if (!fm.wave) {
-            warnings.push(`${phaseLabel}/${plan}: missing 'wave' in frontmatter`);
-          }
-        } catch {
-          // Cannot read plan file
-        }
+        // Cannot read plan file
       }
     }
   }
@@ -557,7 +453,7 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
         const entries = await readdir(phasesDir, { withFileTypes: true });
         for (const e of entries) {
           if (e.isDirectory()) {
-            const m = e.name.match(PHASE_TOKEN_FROM_DIR_RE);
+            const m = e.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/);
             if (m) validPhases.add(m[1]);
           }
         }
@@ -571,15 +467,6 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
         const all = [...roadmapRaw.matchAll(/#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)/gi)];
         for (const m of all) validPhases.add(m[1]);
       } catch { /* intentionally empty */ }
-
-      // Bug #3652 — STATE.md body retains historical phase references across
-      // milestones. After /gsd:complete-milestone, phases are moved into
-      // `milestones/vX.Y-phases/` and their `#### Phase N:` headings in
-      // ROADMAP.md are collapsed (e.g. inside <details> blocks), so neither
-      // the on-disk phases dir nor the ROADMAP heading scan picks them up.
-      // Treat any phase directory present in any archived milestone as a
-      // valid phase reference.
-      await forEachArchivedPhaseToken(planBase, (token) => validPhases.add(token));
 
       // Compare canonical full phase tokens. Also accept a leading-zero
       // variant on the integer prefix only (e.g. "03" → "3", "03.1" → "3.1")
@@ -604,7 +491,7 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
         if (!normalizedValid.has(ref) && !normalizedValid.has(padded)) {
           if (normalizedValid.size > 0) {
             addIssue('warning', 'W002',
-              `STATE.md references phase ${ref}, but only phases ${[...validPhases].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ')} are declared`,
+              `STATE.md references phase ${ref}, but only phases ${[...validPhases].sort().join(', ')} are declared`,
               'Review STATE.md manually');
           }
         }
@@ -739,7 +626,7 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
         const entries = await readdir(phasesDir, { withFileTypes: true });
         for (const e of entries) {
           if (e.isDirectory()) {
-            const dm = e.name.match(PHASE_TOKEN_FROM_DIR_RE);
+            const dm = e.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
             if (dm) {
               diskPhases.add(dm[1]);
               activeDiskPhases.add(dm[1]);
@@ -747,9 +634,20 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
           }
         }
       } catch { /* intentionally empty */ }
-      // Include archived milestone phase directories as valid on-disk
-      // locations for historical ROADMAP phases.
-      await forEachArchivedPhaseToken(planBase, (token) => diskPhases.add(token));
+      // Include archived milestone phase directories as valid on-disk locations
+      // for historical ROADMAP phases.
+      try {
+        const milestoneEntries = await readdir(join(planBase, 'milestones'), { withFileTypes: true });
+        for (const milestoneEntry of milestoneEntries) {
+          if (!milestoneEntry.isDirectory() || !/-phases$/i.test(milestoneEntry.name)) continue;
+          const archivedPhaseEntries = await readdir(join(planBase, 'milestones', milestoneEntry.name), { withFileTypes: true });
+          for (const archivedPhase of archivedPhaseEntries) {
+            if (!archivedPhase.isDirectory()) continue;
+            const dm = archivedPhase.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+            if (dm) diskPhases.add(dm[1]);
+          }
+        }
+      } catch { /* intentionally empty */ }
 
       for (const p of roadmapPhases) {
         const variants = phaseVariants(p);

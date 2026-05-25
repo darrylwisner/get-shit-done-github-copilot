@@ -99,27 +99,6 @@ function gitWorktreeInfo(base: string): { inside: boolean; worktreeRoot: string 
   }
 }
 
-function detectNestedSubdir(base: string, info: { inside: boolean; worktreeRoot: string | null }): boolean {
-  if (!info.inside) return false;
-  try {
-    const prefix = execSync('git rev-parse --show-prefix', {
-      cwd: base,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf-8',
-      timeout: 5000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-    }).trim().replace(/\\/g, '/');
-    if (prefix.length > 0) return prefix !== '.' && prefix !== './';
-    return false;
-  } catch {}
-
-  if (!info.worktreeRoot) return false;
-  const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
-  const root = normalize(info.worktreeRoot);
-  const cwd = normalize(base);
-  return root !== cwd;
-}
-
 
 const NEW_PROJECT_REQUIRED_AGENTS = [
   'gsd-project-researcher',
@@ -303,8 +282,7 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     getModelAlias('gsd-roadmapper', projectDir),
   ]);
   const runtime = detectRuntime(config as { runtime?: unknown });
-  const agentsDir = resolveAgentsDir(runtime, projectDir);
-  const gitInfo = gitWorktreeInfo(projectDir);
+  const agentsDir = resolveAgentsDir(runtime);
   const missingRequiredAgents = NEW_PROJECT_REQUIRED_AGENTS.filter(
     agent => !hasAgentDefinition(agentsDir, agent),
   );
@@ -331,9 +309,12 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
       (hasExistingCode || hasPackageFile) && !pathExists(projectDir, '.planning/codebase'),
 
     // Bug #3491: detect parent worktree to avoid nested .git init.
-    has_git: gitInfo.inside,
-    git_worktree_root: gitInfo.worktreeRoot,
-    in_nested_subdir: detectNestedSubdir(projectDir, gitInfo),
+    has_git: (() => gitWorktreeInfo(projectDir).inside)(),
+    git_worktree_root: (() => gitWorktreeInfo(projectDir).worktreeRoot)(),
+    in_nested_subdir: (() => {
+      const info = gitWorktreeInfo(projectDir);
+      return info.inside && info.worktreeRoot !== null && info.worktreeRoot !== projectDir;
+    })(),
 
     brave_search_available: hasBraveSearch,
     firecrawl_available: hasFirecrawl,
@@ -661,13 +642,16 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
     }
   }
 
-  // Bug #2268: mark EVERY undiscussed phase as is_next_to_discuss, not just
-  // the first one.  Multiple independent phases can be discussed in parallel
-  // — the sliding-window pattern made the manager only recommend one
-  // discuss action even when callers had free capacity to discuss several.
+  // Sliding window: only first undiscussed phase is available to discuss
+  let foundNextToDiscuss = false;
   for (const phase of phases) {
     const status = phase.disk_status as string;
-    phase.is_next_to_discuss = (status === 'empty' || status === 'no_directory');
+    if (!foundNextToDiscuss && (status === 'empty' || status === 'no_directory')) {
+      phase.is_next_to_discuss = true;
+      foundNextToDiscuss = true;
+    } else {
+      phase.is_next_to_discuss = false;
+    }
   }
 
   // Check WAITING.json signal

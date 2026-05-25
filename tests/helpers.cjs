@@ -60,13 +60,12 @@ function runGsdTools(args, cwd = process.cwd(), env = {}) {
         env: childEnv,
       });
     }
-    return { success: true, output: result.trim(), exitCode: 0 };
+    return { success: true, output: result.trim() };
   } catch (err) {
     return {
       success: false,
       output: err.stdout?.toString().trim() || '',
       error: err.stderr?.toString().trim() || err.message,
-      exitCode: err.status ?? 1,
     };
   }
 }
@@ -105,19 +104,7 @@ function createTempGitProject(prefix = 'gsd-test-') {
 }
 
 function cleanup(tmpDir) {
-  if (typeof tmpDir !== 'string' || tmpDir.length === 0) return;
-  const target = path.resolve(tmpDir);
-  const cwd = path.resolve(process.cwd());
-  if (cwd === target || cwd.startsWith(`${target}${path.sep}`)) {
-    // Windows cannot remove a directory that is the current working directory.
-    process.chdir(path.dirname(target));
-  }
-  // maxRetries/retryDelay absorbs transient Windows EBUSY where AV scanners,
-  // file-indexers, or just-exited child processes still hold handles when
-  // teardown runs. On POSIX the retry loop is a no-op (rmSync succeeds first try).
-  // Budget: 20 × 250ms = 5s total — Windows Defender's deferred scan can hold
-  // newly-written files for several seconds on cold runners.
-  fs.rmSync(target, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
 /**
@@ -183,77 +170,4 @@ function isUsageOutput(text) {
   return /Usage:\s*gsd-tools/.test(text) && /Commands:/.test(text);
 }
 
-/**
- * Run `fn` with console.log/warn/error captured, returning {stdout, stderr}
- * with ANSI colors stripped. Re-throws any exception fn threw AFTER restoring
- * the real console so the caller's assertion path sees the failure (without
- * this, a fn that crashes before printing would falsely pass !hasReady-style
- * assertions). #2775 CR follow-up established this exact contract.
- *
- * Previously duplicated in bug-2775, bug-2829, bug-3033, bug-3211, bug-3231,
- * bug-3359, and installer-migration-install-integration.
- */
-function captureConsole(fn) {
-  const stdout = [];
-  const stderr = [];
-  const origLog = console.log;
-  const origWarn = console.warn;
-  const origError = console.error;
-  console.log = (...a) => stdout.push(a.join(' '));
-  console.warn = (...a) => stderr.push(a.join(' '));
-  console.error = (...a) => stderr.push(a.join(' '));
-  let threw = null;
-  try {
-    fn();
-  } catch (e) {
-    threw = e;
-  } finally {
-    console.log = origLog;
-    console.warn = origWarn;
-    console.error = origError;
-  }
-  if (threw) throw threw;
-  const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
-  return {
-    stdout: stdout.map(strip).join('\n'),
-    stderr: stderr.map(strip).join('\n'),
-  };
-}
-
-/**
- * Normalize platform path separators to POSIX forward slashes. Use for
- * cross-platform path comparisons in test assertions where the runtime
- * emits the platform-native separator (\ on Windows) but the test
- * fixture or expected literal is POSIX. Returns the input unchanged if
- * null/undefined so it composes safely with optional chaining.
- */
-function toPosixPath(p) {
-  return p == null ? p : p.split(path.sep).join('/');
-}
-
-/**
- * Run an npm command via execFileSync with cross-platform portability.
- *
- * Handles the Windows `npm.cmd` vs POSIX `npm` distinction and the
- * `shell: true` requirement on Windows so tests do not need to
- * re-implement platform detection inline.
- *
- * @param {string[]} args - npm subcommand and flags (e.g. ['pack', '--pack-destination', dir]).
- * @param {object} [options] - execFileSync options merged with platform defaults.
- *   `cwd`, `encoding`, `timeout`, and `env` are the commonly overridden keys.
- * @returns {string} trimmed stdout string (encoding: 'utf-8').
- * @throws {Error} re-throws the execFileSync error on non-zero exit so callers
- *   get the full stderr in the error message.
- */
-function runNpm(args, options = {}) {
-  const isWindows = process.platform === 'win32';
-  const npmCmd = isWindows ? 'npm.cmd' : 'npm';
-  const defaults = {
-    encoding: 'utf-8',
-    shell: isWindows,
-    timeout: 180000,
-  };
-  return execFileSync(npmCmd, args, { ...defaults, ...options }).trim();
-}
-
-module.exports = { runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, captureConsole, toPosixPath, runNpm, TOOLS_PATH };
+module.exports = { runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH };

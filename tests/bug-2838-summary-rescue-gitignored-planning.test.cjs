@@ -50,8 +50,6 @@ function parseRescueFooter(content) {
 }
 
 const { describe, test, before, after } = require('node:test');
-
-const isWindows = process.platform === 'win32';
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -165,12 +163,10 @@ ${rescueBlock}
 }
 
 function cleanup(tmp) {
-  try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch (_) {}
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {}
 }
 
-describe('bug-2838: SUMMARY rescue handles gitignored .planning/',
-  { skip: isWindows ? 'extracts and executes bash rescue blocks from quick.md/execute-phase.md (find | while read, `done < <(find ...)`); the POSIX shell contract itself is what is under test' : false },
-  () => {
+describe('bug-2838: SUMMARY rescue handles gitignored .planning/', () => {
   test('execute-phase.md rescue block recovers SUMMARY when .planning/ is gitignored', () => {
     const block = extractRescueBlock(EXECUTE_PHASE_PATH);
     const { tmp, summaryFinalPath, rescueOut } = runRescueScenario(block);

@@ -9,7 +9,7 @@
  * dropped skills when users stack multiple plugins (#3408).
  *
  * Profile model: three named profiles replace the old minimal/full binary:
- *  - core     — eight skills covering the main project loop (includes surface for ADR-0011 expand contract)
+ *  - core     — six skills covering the main project loop
  *  - standard — core + phase management and workspace skills
  *  - full     — all skills (previous default, '*' sentinel)
  * Profiles compose: --profile=core,audit resolves to union(closure(core), closure(audit)).
@@ -64,7 +64,6 @@ const PROFILES = Object.freeze({
     'phase',
     'help',
     'update',
-    'surface',
   ]),
   standard: Object.freeze([
     // Core loop
@@ -74,7 +73,6 @@ const PROFILES = Object.freeze({
     'execute-phase',
     'help',
     'update',
-    'surface',
     // Phase management (hot nodes from audit — required by 38+ skills)
     'phase',
     'review',
@@ -375,33 +373,6 @@ function stageAgentsForProfile(srcAgentsDir, resolvedProfile) {
   return stageDir;
 }
 
-function stageSkillsForRuntimeAsSkills(srcCommandsDir, resolvedProfile, converter, prefix) {
-  if (!fs.existsSync(srcCommandsDir)) return srcCommandsDir;
-
-  const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-profile-runtime-skills-'));
-  try {
-    const entries = fs.readdirSync(srcCommandsDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      if (!entry.name.endsWith('.md')) continue;
-      const stem = entry.name.slice(0, -3);
-      if (resolvedProfile.skills !== '*' && !resolvedProfile.skills.has(stem)) continue;
-      const content = fs.readFileSync(path.join(srcCommandsDir, entry.name), 'utf8');
-      const skillName = `${prefix}${stem}`;
-      const converted = converter(content, skillName);
-      const destDir = path.join(stageDir, skillName);
-      fs.mkdirSync(destDir, { recursive: true });
-      fs.writeFileSync(path.join(destDir, 'SKILL.md'), converted);
-    }
-  } catch (err) {
-    try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
-    throw err;
-  }
-  STAGED_DIRS.add(stageDir);
-  ensureExitCleanup();
-  return stageDir;
-}
-
 // ---------------------------------------------------------------------------
 // Profile marker persistence
 // ---------------------------------------------------------------------------
@@ -589,8 +560,6 @@ module.exports = {
   mostRestrictiveProfile,
   stageSkillsForProfile,
   stageAgentsForProfile,
-  stageSkillsForRuntimeAsSkills,
-  STAGED_DIRS,
   readActiveProfile,
   writeActiveProfile,
   // Shared internals

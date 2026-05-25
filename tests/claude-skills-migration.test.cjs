@@ -19,41 +19,12 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
-const ROOT = path.join(__dirname, '..');
-
 const {
   convertClaudeCommandToClaudeSkill,
+  copyCommandsAsClaudeSkills,
   writeManifest,
   install,
-  installRuntimeArtifacts,
-  uninstallRuntimeArtifacts,
-} = require(path.join(ROOT, 'bin', 'install.js'));
-
-const {
-  loadSkillsManifest,
-  resolveProfile,
-} = require(path.join(ROOT, 'get-shit-done', 'bin', 'lib', 'install-profiles.cjs'));
-
-// Shared resolved profile (full — installs all skills from srcDir)
-const _manifest = loadSkillsManifest();
-const resolvedProfileFull = resolveProfile({ modes: [], manifest: _manifest });
-
-/**
- * Set up a configDir backed by a custom srcDir via .gsd-source marker.
- * Returns { configDir, srcDir } both under tmpDir.
- */
-function setupConfigDir(tmpDir, commandFiles) {
-  const srcDir = path.join(tmpDir, 'commands', 'gsd');
-  fs.mkdirSync(srcDir, { recursive: true });
-  for (const [name, content] of Object.entries(commandFiles)) {
-    fs.writeFileSync(path.join(srcDir, name), content);
-  }
-  const configDir = path.join(tmpDir, 'config');
-  fs.mkdirSync(configDir, { recursive: true });
-  // .gsd-source marker tells findInstallSourceRoot to use our custom srcDir
-  fs.writeFileSync(path.join(configDir, '.gsd-source'), srcDir + '\n');
-  return { configDir, srcDir };
-}
+} = require('../bin/install.js');
 
 // ─── convertClaudeCommandToClaudeSkill ──────────────────────────────────────
 
@@ -118,10 +89,8 @@ describe('convertClaudeCommandToClaudeSkill', () => {
     assert.ok(result.includes('name: gsd-next'), 'frontmatter name uses hyphen form (#2808)');
   });
 
-  test('preserves body content while normalizing gsd: command references (#3583)', () => {
-    // The body transformer now rewrites gsd: references (colon → hyphen) but must
-    // leave all other custom prose, tags, and structure intact.
-    const body = '\n<objective>\nSee /gsd:plan-phase and gsd:review for details.\n</objective>\n\n<process>\nStep 1.\nStep 2.\n</process>\n';
+  test('preserves body content unchanged', () => {
+    const body = '\n<objective>\nDo the thing.\n</objective>\n\n<process>\nStep 1.\nStep 2.\n</process>\n';
     const input = [
       '---',
       'name: gsd:test',
@@ -131,17 +100,10 @@ describe('convertClaudeCommandToClaudeSkill', () => {
     ].join('');
 
     const result = convertClaudeCommandToClaudeSkill(input, 'gsd-test');
-    // Custom structure preserved
     assert.ok(result.includes('<objective>'), 'objective tag preserved');
-    assert.ok(result.includes('See /gsd-plan-phase'), 'rewritten command reference visible');
+    assert.ok(result.includes('Do the thing.'), 'body text preserved');
     assert.ok(result.includes('<process>'), 'process tag preserved');
     assert.ok(result.includes('Step 1.'), 'step text preserved');
-
-    // #3583: gsd: references in body are normalized to hyphen form
-    assert.ok(result.includes('/gsd-plan-phase'), 'colon command ref rewritten to hyphen');
-    assert.ok(result.includes('gsd-review'), 'bare colon ref rewritten to hyphen');
-    assert.ok(!result.includes('gsd:plan-phase'), 'no colon form should survive in body');
-    assert.ok(!result.includes('gsd:review'), 'no colon form should survive in body');
   });
 
   test('preserves agent field', () => {
@@ -191,9 +153,9 @@ describe('convertClaudeCommandToClaudeSkill', () => {
   });
 });
 
-// ─── installRuntimeArtifacts (claude global) — skill layout ─────────────────
+// ─── copyCommandsAsClaudeSkills ─────────────────────────────────────────────
 
-describe('installRuntimeArtifacts (claude global) — skill layout', () => {
+describe('copyCommandsAsClaudeSkills', () => {
   let tmpDir;
 
   beforeEach(() => {
@@ -205,14 +167,22 @@ describe('installRuntimeArtifacts (claude global) — skill layout', () => {
   });
 
   test('creates correct directory structure skills/gsd-xxx/SKILL.md', () => {
-    const { configDir } = setupConfigDir(tmpDir, {
-      'next.md': '---\nname: gsd:next\ndescription: Advance\nallowed-tools:\n  - Read\n---\n\nBody.',
-      'health.md': '---\nname: gsd:health\ndescription: Check health\n---\n\nHealth body.',
-    });
+    // Create source commands
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'next.md'),
+      '---\nname: gsd:next\ndescription: Advance\nallowed-tools:\n  - Read\n---\n\nBody.'
+    );
+    fs.writeFileSync(
+      path.join(srcDir, 'health.md'),
+      '---\nname: gsd:health\ndescription: Check health\n---\n\nHealth body.'
+    );
 
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
+    const skillsDir = path.join(tmpDir, 'skills');
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
 
-    const skillsDir = path.join(configDir, 'skills');
+    // Verify directory structure
     assert.ok(
       fs.existsSync(path.join(skillsDir, 'gsd-next', 'SKILL.md')),
       'skills/gsd-next/SKILL.md exists'
@@ -223,27 +193,28 @@ describe('installRuntimeArtifacts (claude global) — skill layout', () => {
     );
   });
 
-  test('cleans up old skills before installing new ones (uninstall+install cycle)', () => {
-    const { configDir } = setupConfigDir(tmpDir, {
-      'next.md': '---\nname: gsd:next\ndescription: Advance\n---\n\nBody.',
-    });
+  test('cleans up old skills before installing new ones', () => {
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'next.md'),
+      '---\nname: gsd:next\ndescription: Advance\n---\n\nBody.'
+    );
 
-    const skillsDir = path.join(configDir, 'skills');
-    // Create a stale skill that should be removed by the uninstall step
+    const skillsDir = path.join(tmpDir, 'skills');
+    // Create a stale skill that should be removed
     const staleDir = path.join(skillsDir, 'gsd-old-command');
     fs.mkdirSync(staleDir, { recursive: true });
     fs.writeFileSync(path.join(staleDir, 'SKILL.md'), 'stale content');
 
-    // Production sequence: uninstall wipes gsd-* entries, install writes fresh ones
-    uninstallRuntimeArtifacts('claude', configDir, 'global');
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
 
-    // Stale skill removed by uninstall
+    // Stale skill removed
     assert.ok(
       !fs.existsSync(staleDir),
       'stale skill directory removed'
     );
-    // New skill created by install
+    // New skill created
     assert.ok(
       fs.existsSync(path.join(skillsDir, 'gsd-next', 'SKILL.md')),
       'new skill created'
@@ -251,63 +222,64 @@ describe('installRuntimeArtifacts (claude global) — skill layout', () => {
   });
 
   test('does not remove non-GSD skills', () => {
-    const { configDir } = setupConfigDir(tmpDir, {
-      'next.md': '---\nname: gsd:next\ndescription: Advance\n---\n\nBody.',
-    });
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'next.md'),
+      '---\nname: gsd:next\ndescription: Advance\n---\n\nBody.'
+    );
 
-    const skillsDir = path.join(configDir, 'skills');
-    // Create a non-GSD skill before install
+    const skillsDir = path.join(tmpDir, 'skills');
+    // Create a non-GSD skill
     const otherDir = path.join(skillsDir, 'my-custom-skill');
     fs.mkdirSync(otherDir, { recursive: true });
     fs.writeFileSync(path.join(otherDir, 'SKILL.md'), 'custom content');
 
-    // Install (no pre-uninstall: uninstall only removes gsd-* prefixed entries)
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
 
     // Non-GSD skill preserved
     assert.ok(
       fs.existsSync(otherDir),
-      'non-GSD skill preserved after install'
-    );
-
-    // Also survives uninstall (uninstall only removes gsd-* prefixed entries)
-    uninstallRuntimeArtifacts('claude', configDir, 'global');
-    assert.ok(
-      fs.existsSync(otherDir),
-      'non-GSD skill preserved after uninstall'
+      'non-GSD skill preserved'
     );
   });
 
-  // NOTE: Recursive subdirectory support was removed when the shim was replaced.
-  // stageSkillsForRuntimeAsSkills only processes top-level .md files.
-  // No subdirectories exist under commands/gsd/ in production.
-  // The subdir-recursion test has been deleted (option a per #3664 brief).
+  test('handles recursive subdirectories', () => {
+    const srcDir = path.join(tmpDir, 'src');
+    const subDir = path.join(srcDir, 'wired');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(subDir, 'ready.md'),
+      '---\nname: gsd-wired:ready\ndescription: Show ready tasks\n---\n\nBody.'
+    );
 
-  test('no-ops on install when source directory has no .md files', () => {
-    // Create an empty (but existing) commands/gsd dir with no .md files.
-    // stageSkillsForRuntimeAsSkills loops over entries, finds none, and stages
-    // an empty dir — _copyStaged then copies nothing into skills/.
-    const emptySrc = path.join(tmpDir, 'empty-commands', 'gsd');
-    fs.mkdirSync(emptySrc, { recursive: true });
+    const skillsDir = path.join(tmpDir, 'skills');
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
 
-    const configDir = path.join(tmpDir, 'config-empty');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(path.join(configDir, '.gsd-source'), emptySrc + '\n');
+    assert.ok(
+      fs.existsSync(path.join(skillsDir, 'gsd-wired-ready', 'SKILL.md')),
+      'nested command creates gsd-wired-ready/SKILL.md'
+    );
+  });
 
+  test('no-ops when source directory does not exist', () => {
+    const skillsDir = path.join(tmpDir, 'skills');
     // Should not throw
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
-    const skillsDir = path.join(configDir, 'skills');
-    // If skills dir was created it must contain no gsd-* entries
-    if (fs.existsSync(skillsDir)) {
-      const gsdEntries = fs.readdirSync(skillsDir).filter(n => n.startsWith('gsd-'));
-      assert.strictEqual(gsdEntries.length, 0, 'no gsd-* skills created when src has no .md files');
-    }
+    copyCommandsAsClaudeSkills(
+      path.join(tmpDir, 'nonexistent'),
+      skillsDir,
+      'gsd',
+      '$HOME/.claude/',
+      'claude',
+      true
+    );
+    assert.ok(!fs.existsSync(skillsDir), 'skills dir not created when src missing');
   });
 });
 
 // ─── Path replacement in Claude skills (#1653) ────────────────────────────────
 
-describe('installRuntimeArtifacts path replacement in Claude global skills (#1653)', () => {
+describe('copyCommandsAsClaudeSkills path replacement (#1653)', () => {
   let tmpDir;
 
   beforeEach(() => {
@@ -318,13 +290,12 @@ describe('installRuntimeArtifacts path replacement in Claude global skills (#165
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('replaces ~/.claude/ and $HOME/.claude/ paths with absolute configDir prefix on global install', () => {
-    // Global install: configDir IS the runtime config directory.
-    // computePathPrefix(isGlobal=true) → resolvedTarget + '/'.
-    // applyRuntimeContentRewritesInPlace rewrites ~/.claude/ and $HOME/.claude/
-    // to the absolute configDir path so skills work from any machine.
-    const { configDir } = setupConfigDir(tmpDir, {
-      'manager.md': [
+  test('replaces ~/.claude/ paths with pathPrefix on local install', () => {
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'manager.md'),
+      [
         '---',
         'name: gsd:manager',
         'description: Manager command',
@@ -332,66 +303,52 @@ describe('installRuntimeArtifacts path replacement in Claude global skills (#165
         '',
         '<execution_context>',
         '@~/.claude/get-shit-done/workflows/manager.md',
-        '@$HOME/.claude/get-shit-done/references/ui-brand.md',
+        '@~/.claude/get-shit-done/references/ui-brand.md',
         '</execution_context>',
-      ].join('\n'),
-    });
-
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
-
-    const content = fs.readFileSync(
-      path.join(configDir, 'skills', 'gsd-manager', 'SKILL.md'), 'utf8'
+      ].join('\n')
     );
+
+    const skillsDir = path.join(tmpDir, 'skills');
+    const localPrefix = '/Users/test/myproject/.claude/';
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', localPrefix, 'claude', false);
+
+    const content = fs.readFileSync(path.join(skillsDir, 'gsd-manager', 'SKILL.md'), 'utf8');
     assert.ok(!content.includes('~/.claude/'), 'no hardcoded ~/.claude/ paths remain');
-    assert.ok(!content.includes('$HOME/.claude/'), 'no $HOME/.claude/ paths remain');
-    // Paths are rewritten to the absolute configDir prefix
-    const expectedPrefix = path.resolve(configDir).replace(/\\/g, '/') + '/';
-    assert.ok(
-      content.includes(expectedPrefix + 'get-shit-done/workflows/manager.md'),
-      'tilde path rewritten to absolute configDir prefix'
-    );
-    assert.ok(
-      content.includes(expectedPrefix + 'get-shit-done/references/ui-brand.md'),
-      'HOME path rewritten to absolute configDir prefix'
-    );
+    assert.ok(content.includes(localPrefix + 'get-shit-done/workflows/manager.md'), 'path rewritten to local prefix');
+    assert.ok(content.includes(localPrefix + 'get-shit-done/references/ui-brand.md'), 'reference path rewritten');
   });
 
-  test('replaces $HOME/.claude/ paths with absolute configDir prefix on global install', () => {
-    const { configDir } = setupConfigDir(tmpDir, {
-      'debug.md': '---\nname: gsd:debug\ndescription: Debug\n---\n\n@$HOME/.claude/get-shit-done/workflows/debug.md',
-    });
-
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
-
-    const content = fs.readFileSync(
-      path.join(configDir, 'skills', 'gsd-debug', 'SKILL.md'), 'utf8'
+  test('replaces $HOME/.claude/ paths with pathPrefix', () => {
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'debug.md'),
+      '---\nname: gsd:debug\ndescription: Debug\n---\n\n@$HOME/.claude/get-shit-done/workflows/debug.md'
     );
+
+    const skillsDir = path.join(tmpDir, 'skills');
+    const localPrefix = '/tmp/project/.claude/';
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', localPrefix, 'claude', false);
+
+    const content = fs.readFileSync(path.join(skillsDir, 'gsd-debug', 'SKILL.md'), 'utf8');
     assert.ok(!content.includes('$HOME/.claude/'), 'no $HOME/.claude/ paths remain');
-    const expectedPrefix = path.resolve(configDir).replace(/\\/g, '/') + '/';
-    assert.ok(
-      content.includes(expectedPrefix + 'get-shit-done/workflows/debug.md'),
-      'path rewritten to absolute configDir prefix'
-    );
+    assert.ok(content.includes(localPrefix + 'get-shit-done/workflows/debug.md'), 'path rewritten');
   });
 
-  test('global install rewrites ~/.claude/ paths to absolute configDir form', () => {
-    // For global installs, computePathPrefix returns the absolute configDir path.
-    // Both ~/.claude/ and $HOME/.claude/ are normalized to the same absolute prefix.
-    const { configDir } = setupConfigDir(tmpDir, {
-      'next.md': '---\nname: gsd:next\ndescription: Next\n---\n\n@~/.claude/get-shit-done/workflows/next.md',
-    });
-
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
-
-    const content = fs.readFileSync(
-      path.join(configDir, 'skills', 'gsd-next', 'SKILL.md'), 'utf8'
+  test('global install preserves $HOME/.claude/ when pathPrefix matches', () => {
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'next.md'),
+      '---\nname: gsd:next\ndescription: Next\n---\n\n@~/.claude/get-shit-done/workflows/next.md'
     );
-    const expectedPrefix = path.resolve(configDir).replace(/\\/g, '/') + '/';
-    assert.ok(
-      content.includes(expectedPrefix + 'get-shit-done/workflows/next.md'),
-      'global tilde path rewritten to absolute configDir prefix'
-    );
-    assert.ok(!content.includes('~/.claude/'), 'tilde form is replaced');
+
+    const skillsDir = path.join(tmpDir, 'skills');
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
+
+    const content = fs.readFileSync(path.join(skillsDir, 'gsd-next', 'SKILL.md'), 'utf8');
+    assert.ok(content.includes('$HOME/.claude/get-shit-done/workflows/next.md'), 'global paths use $HOME form');
+    assert.ok(!content.includes('~/.claude/'), '~/ form replaced with $HOME/ form');
   });
 });
 
@@ -409,22 +366,31 @@ describe('Legacy commands/gsd/ cleanup', () => {
   });
 
   test('install removes legacy commands/gsd/ directory when present', () => {
-    const { configDir } = setupConfigDir(tmpDir, {
-      'next.md': '---\nname: gsd:next\ndescription: Advance\n---\n\nBody.',
-    });
-
-    // Create a mock legacy commands/gsd/ directory inside configDir
-    const legacyDir = path.join(configDir, 'commands', 'gsd');
+    // Create a mock legacy commands/gsd/ directory
+    const legacyDir = path.join(tmpDir, 'commands', 'gsd');
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, 'next.md'), 'legacy content');
 
-    // installRuntimeArtifacts calls _runLegacyInstallMigrations which removes
-    // commands/gsd/ for claude runtime (it's the legacy location for global).
-    installRuntimeArtifacts('claude', configDir, 'global', resolvedProfileFull);
+    // Create source commands for the installer to read
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'next.md'),
+      '---\nname: gsd:next\ndescription: Advance\n---\n\nBody.'
+    );
+
+    const skillsDir = path.join(tmpDir, 'skills');
+    // Install skills
+    copyCommandsAsClaudeSkills(srcDir, skillsDir, 'gsd', '$HOME/.claude/', 'claude', true);
+
+    // Simulate the legacy cleanup that install() does after copyCommandsAsClaudeSkills
+    if (fs.existsSync(legacyDir)) {
+      fs.rmSync(legacyDir, { recursive: true });
+    }
 
     assert.ok(!fs.existsSync(legacyDir), 'legacy commands/gsd/ removed');
     assert.ok(
-      fs.existsSync(path.join(configDir, 'skills', 'gsd-next', 'SKILL.md')),
+      fs.existsSync(path.join(skillsDir, 'gsd-next', 'SKILL.md')),
       'new skill installed'
     );
   });
@@ -486,7 +452,7 @@ describe('Claude skills migration exports', () => {
     assert.strictEqual(typeof convertClaudeCommandToClaudeSkill, 'function');
   });
 
-  test('installRuntimeArtifacts is exported', () => {
-    assert.strictEqual(typeof installRuntimeArtifacts, 'function');
+  test('copyCommandsAsClaudeSkills is exported', () => {
+    assert.strictEqual(typeof copyCommandsAsClaudeSkills, 'function');
   });
 });

@@ -132,10 +132,9 @@ async function main(): Promise<void> {
 }
 
 // Only run main() when this file is the entry point, not when imported.
-// process.argv[1] is already an absolute filesystem path on every platform Node
-// supports; comparing directly avoids the Windows URL-parsing bug where
-// `C:\\…\\gen-*.mjs` is misread as scheme "c:" by `new URL(...)`.
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
+const scriptPath = fileURLToPath(import.meta.url);
+const entryPath = process.argv[1] ? new URL(process.argv[1], 'file://').pathname : '';
+if (scriptPath === entryPath || process.argv[1] === scriptPath) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

@@ -28,7 +28,6 @@ const { execFileSync } = require('child_process');
 const INSTALL_SRC = path.join(__dirname, '..', 'bin', 'install.js');
 const BUILD_SCRIPT = path.join(__dirname, '..', 'scripts', 'build-hooks.js');
 const { install, finishInstall } = require(INSTALL_SRC);
-const { cleanup } = require('./helpers.cjs');
 
 // ─── Ensure hooks/dist/ is populated before install tests ────────────────────
 before(() => {
@@ -48,8 +47,7 @@ describe('#2248: local Claude install does not clobber profile-level statusLine'
   });
 
   afterEach(() => {
-    // Use the shared 5s Windows-EBUSY retry budget instead of inline 1s.
-    cleanup(tmpDir);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   test('local install does not write statusLine to .claude/settings.json', (t) => {

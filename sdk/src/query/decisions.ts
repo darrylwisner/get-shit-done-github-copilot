@@ -29,7 +29,7 @@ import { isAbsolute, join } from 'node:path';
 import type { QueryHandler } from './utils.js';
 
 export interface ParsedDecision {
-  /** Stable id: `D-01`, `D-42`, `D-INFRA-01`, `D-FOO_BAR`. Numeric or alphanumeric. */
+  /** Stable id: `D-01`, `D-7`, `D-42`. */
   id: string;
   /** Body text (everything after `**D-NN[ tags]:**` up to next bullet/blank). */
   text: string;
@@ -93,11 +93,7 @@ export function parseDecisions(content: string): ParsedDecision[] {
   let inDiscretion = false;
 
   // Bullet line: `- **D-NN[ [tags]]:** text`
-  // Phase 6 (#3575): aligned to CJS regex — accepts alphanumeric IDs (D-01, D-INFRA-01, D-FOO_BAR)
-  // in addition to numeric-only IDs (D-42). The first character after `D-` must
-  // be alphanumeric, so malformed shapes like `D--foo` or `D-_bar` are rejected.
-  // CJS callers consume {id, text} and ignore the optional extras.
-  const bulletRe = /^\s*-\s+\*\*D-([A-Za-z0-9][A-Za-z0-9_-]*)(?:\s*\[([^\]]+)\])?\s*:\*\*\s*(.*)$/;
+  const bulletRe = /^\s*-\s+\*\*D-(\d+)(?:\s*\[([^\]]+)\])?\s*:\*\*\s*(.*)$/;
 
   let current: ParsedDecision | null = null;
 

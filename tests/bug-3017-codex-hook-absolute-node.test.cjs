@@ -124,14 +124,8 @@ describe('Bug #3017: buildCodexHookBlock emits absolute node runner', () => {
     // pass — e.g. '/Users/x/notnode/foo'.
     assert.equal(unescapeRunner(parsed.runner), expectedRunnerPath,
       `parsed runner must equal supplied absolute path: got ${parsed.runner}, want ${expectedRunnerPath}`);
-    // On Windows, path.resolve prepends the current drive letter ("D:") to
-    // the POSIX-shaped fixture path. Accept either form.
-    const expectedHookSuffix = '/tmp/codex-test/.codex/hooks/gsd-check-update.js';
-    assert.ok(
-      parsed.hookPath === expectedHookSuffix ||
-        parsed.hookPath.replace(/^[A-Za-z]:/, '') === expectedHookSuffix,
-      `hook path equality, got: ${parsed.hookPath}, want suffix: ${expectedHookSuffix}`,
-    );
+    assert.equal(parsed.hookPath, '/tmp/codex-test/.codex/hooks/gsd-check-update.js',
+      `hook path equality, got: ${parsed.hookPath}`);
   });
 
   test('returns null when absoluteRunner is null (caller skips registration)', () => {

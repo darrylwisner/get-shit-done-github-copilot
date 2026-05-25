@@ -86,7 +86,6 @@ describe('Bug #2969: deterministic Step 5 verification gate', () => {
   test('REASON enum exposes the documented set of stable codes', () => {
     // Locks the public diagnostic surface — adding a code requires updating
     // this assertion, removing one breaks consumers that switch on the enum.
-    // Bug #3657 added OK_PRISTINE_DRIFT_DETECTED.
     assert.deepEqual(
       Object.keys(REASON).sort(),
       [
@@ -96,7 +95,6 @@ describe('Bug #2969: deterministic Step 5 verification gate', () => {
         'FAIL_USER_LINES_MISSING',
         'OK_NO_SIGNIFICANT_BACKUP_LINES',
         'OK_NO_USER_LINES_VS_PRISTINE',
-        'OK_PRISTINE_DRIFT_DETECTED',
       ],
     );
   });
@@ -130,8 +128,7 @@ describe('Bug #2969: deterministic Step 5 verification gate', () => {
     assert.equal(status, 1);
     assert.equal(report.failures, 1);
     const r0 = report.results[0];
-    // Normalize separators: on Windows the SUT emits 'skills\discuss-phase\SKILL.md'.
-    assert.equal(r0.file.replace(/\\/g, '/'), 'skills/discuss-phase/SKILL.md');
+    assert.equal(r0.file, 'skills/discuss-phase/SKILL.md');
     assert.equal(r0.status, 'fail');
     assert.equal(r0.reason, REASON.FAIL_USER_LINES_MISSING);
     assert.ok(
@@ -175,9 +172,7 @@ describe('Bug #2969: deterministic Step 5 verification gate', () => {
 
     const { status, report } = runVerifier();
     assert.equal(status, 1);
-    // Bug #3657 (Finding 1): drifted + drifted_files are additive fields added to surface
-    // pristine-drift skips distinctly from failures.  Shape-lock updated to include them.
-    assert.deepEqual(Object.keys(report).sort(), ['checked', 'drifted', 'drifted_files', 'failures', 'results']);
+    assert.deepEqual(Object.keys(report).sort(), ['checked', 'failures', 'results']);
     const r0 = report.results[0];
     assert.deepEqual(Object.keys(r0).sort(), ['file', 'missing', 'reason', 'status']);
     assert.equal(typeof r0.file, 'string');
