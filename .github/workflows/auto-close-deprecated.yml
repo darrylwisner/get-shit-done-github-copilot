@@ -24,10 +24,10 @@ jobs:
           📦 **This repository has moved and is no longer maintained here.**
 
           Development now happens at:
-          https://github.com/GSD-redux/get-shit-done-redux
+          https://github.com/open-gsd/gsd-core
 
           **Please file your issue on the active repo:**
-          https://github.com/GSD-redux/get-shit-done-redux/issues/new/choose
+          https://github.com/open-gsd/gsd-core/issues/new/choose
 
           This issue is being auto-closed and locked.
           BODY
@@ -47,12 +47,12 @@ jobs:
           📦 **This repository has moved and is no longer maintained here.**
 
           Development now happens at:
-          https://github.com/GSD-redux/get-shit-done-redux
+          https://github.com/open-gsd/gsd-core
 
           **Please re-open your PR against the active repo:**
-          https://github.com/GSD-redux/get-shit-done-redux
+          https://github.com/open-gsd/gsd-core
 
-          (You'll need to rebase your branch against `GSD-redux/get-shit-done-redux` first.)
+          (You'll need to rebase your branch against `open-gsd/gsd-core` first.)
 
           This PR is being auto-closed and locked.
           BODY
